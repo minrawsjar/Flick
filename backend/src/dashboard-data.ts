@@ -1,6 +1,7 @@
 import {
   amountOf,
   getBalances,
+  PayPalApiError,
   listInvoices,
   listPlans,
   listProducts,
@@ -311,17 +312,26 @@ function flickRows() {
 const TRANSACTION_WINDOW_MS = TRANSACTION_SEARCH_MAX_DAYS * DAY_MS;
 
 export async function getDashboardData(asOf = new Date()) {
+  // Transaction search is a separate app feature, off by default and slow to activate. Without it
+  // the dashboard still works: those two tables are empty, and it says why.
+  const warnings: string[] = [];
+  const unlessForbidden = <T>(fallback: T) => (err: unknown): T => {
+    if (!(err instanceof PayPalApiError && err.status === 403)) throw err;
+    if (!warnings.length) warnings.push('Transactions and balances are empty: turn on Transaction search for your PayPal sandbox app (it can take a few hours to start working).');
+    return fallback;
+  };
   const [products, plans, invoices, transactions, balances] = await Promise.all([
     listProducts(),
     listPlans(),
     listInvoices(),
-    searchTransactions(new Date(asOf.getTime() - TRANSACTION_WINDOW_MS), asOf),
-    getBalances(),
+    searchTransactions(new Date(asOf.getTime() - TRANSACTION_WINDOW_MS), asOf).catch(unlessForbidden<Transaction[]>([])),
+    getBalances().catch(unlessForbidden<Balances>({})),
   ]);
   const today = asOf.toISOString().slice(0, 10);
 
   return {
     asOf: asOf.toISOString(),
+    warnings,
     customers: customerRows(invoices),
     invoices: invoiceRows(invoices, today),
     invoiceItems: invoiceItemRows(invoices),

@@ -255,6 +255,12 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
         }
       />
 
+      {data.warnings.map((warning) => (
+        <p key={warning} className="mx-5 mb-2 rounded-xl bg-wait/15 px-4 py-2 text-[13px] text-wait">
+          {warning}
+        </p>
+      ))}
+
       <div className="min-h-0 flex-1">
         {hasData(data) ? (
           <AgStudioProvider licenseKey={licenseKey} modules={ai ? [AgStudioAiModule] : undefined}>
