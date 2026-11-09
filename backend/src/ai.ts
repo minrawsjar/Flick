@@ -1,40 +1,79 @@
-// Configuration for the AG Studio AI assistant. The OpenAI key is read only here, in the backend:
-// the frontend only ever sees the model ids (GET /api/ai/models).
+import { HttpError } from './http.ts';
 
-const DEFAULT_MODELS = ['gpt-5.4-mini'];
+// The AI behind Flick: Lens reading photos, Nudge drafting reminders, and AG Studio's assistant.
+// Any OpenAI-compatible API works; OpenRouter by default, so one key reaches many models. The key
+// stays in the backend: the frontend only ever sees model ids (GET /api/ai/models).
 
-// AG_STUDIO_OPENAI_API_KEY is specific to this app, so a key set for it in backend/.env always wins.
-// OPENAI_API_KEY is the fallback, so a key already exported for other tools works with no setup.
-// (Node's --env-file never overrides a variable already in the environment, which is why the
-// generic name alone couldn't be overridden per project.)
-const KEY_VARIABLES = ['AG_STUDIO_OPENAI_API_KEY', 'OPENAI_API_KEY'] as const;
+const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+// Reads images and fills a JSON schema; cheap enough to call on every snap.
+const DEFAULT_MODEL = 'google/gemini-2.5-flash';
 
-let loggedKeySource = false;
+let logged = false;
 
-/** The OpenAI key for the assistant, or undefined when none is configured. */
-export function openAiKey(): string | undefined {
-  const variable = KEY_VARIABLES.find((name) => process.env[name]);
-  if (!loggedKeySource) {
-    loggedKeySource = true;
-    console.log(
-      variable
-        ? `[AI] AG Studio assistant enabled, using the OpenAI key from ${variable}`
-        : `[AI] AG Studio assistant disabled: set AG_STUDIO_OPENAI_API_KEY in backend/.env to enable it`,
-    );
+/** The API key, or undefined when AI isn't configured. */
+export function aiKey(): string | undefined {
+  const key = process.env.AI_API_KEY;
+  if (!logged) {
+    logged = true;
+    console.log(key ? `[AI] using ${aiModel()} at ${aiBaseUrl()}` : '[AI] off: set AI_API_KEY in backend/.env to turn on Lens, Nudge drafts and the Studio assistant');
   }
-  return variable && process.env[variable];
+  return key || undefined;
 }
 
-/** The OpenAI models the assistant may use, from OPENAI_MODELS (comma-separated). The first is the default. */
-export function aiModels(): string[] {
-  const models = (process.env.OPENAI_MODELS ?? '')
+export const aiBaseUrl = () => (process.env.AI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
+export const aiModel = () => process.env.AI_MODEL || DEFAULT_MODEL;
+
+/** Models AG Studio's assistant may use, from STUDIO_MODELS (comma-separated); the first is the default. */
+export function studioModels(): string[] {
+  const models = (process.env.STUDIO_MODELS ?? '')
     .split(',')
     .map((id) => id.trim())
     .filter(Boolean);
-  return models.length > 0 ? models : DEFAULT_MODELS;
+  return models.length ? models : [aiModel()];
 }
 
-/** The assistant is shown only when a key is configured. */
-export function aiEnabled(): boolean {
-  return Boolean(openAiKey());
+export function aiHeaders(key: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${key}`,
+    // OpenRouter shows these on its dashboard; other providers ignore them.
+    'HTTP-Referer': 'https://github.com/minrawsjar/Flick',
+    'X-Title': 'Flick',
+  };
+}
+
+export type Message =
+  | { role: 'system' | 'assistant'; content: string }
+  | { role: 'user'; content: string | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[] };
+
+/**
+ * Asks the model for an answer shaped by `schema` (strict JSON Schema: every property required,
+ * no extras) and returns it parsed. The caller still validates it: model output is untrusted.
+ */
+export async function askJson<T>(name: string, schema: object, messages: Message[]): Promise<T> {
+  const key = aiKey();
+  if (!key) throw new HttpError(503, 'AI is off: set AI_API_KEY in backend/.env.');
+
+  const res = await fetch(`${aiBaseUrl()}/chat/completions`, {
+    method: 'POST',
+    headers: aiHeaders(key),
+    body: JSON.stringify({
+      model: aiModel(),
+      messages,
+      temperature: 0.2,
+      response_format: { type: 'json_schema', json_schema: { name, strict: true, schema } },
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) throw new HttpError(502, `The AI model answered ${res.status}: ${(await res.text()).slice(0, 300)}`);
+
+  const reply = (await res.json()) as { choices?: { message?: { content?: string | null } }[] };
+  const content = reply.choices?.[0]?.message?.content;
+  if (!content) throw new HttpError(502, 'The AI model sent back an empty answer.');
+  try {
+    // Some models wrap JSON in a ```json fence even when asked not to.
+    return JSON.parse(content.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '')) as T;
+  } catch {
+    throw new HttpError(502, 'The AI model sent back something that is not JSON.');
+  }
 }

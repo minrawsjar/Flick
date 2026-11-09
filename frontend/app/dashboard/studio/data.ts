@@ -55,13 +55,15 @@ const ratio = (id: string, name: string, description: string, numerator: string,
 
 // Whether the PayPal account has anything to report on. Without it, Studio would only show empty widgets.
 export const hasData = (data: DashboardData) =>
-  [data.invoices, data.transactions, data.products, data.plans, data.balances].some((rows) => rows.length > 0);
+  [data.invoices, data.transactions, data.products, data.plans, data.balances, data.flickPayments, data.flickHistory].some((rows) => rows.length > 0);
 
 export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
   const dates = [
     ...data.invoices.map((r) => r.invoiceDate),
     ...data.invoicePayments.map((r) => r.date),
     ...data.transactions.map((r) => r.date?.slice(0, 10)),
+    ...data.flickHistory.map((r) => r.date),
+    ...data.flickPayments.map((r) => r.date),
   ]
     .filter((d): d is string => !!d)
     .sort();
@@ -71,7 +73,9 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
     description:
       'PayPal sandbox data fetched over the REST API for a merchant that sells subscription products and sends invoices. ' +
       'Invoices are in USD, EUR or GBP and are not converted, so filter by currency before summing money. ' +
-      'Invoice payments are recorded externally (bank transfer, card, check, cash). The ledger holds payouts to affiliates, creators and customers.',
+      'Invoice payments are recorded externally (bank transfer, card, check, cash). The ledger holds payouts to affiliates, creators and customers. ' +
+      "The Flick tables are the household's own: this week's payments planned by Autopilot, past payments it learned from, " +
+      'money friends owe (requested as PayPal invoices, followed up by Nudge), and what each agent did. All Flick amounts are USD.',
     sources: [
       {
         id: 'customers',
@@ -220,6 +224,65 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['withheld', 'Withheld Balance', 'currencyFormat'],
         ]),
       },
+      {
+        id: 'flickPayments',
+        name: 'This Week (Autopilot)',
+        description: "This week's planned payments. Status: planned (awaiting approval), scheduled (approved), paid, skipped or failed.",
+        data: data.flickPayments,
+        fields: fields([
+          ['id', 'Payment ID', 'textFormat', true],
+          ['payee', 'Payee', 'textFormat'],
+          ['what', 'For', 'textFormat'],
+          ['amount', 'Amount', 'currencyFormat'],
+          ['currency', 'Currency', 'textFormat', true],
+          ['date', 'Due Date', 'dateFormat'],
+          ['status', 'Status', 'textFormat'],
+          ['reason', "Autopilot's Reason", 'textFormat'],
+        ]),
+      },
+      {
+        id: 'flickHistory',
+        name: 'Past Payments',
+        description: 'Payments already made, which Autopilot learns weekly and monthly habits from.',
+        data: data.flickHistory,
+        fields: fields([
+          ['id', 'ID', 'textFormat', true],
+          ['payee', 'Payee', 'textFormat'],
+          ['what', 'For', 'textFormat'],
+          ['amount', 'Amount', 'currencyFormat'],
+          ['currency', 'Currency', 'textFormat', true],
+          ['date', 'Paid On', 'dateFormat'],
+        ]),
+      },
+      {
+        id: 'flickRequests',
+        name: 'Owed to You',
+        description: 'Money friends owe, requested with PayPal invoices. Status: requested, paid or cancelled.',
+        data: data.flickRequests,
+        fields: fields([
+          ['id', 'Request ID', 'textFormat', true],
+          ['friend', 'Friend', 'textFormat'],
+          ['what', 'For', 'textFormat'],
+          ['amount', 'Amount', 'currencyFormat'],
+          ['currency', 'Currency', 'textFormat', true],
+          ['requested', 'Requested On', 'dateFormat'],
+          ['status', 'Status', 'textFormat'],
+          ['reminders', 'Reminders Sent', 'integerFormat'],
+        ]),
+      },
+      {
+        id: 'flickActivity',
+        name: 'Agent Activity',
+        description: 'What Lens, Autopilot, Splitter and Nudge did, newest first.',
+        data: data.flickActivity,
+        fields: fields([
+          ['id', 'ID', 'textFormat', true],
+          ['date', 'Date', 'dateFormat'],
+          ['agent', 'Agent', 'textFormat'],
+          ['text', 'What Happened', 'textFormat'],
+          ['amount', 'Amount', 'currencyFormat'],
+        ]),
+      },
     ],
     relationships: [
       manyToOne('invoice-customer', 'invoices.customerId', 'customers.id'),
@@ -230,6 +293,10 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
       onCalendar('invoicePayments', 'date'),
       onCalendar('transactions', 'date', 'day'),
       onCalendar('payouts', 'date', 'day'),
+      onCalendar('flickPayments', 'date'),
+      onCalendar('flickHistory', 'date'),
+      onCalendar('flickRequests', 'requested'),
+      onCalendar('flickActivity', 'date'),
     ],
     calendars: [
       {

@@ -14,6 +14,8 @@ import {
   type Product,
   type Transaction,
 } from './paypal.ts';
+import { addDays, DAYS } from './model.ts';
+import { friend, payee, state } from './store.ts';
 
 // Flat rows for the Dashboard's AG Studio data sources. Relationships between them:
 //   invoices.customerId        -> customers.id
@@ -273,6 +275,37 @@ function balanceRows({ balances = [] }: Balances) {
   }));
 }
 
+// --- Flick's own data ----------------------------------------------------------------
+
+// What the agents planned, paid, requested and did, from Flick's store (store.ts).
+function flickRows() {
+  const { week } = state;
+  return {
+    flickPayments: week.payments.map((p) => ({
+      id: p.id,
+      payee: p.payee,
+      what: p.what,
+      amount: p.amount,
+      currency: 'USD',
+      date: addDays(week.starts, DAYS.indexOf(p.day)),
+      status: p.status,
+      reason: p.why,
+    })),
+    flickHistory: state.history.map((p, i) => ({ id: `h${i}`, payee: payee(p.payeeId)?.name ?? p.payeeId, what: p.what, amount: p.amount, currency: 'USD', date: p.date })),
+    flickRequests: state.debts.map((d) => ({
+      id: d.id,
+      friend: friend(d.friendId)?.name ?? d.friendId,
+      what: d.what,
+      amount: d.amount,
+      currency: 'USD',
+      requested: d.createdAt.slice(0, 10),
+      status: d.status,
+      reminders: d.reminders,
+    })),
+    flickActivity: state.activity.map((a) => ({ id: a.id, date: a.at.slice(0, 10), agent: a.agent, text: a.text, amount: a.amount ?? null })),
+  };
+}
+
 // --- Snapshot -----------------------------------------------------------------------
 
 const TRANSACTION_WINDOW_MS = TRANSACTION_SEARCH_MAX_DAYS * DAY_MS;
@@ -298,6 +331,7 @@ export async function getDashboardData(asOf = new Date()) {
     transactions: transactionRows(transactions),
     payouts: payoutRows(transactions),
     balances: balanceRows(balances),
+    ...flickRows(),
   };
 }
 

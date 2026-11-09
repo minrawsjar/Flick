@@ -1,6 +1,9 @@
-// PayPal REST client: every call this demo makes to PayPal goes through here. It covers
-// catalog products, billing plans, invoicing, Transaction Search and balances, with plain
-// fetch and no SDK. It reads the client secret from the environment (backend/.env).
+// PayPal REST client: every call Flick makes to PayPal goes through here, with plain fetch and
+// no SDK. Reads: catalog products, billing plans, invoices, Transaction Search and balances.
+// Money movement: orders (checkout), captures and refunds, payouts, and invoices (requests to
+// friends, and reminders). It reads the client secret from the environment (backend/.env).
+
+import { HttpError } from './http.ts';
 
 const BASE_URL = 'https://api-m.sandbox.paypal.com';
 const MAX_ATTEMPTS = 4;
@@ -23,7 +26,7 @@ async function accessToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.value;
 
   const { PAYPAL_CLIENT_ID: id, PAYPAL_SECRET: secret } = process.env;
-  if (!id || !secret) throw new Error('PAYPAL_CLIENT_ID and PAYPAL_SECRET must be set (see backend/env.example)');
+  if (!id || !secret) throw new HttpError(503, 'PayPal is off: set PAYPAL_CLIENT_ID and PAYPAL_SECRET in backend/.env (see env.example).');
 
   const res = await fetch(`${BASE_URL}/v1/oauth2/token`, {
     method: 'POST',
@@ -41,25 +44,50 @@ async function accessToken(): Promise<string> {
   return access_token;
 }
 
-async function get<T>(path: string): Promise<T> {
+type CallOptions = {
+  body?: unknown;
+  /** PayPal-Request-Id: makes a POST idempotent, so it's safe to retry and to repeat. */
+  requestId?: string;
+  /** "return=representation" asks for the full resource back instead of a link to it. */
+  prefer?: string;
+};
+
+/**
+ * One REST call. Retries a rejected token once, and 429s and 5xxs with backoff: always for GETs,
+ * and for writes only when they carry a request id, since only then can PayPal de-duplicate them.
+ */
+export async function call<T>(method: string, path: string, { body, requestId, prefer }: CallOptions = {}): Promise<T> {
+  const retryable = method === 'GET' || Boolean(requestId);
   for (let attempt = 1; ; attempt++) {
     const res = await fetch(`${BASE_URL}${path}`, {
-      headers: { Authorization: `Bearer ${await accessToken()}` },
-      });
-    if (res.ok) return (await res.json()) as T;
+      method,
+      headers: {
+        Authorization: `Bearer ${await accessToken()}`,
+        ...(body !== undefined && { 'Content-Type': 'application/json' }),
+        ...(requestId && { 'PayPal-Request-Id': requestId }),
+        ...(prefer && { Prefer: prefer }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (res.ok) {
+      const text = await res.text();
+      return (text ? JSON.parse(text) : undefined) as T;
+    }
 
     // A revoked or expired token: drop it and mint a new one once.
     if (res.status === 401 && attempt === 1) {
       cachedToken = undefined;
       continue;
     }
-    if ((res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS) {
+    if (retryable && (res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS) {
       await new Promise((resolve) => setTimeout(resolve, 2 ** attempt * 250));
       continue;
     }
     throw new PayPalApiError(res.status, path, await res.text());
   }
 }
+
+const get = <T>(path: string) => call<T>('GET', path);
 
 // `path` must already carry whatever flag makes the endpoint report `total_pages`.
 async function listAll<T>(path: string, key: string, pageSize: number): Promise<T[]> {
@@ -219,4 +247,163 @@ export type Balances = {
 
 export function getBalances(): Promise<Balances> {
   return get<Balances>('/v1/reporting/balances');
+}
+
+// --- Money movement ------------------------------------------------------------------
+
+/** Two decimal places, as PayPal wants amounts. */
+export const money = (value: number, currency_code = 'USD'): Money => ({ value: value.toFixed(2), currency_code });
+
+type Link = { href: string; rel: string };
+
+export type Order = {
+  id: string;
+  status: 'CREATED' | 'SAVED' | 'APPROVED' | 'VOIDED' | 'COMPLETED' | 'PAYER_ACTION_REQUIRED';
+  links?: Link[];
+  purchase_units?: { payments?: { captures?: { id: string; status: string; amount: Money }[] } }[];
+};
+
+export type OrderItem = { name: string; amount: number };
+
+/**
+ * A checkout for the person to approve in PayPal. It's captured into this app's own (sandbox
+ * business) account; Flick then pays the billers out of it. Returns the order and the URL that
+ * sends the person to PayPal to approve it.
+ */
+export async function createOrder({
+  reference,
+  description,
+  items,
+  currency = 'USD',
+  returnUrl,
+  cancelUrl,
+}: {
+  /** Our own id for this checkout; also makes the call idempotent. */
+  reference: string;
+  description: string;
+  items: OrderItem[];
+  currency?: string;
+  returnUrl: string;
+  cancelUrl: string;
+}) {
+  const total = items.reduce((sum, item) => sum + Math.round(item.amount * 100), 0) / 100;
+  const order = await call<Order>('POST', '/v2/checkout/orders', {
+    requestId: `order-${reference}`,
+    body: {
+      intent: 'CAPTURE',
+      purchase_units: [
+        {
+          reference_id: reference.slice(0, 256),
+          description: description.slice(0, 127),
+          amount: { ...money(total, currency), breakdown: { item_total: money(total, currency) } },
+          items: items.map((item) => ({
+            name: item.name.slice(0, 127),
+            quantity: '1',
+            unit_amount: money(item.amount, currency),
+            category: 'DIGITAL_GOODS',
+          })),
+        },
+      ],
+      payment_source: {
+        paypal: {
+          experience_context: {
+            brand_name: 'Flick',
+            user_action: 'PAY_NOW',
+            shipping_preference: 'NO_SHIPPING',
+            return_url: returnUrl,
+            cancel_url: cancelUrl,
+          },
+        },
+      },
+    },
+  });
+  const approveUrl = order.links?.find((l) => l.rel === 'payer-action' || l.rel === 'approve')?.href;
+  if (!approveUrl) throw new Error(`PayPal returned order ${order.id} without an approval link`);
+  return { id: order.id, approveUrl, total };
+}
+
+/** Takes the money for an approved order. Safe to repeat: the request id makes it idempotent. */
+export async function captureOrder(orderId: string) {
+  const order = await call<Order>('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
+    requestId: `capture-${orderId}`,
+    prefer: 'return=representation',
+    body: {},
+  });
+  const capture = order.purchase_units?.[0]?.payments?.captures?.[0];
+  if (order.status !== 'COMPLETED' || !capture) throw new Error(`PayPal order ${orderId} is ${order.status}, not COMPLETED`);
+  return { orderId: order.id, captureId: capture.id, amount: amountOf(capture.amount) };
+}
+
+/** Gives part (or all) of a capture back to the person who paid. */
+export function refundCapture(captureId: string, amount: number, note: string, reference: string) {
+  return call<{ id: string; status: string }>('POST', `/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
+    requestId: `refund-${reference}`,
+    body: { amount: money(amount), note_to_payer: note.slice(0, 255) },
+  });
+}
+
+export type PayoutItem = { id: string; email: string; amount: number; note: string };
+
+/** Sends money from this app's account to one or more people by email, in one batch. */
+export async function createPayout(batchId: string, subject: string, items: PayoutItem[]) {
+  const res = await call<{ batch_header: { payout_batch_id: string; batch_status: string } }>('POST', '/v1/payments/payouts', {
+    requestId: `payout-${batchId}`,
+    body: {
+      sender_batch_header: { sender_batch_id: batchId.slice(0, 127), email_subject: subject, email_message: 'Paid by Flick, on your behalf.' },
+      items: items.map((item) => ({
+        recipient_type: 'EMAIL',
+        receiver: item.email,
+        amount: { value: item.amount.toFixed(2), currency: 'USD' },
+        note: item.note.slice(0, 4000),
+        sender_item_id: item.id.slice(0, 63),
+      })),
+    },
+  });
+  return { batchId: res.batch_header.payout_batch_id, status: res.batch_header.batch_status };
+}
+
+/** A request for money: a PayPal invoice to one person, sent by email. Returns its id and payer link. */
+export async function sendInvoice({
+  reference,
+  to,
+  name,
+  item,
+  amount,
+  note,
+}: {
+  reference: string;
+  to: string;
+  name: string;
+  item: string;
+  amount: number;
+  note: string;
+}) {
+  const created = await call<{ id?: string; href?: string }>('POST', '/v2/invoicing/invoices', {
+    requestId: `invoice-${reference}`,
+    prefer: 'return=representation',
+    body: {
+      detail: { currency_code: 'USD', note: note.slice(0, 4000), payment_term: { term_type: 'DUE_ON_RECEIPT' } },
+      primary_recipients: [{ billing_info: { name: { given_name: name }, email_address: to } }],
+      items: [{ name: item.slice(0, 200), quantity: '1', unit_amount: money(amount) }],
+    },
+  });
+  // With return=representation the invoice comes back; otherwise a link ending in its id.
+  const id = created.id ?? created.href?.split('/').pop();
+  if (!id) throw new Error('PayPal created an invoice without an id');
+  const sent = await call<{ href?: string } | undefined>('POST', `/v2/invoicing/invoices/${encodeURIComponent(id)}/send`, {
+    requestId: `send-${reference}`,
+    body: { send_to_invoicer: false, send_to_recipient: true, subject: `${item}`.slice(0, 4000) },
+  });
+  return { id, payerUrl: sent?.href };
+}
+
+/** PayPal's own reminder email for an unpaid invoice, carrying our note. */
+export function remindInvoice(invoiceId: string, subject: string, note: string) {
+  return call<undefined>('POST', `/v2/invoicing/invoices/${encodeURIComponent(invoiceId)}/remind`, {
+    body: { subject: subject.slice(0, 4000), note: note.slice(0, 4000), send_to_invoicer: false, send_to_recipient: true },
+  });
+}
+
+export function getInvoice(invoiceId: string): Promise<Invoice> {
+  return get<Invoice>(`/v2/invoicing/invoices/${encodeURIComponent(invoiceId)}`);
 }
