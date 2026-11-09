@@ -1,5 +1,5 @@
-import { aiBaseUrl, aiHeaders, aiKey, aiModel, askJson, studioModels } from '../src/ai.ts';
-import { call, createOrder, createPayout, getBalances } from '../src/paypal.ts';
+import { aiBaseUrl, aiHeaders, aiKey, aiModels, askJson, studioModels } from '../src/ai.ts';
+import { call, createOrder, createPayout, getBalances, revokeToken } from '../src/paypal.ts';
 
 // `npm run check`: tries each PayPal sandbox feature and the AI connection Flick needs, and says
 // what to switch on when one fails. Safe to run: the order is never captured, the invoice is a
@@ -19,6 +19,8 @@ async function check(name: string, fix: string, run: () => Promise<string | void
 }
 
 const signedIn = await check('PayPal sign-in', 'set PAYPAL_CLIENT_ID and PAYPAL_SECRET in backend/.env, from a sandbox app', async () => {
+  // A fresh token, so features just switched on in the dashboard count.
+  await revokeToken();
   await getBalances().catch((err) => {
     if (String(err).includes(' 403 ')) return; // signed in fine; only Transaction search is off
     throw err;
@@ -51,7 +53,7 @@ if (signedIn) {
 if (!aiKey()) {
   console.log('✗ AI: AI_API_KEY is not set\n    → add an OpenRouter (or OpenAI) key to backend/.env');
 } else {
-  await check(`AI answers in JSON (${aiModel()})`, 'check AI_API_KEY, AI_BASE_URL and that AI_MODEL exists and supports structured outputs', async () => {
+  await check(`AI answers in JSON (${aiModels().join(', then ')})`, 'check AI_API_KEY, AI_BASE_URL and that AI_MODEL exists and supports structured outputs', async () => {
     const { ok } = await askJson<{ ok: boolean }>('check', { type: 'object', additionalProperties: false, required: ['ok'], properties: { ok: { type: 'boolean' } } }, [
       { role: 'user', content: 'Reply with {"ok": true}.' },
     ]);

@@ -66,7 +66,7 @@ Lens (reading photos), Nudge's drafts and the Money Studio assistant use one Ope
 
 - `AI_API_KEY`: the key. Without it Lens and the assistant are off, and Nudge drafts from templates.
 - `AI_BASE_URL`: OpenRouter (`https://openrouter.ai/api/v1`) unless set; for OpenAI use `https://api.openai.com/v1`.
-- `AI_MODEL`: the model Lens and Nudge call (`google/gemini-2.5-flash` unless set). It must read images and support structured outputs.
+- `AI_MODEL`: the model Lens and Nudge call (`google/gemini-2.5-flash` unless set). It must read images and support structured outputs. List fallbacks after it, comma-separated; on OpenRouter they take over when the first is rate-limited or down. In a bake-off on a bill, a receipt and a price tag, `google/gemini-2.5-flash-lite,openai/gpt-6-luna` read everything right for about $0.0002 a scan.
 - `STUDIO_MODELS`: model ids the Money Studio assistant may use, comma-separated, the first the default (`AI_MODEL` unless set). With two or more, the chat offers a picker. The assistant streams from the provider's Responses API: OpenAI's, or OpenRouter's (in beta); `npm run check` tries it.
 
 The key never reaches the browser. Studio's adapter ([`openai-adapter.ts`](frontend/app/dashboard/studio/openai-adapter.ts), copied from the AG Studio docs) runs client-side and posts to `/api/ai/responses`, which the frontend rewrites to the backend's [proxy](backend/src/ai-proxy.ts). That adds the key, only allows the configured models, caps output tokens, and streams the reply back.

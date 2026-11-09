@@ -89,6 +89,21 @@ export async function call<T>(method: string, path: string, { body, requestId, p
 
 const get = <T>(path: string) => call<T>('GET', path);
 
+/**
+ * PayPal keeps handing out the same token, with the permissions the app had when it was issued, for
+ * up to 9 hours. Revoking it makes features just switched on in the developer dashboard apply now.
+ */
+export async function revokeToken() {
+  const { PAYPAL_CLIENT_ID: id, PAYPAL_SECRET: secret } = process.env;
+  const token = await accessToken();
+  await fetch(`${BASE_URL}/v1/oauth2/token/terminate`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token, token_type_hint: 'ACCESS_TOKEN' }),
+  });
+  cachedToken = undefined;
+}
+
 // `path` must already carry whatever flag makes the endpoint report `total_pages`.
 async function listAll<T>(path: string, key: string, pageSize: number): Promise<T[]> {
   const items: T[] = [];

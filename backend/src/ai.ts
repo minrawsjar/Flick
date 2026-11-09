@@ -15,13 +15,17 @@ export function aiKey(): string | undefined {
   const key = process.env.AI_API_KEY;
   if (!logged) {
     logged = true;
-    console.log(key ? `[AI] using ${aiModel()} at ${aiBaseUrl()}` : '[AI] off: set AI_API_KEY in backend/.env to turn on Lens, Nudge drafts and the Studio assistant');
+    console.log(key ? `[AI] using ${aiModels().join(', then ')} at ${aiBaseUrl()}` : '[AI] off: set AI_API_KEY in backend/.env to turn on Lens, Nudge drafts and the Studio assistant');
   }
   return key || undefined;
 }
 
 export const aiBaseUrl = () => (process.env.AI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
-export const aiModel = () => process.env.AI_MODEL || DEFAULT_MODEL;
+/** AI_MODEL, then any fallbacks listed after it (comma-separated). */
+export const aiModels = () => (process.env.AI_MODEL || DEFAULT_MODEL).split(',').map((m) => m.trim()).filter(Boolean);
+export const aiModel = () => aiModels()[0];
+// OpenRouter tries `models` in order when one is rate-limited or down; other providers take one `model`.
+const modelParams = () => (aiBaseUrl().includes('openrouter.ai') && aiModels().length > 1 ? { models: aiModels() } : { model: aiModel() });
 
 /** Models AG Studio's assistant may use, from STUDIO_MODELS (comma-separated); the first is the default. */
 export function studioModels(): string[] {
@@ -58,7 +62,7 @@ export async function askJson<T>(name: string, schema: object, messages: Message
     method: 'POST',
     headers: aiHeaders(key),
     body: JSON.stringify({
-      model: aiModel(),
+      ...modelParams(),
       messages,
       temperature: 0.2,
       response_format: { type: 'json_schema', json_schema: { name, strict: true, schema } },
