@@ -3,56 +3,22 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { Bot, botColors } from "@/components/bot";
 import { Phone } from "@/components/phone";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { Glow, Logo, Reveal, Section, type Face } from "@/components/ui";
+import { Nav } from "@/components/nav";
+import { Glow, Reveal, Section, type Face } from "@/components/ui";
+import { ShowDemo } from "@/lib/live";
 import { Agents } from "./_landing/agents";
 import { Autopilot, WeekScreen } from "./_landing/autopilot";
 import { agents, friends, owed, week } from "./_landing/data";
 import { HeroLens, Snap } from "./_landing/lens";
-import { ReturnNotice } from "./_landing/live-notice";
 import { Nudge, NudgeScreen } from "./_landing/nudge";
 import { Split } from "./_landing/split";
 import { Studio } from "./_landing/studio";
 
-// Flick's one-pager, in the Air Agents style: the hero's phones show the app, and each section
-// below is a demo you can play with.
+// Flick's one-pager, in the Air Agents style: a mock demo of what Flick can do. The hero's phones
+// show the app, and each section below is a demo you can play with, always on demo data (<ShowDemo>).
+// The navbar leads to the working pages, on the live backend.
 
 const repo = "https://github.com/minrawsjar/Flick";
-
-const links = [
-  ["#agents", "Agents"],
-  ["#snap", "Lens"],
-  ["#autopilot", "Autopilot"],
-  ["#split", "Split"],
-  ["#nudge", "Nudge"],
-  ["#studio", "Studio"],
-] as const;
-
-function Nav() {
-  return (
-    <header className="sticky top-0 z-30 bg-page/75 backdrop-blur-2xl backdrop-saturate-150">
-      <nav className="mx-auto flex h-12 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <a href="#top" className="flex items-center gap-2 text-[15px]">
-          <Logo />
-          Flick
-        </a>
-        <div className="flex items-center gap-6 text-[13px] text-ink/70">
-          {links.map(([href, label]) => (
-            <a key={href} href={href} className="hidden transition-colors hover:text-ink md:block">
-              {label}
-            </a>
-          ))}
-          <span className="-mx-3 flex items-center gap-2">
-            <ThemeToggle />
-            <Link href="/dashboard" className="pressable rounded-full bg-ink px-3 py-1 text-on-ink">
-              Money Studio
-            </Link>
-          </span>
-        </div>
-      </nav>
-    </header>
-  );
-}
 
 /** A notification floating by the hero's phones: something an agent just did. */
 function Chip({ face, title, sub, className, delay }: { face: Face; title: string; sub: string; className: string; delay: number }) {
@@ -81,10 +47,13 @@ function Hero() {
           Point your camera at a bill, a receipt or something you want. Flick pays it with PayPal, learns it, and runs your week on autopilot.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <a href="#snap" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-ink px-6 text-[17px] text-on-ink">
-            Try it <ArrowDown size={18} aria-hidden />
+          <Link href="/lens" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-ink px-6 text-[17px] text-on-ink">
+            Try Flick <ArrowUpRight size={18} aria-hidden />
+          </Link>
+          <a href="#agents" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-fill px-6 text-[17px]">
+            See how it works <ArrowDown size={18} aria-hidden />
           </a>
-          <a href={repo} className="pressable flex h-12 items-center gap-1.5 rounded-full bg-fill px-6 text-[17px]">
+          <a href={repo} className="pressable hidden h-12 items-center gap-1.5 rounded-full bg-fill px-6 text-[17px] sm:flex">
             GitHub <ArrowUpRight size={18} aria-hidden />
           </a>
         </div>
@@ -179,9 +148,9 @@ function Closing() {
           Four agents, one PayPal approval a week, and a money HQ that builds itself.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <a href="#snap" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-white px-6 text-[17px] text-black">
-            Try it <ArrowDown size={18} aria-hidden />
-          </a>
+          <Link href="/lens" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-white px-6 text-[17px] text-black">
+            Try Flick <ArrowUpRight size={18} aria-hidden />
+          </Link>
           <Link href="/dashboard" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-white/15 px-6 text-[17px] text-white">
             Open Money Studio <ArrowUpRight size={18} aria-hidden />
           </Link>
@@ -195,7 +164,7 @@ export default function Home() {
   return (
     <>
       <Nav />
-      <ReturnNotice />
+      <ShowDemo>
       <main>
         <Hero />
         <Marquee />
@@ -268,6 +237,7 @@ export default function Home() {
         </Section>
         <Closing />
       </main>
+      </ShowDemo>
       <footer className="mx-auto flex max-w-6xl flex-wrap justify-between gap-2 px-4 py-8 text-[12px] text-secondary sm:px-6">
         <p>Built for the PayPal AI Hackathon, 2026. Runs on the PayPal sandbox.</p>
         <p>

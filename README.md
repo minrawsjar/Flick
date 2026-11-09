@@ -15,7 +15,7 @@ Snap anything you need to pay once: Flick pays it now, learns it, and runs your 
 
 It has two parts so far:
 
-- **The one-pager** (`/`): an animated, interactive tour. Phones show the app, and each section is a demo you can play with: Lens reading a bill, a receipt, a price tag or a tip jar and paying it; Autopilot's week in an editable [AG Grid](https://www.ag-grid.com/react-data-grid/); Splitter's who-had-what grid; Nudge drafting reminders. It runs on demo data for now.
+- **The one-pager** (`/`): an animated, interactive tour (a mock demo; the navbar leads to the working pages, below). Phones show the app, and each section is a demo you can play with: Lens reading a bill, a receipt, a price tag or a tip jar and paying it; Autopilot's week in an editable [AG Grid](https://www.ag-grid.com/react-data-grid/); Splitter's who-had-what grid; Nudge drafting reminders. It runs on demo data for now.
 - **Money Studio** (`/dashboard`): an [AG Studio](https://www.ag-grid.com/studio/) report over the PayPal sandbox data, read over the [PayPal REST API](https://developer.paypal.com/api/rest/) and joined together, which you can edit and save in the browser.
 
 Built on the [PayPal + AG Grid hackathon starter](https://github.com/paypaldev/hackathon-paypal-ag-grid-boilerplate). The design language (bot faces, phone frame, colours and motion) is ported from [Air Agents](https://github.com/ahmedfahim21/Spatial-Agents) (MIT).
@@ -146,14 +146,15 @@ Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 404 for an unk
 
 [`app/page.tsx`](frontend/app/page.tsx) lays out the sections. Each lives in [`app/_landing`](frontend/app/_landing) and starts playing when it scrolls into view.
 
-The page runs **live** when the backend answers and PayPal is configured ([`lib/live.ts`](frontend/lib/live.ts)), and says so under the hero. Then every demo is real:
+The one-pager is a **mock demo** of what Flick can do: its sections always play on demo data. The navbar leads to the **working pages**, one per agent, which run on the live backend ([`lib/live.ts`](frontend/lib/live.ts)):
 
-- **Lens**: tapping a sample draws it into a photo and sends it to the vision model; *Snap your own* takes a photo (or a file). Paying opens PayPal's sandbox checkout (sign in with a sandbox personal account) and comes back to the page; a receipt is handed to Split.
-- **Autopilot**: the backend's week. Edit it in the grid, approve it through PayPal, and each *Next day* pays out.
-- **Split**: sends real sandbox invoices and links to them.
-- **Nudge**: the real requests, a reminder drafted by the AI model, sent as PayPal's own reminder; *Check who's paid* asks PayPal.
+- **`/lens`**: tapping a sample draws it into a photo and sends it to the vision model; *Snap your own* takes a photo (or a file). Paying opens PayPal's sandbox checkout (sign in with a sandbox personal account) and comes back to the page; a receipt goes to `/split`.
+- **`/autopilot`**: the backend's week. Edit it in the grid, approve it through PayPal, and each *Next day* pays out.
+- **`/split`**: sends real sandbox invoices and links to them.
+- **`/nudge`**: the real requests, a reminder drafted by the AI model, sent as PayPal's own reminder; *Check who's paid* asks PayPal.
+- **`/dashboard`**: Money Studio.
 
-Without the backend, the page plays the same demos on [`data.ts`](frontend/app/_landing/data.ts), so it never breaks.
+If the backend can't be reached, the working pages say so and play the demo instead.
 
 Colours, type and motion are tokens in [`globals.css`](frontend/app/globals.css). The grids use [`components/grid.tsx`](frontend/components/grid.tsx), AG Grid themed as an iOS grouped list from the same tokens. Everything respects `prefers-reduced-motion`.
 

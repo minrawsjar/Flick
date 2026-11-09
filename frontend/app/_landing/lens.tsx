@@ -2,6 +2,7 @@
 
 import type { Scan } from "@backend/model";
 import { Camera, CircleCheck, LoaderCircle, Repeat, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Bot } from "@/components/bot";
 import { Phone } from "@/components/phone";
@@ -347,6 +348,7 @@ export function Snap() {
   const [recurring, setRecurring] = useState(true);
   const [error, setError] = useState<string>();
   const box = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   // Until you tap something, a live page shows the latest real scan: the one just paid, if PayPal
   // just sent you back, or else the newest, ready to pay.
@@ -425,7 +427,7 @@ export function Snap() {
     // A real receipt goes to Splitter, with its items.
     if (scan.kind === "receipt") {
       handReceipt(scan);
-      document.getElementById("split")?.scrollIntoView({ behavior: "smooth" });
+      router.push("/split");
       return;
     }
     setView({ ...current, live: true });

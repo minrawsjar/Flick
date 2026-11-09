@@ -2,7 +2,18 @@
 
 import { CircleCheck, Info } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { returned } from "@/lib/live";
+import { returned, useLive } from "@/lib/live";
+
+/** On the working pages: says so when they've fallen back to the demo. */
+export function BackendNotice() {
+  const live = useLive();
+  if (live.mode !== "demo") return null;
+  return (
+    <p className="mx-auto mt-4 w-fit max-w-[calc(100%-2rem)] rounded-full bg-wait/15 px-4 py-1.5 text-center text-[13px] text-wait">
+      Can&apos;t reach Flick&apos;s backend right now, so this page is playing the demo.
+    </p>
+  );
+}
 
 const messages: Record<string, [ok: boolean, text: string]> = {
   week: [true, "Week approved with PayPal. Autopilot takes it from here."],

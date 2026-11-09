@@ -20,6 +20,8 @@ type Ctx = { req: IncomingMessage; res: ServerResponse; url: URL; body: () => Pr
 type Handler = (ctx: Ctx) => unknown;
 
 const redirect = (res: ServerResponse, to: string) => res.writeHead(303, { Location: to }).end();
+/** The frontend page a checkout started from: Autopilot's week, or a Lens payment. */
+const pageFor = (orderId: string) => `${frontendUrl()}/${state.checkouts[orderId]?.kind === 'week' ? 'autopilot' : 'lens'}`;
 
 const routes: Record<string, Handler> = {
   'GET /api/health': () => ({ ok: true }),
@@ -53,10 +55,10 @@ const routes: Record<string, Handler> = {
       const { checkout, captureId } = await captureCheckout(orderId);
       if (captureId && checkout.kind === 'week') await autopilot.approved(checkout, captureId);
       if (captureId && checkout.kind === 'scan') await lens.paid(checkout);
-      redirect(res, `${frontendUrl()}/?paid=${checkout.kind}#${checkout.kind === 'week' ? 'autopilot' : 'snap'}`);
+      redirect(res, `${pageFor(orderId)}?paid=${checkout.kind}`);
     } catch (err) {
       console.error('PayPal return:', err);
-      redirect(res, `${frontendUrl()}/?checkout=failed`);
+      redirect(res, `${pageFor(orderId)}?checkout=failed`);
     }
   },
   'GET /api/paypal/cancel': ({ res, url }) => {
@@ -67,7 +69,7 @@ const routes: Record<string, Handler> = {
       if (scan?.status === 'awaiting') scan.status = 'read';
     }
     save();
-    redirect(res, `${frontendUrl()}/?checkout=cancelled`);
+    redirect(res, `${pageFor(url.searchParams.get('token') ?? '')}?checkout=cancelled`);
   },
 
   // Every PayPal endpoint the demo reads, joined into the AG Studio dashboard's tables.

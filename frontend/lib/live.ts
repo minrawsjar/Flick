@@ -1,11 +1,12 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { createContext, createElement, useContext, useSyncExternalStore, type ReactNode } from "react";
 import type { Scan, State } from "@backend/model";
 
-// The one-pager's link to the backend. When the backend answers and PayPal is configured, the
-// page is "live": its demos read and change real state through the API (the browser reaches it via
-// the /api/* rewrite). Otherwise it stays on demo data, so it never breaks.
+// The app pages' link to the backend (/lens, /autopilot, /split, /nudge). When the backend answers
+// and PayPal is configured they're "live": they read and change real state through the API (the
+// browser reaches it via the /api/* rewrite). Otherwise they fall back to demo data. The one-pager
+// wraps its sections in <ShowDemo>, so it's always the demo.
 
 export type LiveState = State & { config: { paypal: boolean; ai: boolean } };
 
@@ -42,7 +43,16 @@ function subscribe(listener: () => void) {
 }
 
 const serverSnapshot: Snapshot = { mode: "loading", state: null, receipt: null };
-export const useLive = () => useSyncExternalStore(subscribe, () => snapshot, () => serverSnapshot);
+const demoSnapshot: Snapshot = { mode: "demo", state: null, receipt: null };
+
+const DemoOnly = createContext(false);
+/** Everything inside plays the demo, whatever the backend says. */
+export const ShowDemo = ({ children }: { children: ReactNode }) => createElement(DemoOnly.Provider, { value: true }, children);
+
+export function useLive() {
+  const live = useSyncExternalStore(subscribe, () => snapshot, () => serverSnapshot);
+  return useContext(DemoOnly) ? demoSnapshot : live;
+}
 
 export const handReceipt = (receipt: Scan) => update({ receipt });
 
