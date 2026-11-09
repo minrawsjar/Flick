@@ -1,106 +1,69 @@
-# Umang: Story & submission track
+# Umang: Ask Flick & PayPal webhooks
 
-Hi Umang! You're on **Story & submission**: the **demo video** (under 3 minutes) and the **Devpost write-up**. The judging weighs presentation as much as the code, and "Best Demo" is a prize of its own, so this track matters as much as the code.
+Hi Umang! You own **Ask Flick** (`/ask`), the AI agent that plans across all of Flick, and **PayPal webhooks**, so Flick hears about payments the moment they happen. This is the heart of the **Agentic Commerce** prize.
+
+**First:** follow [`setup.md`](setup.md) to run Flick locally with your own PayPal sandbox and AI key. You need both.
 
 ## Flick in one minute
 
-Flick is our PayPal AI Hackathon entry. Tagline: **"Snap it. Flick pays."** Four AI agents do the work:
+Snap anything you need to pay, and Flick pays it. **Lens** reads photos of bills and receipts; **Autopilot** plans and pays the week with one PayPal approval; **Splitter** invoices friends; **Nudge** reminds them. **Ask Flick** is one conversation over all four: the AI reads your real data through tools, plans, and proposes actions, and **nothing runs until you approve it**.
 
-- **Lens** reads a photo of a bill, receipt, price tag or tip jar (vision AI) and pays it through a PayPal checkout.
-- **Autopilot** plans the week's payments from what it has seen, takes **one** PayPal approval, then pays each on its day.
-- **Splitter** splits a receipt (you can just *say* who had what) and sends each friend a PayPal invoice.
-- **Nudge** writes a reminder in the tone you pick, and PayPal sends it.
-- **Ask Flick** is an agent over all four: one sentence becomes a plan of actions across them, and nothing runs until you approve.
-- **Money Studio** is a dashboard (AG Studio) over all the data, which its own AI can build for you.
+## Your area
 
-| | |
-|---|---|
-| Live site | https://flick-frontend-woad.vercel.app |
-| Repo | https://github.com/minrawsjar/Flick |
-| Hackathon page (rules, prizes, submission form) | https://paypalaihackathon.devpost.com |
-| Technical details for the write-up | [`README.md`](../../README.md) |
+```
+backend/src/agent.ts                  Ask Flick: tools, the plan-then-approve loop
+backend/src/checkout.ts, server.ts    PayPal's return after a checkout (webhooks join it here)
+backend/src/nudge.ts                  checking which invoices are paid
+backend/src/paypal.ts                 every PayPal call
+frontend/app/_landing/ask.tsx         the /ask page and the one-pager's scripted version
+```
 
-The one-pager at `/` is the *story* (animated demos). The navbar pages are *live*: real AI and the real PayPal sandbox. **Record the live pages**; the one-pager is good for the opening and closing shots.
+New files are yours: `backend/src/webhooks.ts`, and its tests. Others: Utkarsh owns Money Studio; Manya owns Autopilot and Lens, and will ask you before adding one line to `overview()` in `agent.ts`.
 
-## Who does what
+## Task 1: PayPal webhooks (do this first)
 
-| Who | Track | Hands you |
-|---|---|---|
-| **Umang (you)** | Story & submission | |
-| Manya | Test & sandbox | Sandbox logins (for recording and for judges), the best real photos, fresh demo data before you record |
-| Utkarsh | Build: Money Studio widgets and agent | Finished features by the freeze |
-| Swarnim | Reviews, deploys, final say on the submission | |
+Today Flick only learns that a friend paid when someone presses **Check who's paid**, and a checkout only completes if the person comes back from PayPal's page. Webhooks fix both.
 
-## Timeline (IST)
+**Build `POST /api/paypal/webhook`:**
 
-| When | What |
-|---|---|
-| **Tue 10 Nov** | Watch every flow on the live site. Write the voiceover script (task 1). Start the Devpost draft (task 2). |
-| **Wed 11 Nov** | Record practice takes of what's stable (Lens, Split, Nudge, Ask Flick). Get the script reviewed by Swarnim. |
-| **Thu 12 Nov, 14:00** | Feature freeze. Manya prepares demo data (about an hour). |
-| **Thu 12 Nov, 15:30–20:00** | Record the final takes, edit, upload to YouTube. |
-| **Thu 12 Nov, 23:30** | **Submit** (10:00 PST). Hard deadline: Fri 13 Nov, 01:30 IST. Don't cut it close. |
+1. **Verify every event with PayPal** before trusting it: `POST /v1/notifications/verify-webhook-signature` with the `paypal-transmission-*` and `paypal-auth-algo` / `paypal-cert-url` headers, your `PAYPAL_WEBHOOK_ID` (a new env var) and the event body. Only `verification_status: "SUCCESS"` gets processed. Answer 200 quickly either way, so PayPal doesn't keep retrying.
+2. **Handle:**
+   - `INVOICING.INVOICE.PAID`: mark that request paid (match `debt.invoiceId`), and log "Maya paid you back" as Nudge activity.
+   - `PAYMENT.PAYOUTS-ITEM.SUCCEEDED`, `…FAILED`, `…UNCLAIMED`: update that week payment (the payout's `sender_item_id` is the payment's id).
+   - `CHECKOUT.ORDER.APPROVED`: capture it if it's still waiting. That covers someone closing the tab on PayPal's page before coming back. Reuse what `/api/paypal/return` does in `server.ts` rather than copying it: pull it into one function both use.
+3. **Apply each event only once:** remember the last 200 event ids in the state.
+4. **Tests:** keep the handling a plain function (`applyEvent(state, event)`) that you can test without the network.
 
-## Task 1: The demo video (≤ 3:00, hard limit)
+**To test it locally,** PayPal needs a public HTTPS address for your laptop: run `cloudflared tunnel --url http://localhost:4000` (or ngrok), then in your sandbox app → **Webhooks → Add Webhook**, enter `https://<your-tunnel>/api/paypal/webhook`, tick those events, and copy the **Webhook ID** into `backend/.env`. Try the **Webhook Simulator** (developer dashboard → Testing Tools), then real flows.
 
-### Storyboard
+**Done when:**
+- [ ] Paying a split invoice as a friend (log in at sandbox.paypal.com) turns that friend to "Paid you back" on `/nudge` within seconds, with no button pressed.
+- [ ] Approving the week on PayPal and **closing the tab** still captures it.
+- [ ] An event with a bad signature changes nothing.
+- [ ] `npm test` covers each event type and a repeated event.
 
-Times are targets. The story is **one person's week**: snap, pay, split, get paid back, and an agent that does it all from one sentence.
+Document `PAYPAL_WEBHOOK_ID` in `backend/env.example`, and the route in the README's Routes table.
 
-| Time | Scene | On screen | Say (roughly) |
-|---|---|---|---|
-| 0:00–0:12 | Hook | Phone camera on an electricity bill, then the one-pager hero "Snap it. Flick pays." | "Bills, receipts, IOUs. What if you could just snap them?" |
-| 0:12–0:40 | Lens | `/lens` on a phone: **Snap your own** of a real bill → fields fill in → **Pay with PayPal** → PayPal sandbox approval → "Paid" → "Pay it every month" | "Lens reads it with AI. One tap and PayPal pays it, and Autopilot remembers it for next month." |
-| 0:40–1:05 | Autopilot | `/autopilot`: the AG Grid of the week with Autopilot's reasons → change an amount → **Approve with PayPal** once → **Next day** → payments turn "Paid" | "Autopilot plans your week from what you actually pay, and why. One approval on Sunday, and it pays each bill on its day." |
-| 1:05–1:30 | Split | `/split`: type "Maya and I shared the salmon…" → **Tick it for me** → **Send requests** → cut to Maya's PayPal showing the invoice | "Dinner with friends? Just say who had what. Each friend gets a PayPal invoice for their share." |
-| 1:30–1:45 | Nudge | `/nudge`: pick Leo, tone **Funny** → AI draft types out → **Send** | "And when someone forgets, Nudge reminds them nicely, through PayPal." |
-| 1:45–2:20 | Ask Flick | `/ask`: "Split last night's sushi with Maya and Leo, and remind Leo about the cab" → it reads your data → approval card → **Go ahead** → done | "Or just ask. Flick plans across every agent, and nothing happens until you say yes." |
-| 2:20–2:45 | Money Studio | `/dashboard`: the This week page → AI chat "Build my Sunday recap" → widgets appear | "Everything lands in Money Studio, a dashboard an AI builds for you." |
-| 2:45–3:00 | Close | One-pager closing band "Point. Snap. Paid." + live URL + "PayPal · AG Grid · AI" | "Flick. Snap it, and it's paid." |
+## Task 2: Talk to Flick
 
-### Recording tips
+Flick's design comes from Air Agents, a voice-first app: let people talk to Ask Flick too. Use the browser's built-in speech, no libraries:
 
-- **1920×1080**, browser zoom about 110%, bookmarks bar hidden, notifications off. Pick **one** theme (dark looks great) and stick to it.
-- Record each scene **separately**; it's much easier to edit and redo.
-- Before the final takes, Manya resets the demo data (her task 3). Use the **You** sandbox login she gives you to approve payments on PayPal's page.
-- For the phone shots (Lens), record the phone screen (iOS/Android screen recording), or film the phone over the shoulder.
-- The PayPal approval page is part of the story: keep it, but speed it up.
-- Add captions; many judges watch muted. Keep music quiet under the voice.
-- Upload to **YouTube** (public or unlisted) and check it plays in a private window.
+- A **mic button** in `/ask`'s input bar, using the Web Speech API (`SpeechRecognition`, which is `webkitSpeechRecognition` in Chrome and Safari). Tap to talk; the words appear in the input as you speak; it sends when you stop.
+- A **"Read replies aloud"** switch using `speechSynthesis`.
+- Hide the mic where the browser can't do it (Firefox), and handle "microphone permission denied" gracefully.
 
-**Done when:** the video is ≤ 3:00, on YouTube, playable without signing in, and Swarnim has watched it.
+**Done when:** it works in Chrome on a laptop, Safari on an iPhone and Chrome on Android. Browsers only allow the microphone on `localhost` or HTTPS, so to try it on your phone, open a second tunnel to the site (`cloudflared tunnel --url http://localhost:3000`) and visit that HTTPS address; the site passes `/api` on to your local backend by itself.
 
-## Task 2: The Devpost write-up
+## Task 3: Better approval cards
 
-Draft it in a doc first; Swarnim reviews it before it goes into the form. Use the README for facts, and keep the tone plain and confident.
+On `/ask`, the "Needs your OK" card lists actions as text. Make it clearer:
 
-### Sections
+- Show **which agent** each action belongs to, with its bot face: paying a scan is Lens, the week is Autopilot, a split is Splitter, a reminder is Nudge. Return an `agent` field with each pending action from `agent.ts`.
+- After you decide, keep the card in the conversation as a receipt: ✓ or ✗ on each line.
+- When an action opens a PayPal checkout, put the **Approve on PayPal** button inside its line, not below the conversation.
 
-- **Inspiration**: the small, constant admin of money (bills, splitting, chasing friends) and how often it gets forgotten.
-- **What it does**: the five bullets at the top of this file, in your words, plus "you approve every action".
-- **How we built it**:
-  - **PayPal (sandbox)**: Orders v2 (checkout, capture), Payments v2 (refunds when a payment is skipped), Payouts v1 (paying billers and friends), Invoicing v2 (create, send, remind, check paid), Transaction Search and Balances (Money Studio). OAuth client credentials; checkouts, captures, refunds, payouts and invoices carry a `PayPal-Request-Id`, so a retry or a reloaded page can never pay or invoice twice.
-  - **AI (via OpenRouter)**: Lens uses Gemini 2.5 Flash-Lite with structured JSON output (with GPT-6 Luna as fallback), and every reading is checked before it can become money. Ask Flick is an agent on GPT-6 Luna with tool calling: read tools run on their own; action tools wait for the person's approval. Nudge drafts, "Tick it for me", and Money Studio's AI assistant.
-  - **AG Grid and AG Studio**: the editable week plan, the split grid with bot-face headers and pinned totals, Money Studio's reports and custom widgets (Utkarsh's work: confirm with him what made it).
-  - **Stack**: Next.js 16 and React 19 on Vercel; a Node.js backend with no dependencies on Railway; Tailwind; design language adapted from Air Agents (MIT).
-- **Challenges**: PayPal sandbox accounts in India can't send payouts (we moved to a US sandbox business account); PayPal caches access tokens with old permissions (we revoke and re-issue); keeping the AI's output from ever becoming a wrong payment.
-- **Accomplishments**: real end-to-end money flows on the sandbox; an agent that plans across four agents with a human approving every action.
-- **What we learned** and **What's next**: real bank and bill integrations, scheduled Autopilot runs, shared household accounts.
-- **Built with**: PayPal REST APIs, AG Grid, AG Studio, Next.js, React, TypeScript, Tailwind CSS, Node.js, OpenRouter, Gemini, GPT, Vercel, Railway.
+**Done when:** a request with three actions across three agents shows three faces, and the card stays readable after you've decided.
 
-### Also in the submission
+## When you're stuck
 
-- [ ] **Live demo URL**: https://flick-frontend-woad.vercel.app
-- [ ] **Repo**: https://github.com/minrawsjar/Flick (public, MIT licence)
-- [ ] **Video**: the YouTube link
-- [ ] **Test login for judges**: the **You** sandbox account, from Manya, sent privately. Say it's a PayPal *sandbox* account and that no real money moves.
-- [ ] **How to try it**, for judges: start at the one-pager, then try **Lens → Pay**, **Autopilot → Approve**, and **Ask Flick**. Say the one-pager is a demo and the navbar pages are live.
-- [ ] **Gallery**: 5 or 6 screenshots (one-pager hero, Lens result, Autopilot grid, Split, Ask Flick approval card, Money Studio).
-- [ ] **Prize categories**: Grand Prize, Most Creative, Best Demo, Agentic Commerce, Best Use of AG Grid (check the form for the exact options).
-- [ ] Every team member added on Devpost.
-
-**Done when:** submitted by **23:30 IST Thu 12 Nov**, and the Devpost page shows the video, the link and the repo.
-
-## Task 3: The README's first screen (small)
-
-Judges open the repo. Before submitting, ask Swarnim to put a screenshot, the live link and the video link at the top of `README.md`. Send him the screenshot and the YouTube link.
+[`agent.ts`](../../backend/src/agent.ts) starts with a comment explaining the plan-then-approve loop, and the README's "The backend" section explains the money flow. Then Swarnim.

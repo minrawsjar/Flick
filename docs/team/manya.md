@@ -1,133 +1,71 @@
-# Manya: Test & sandbox track
+# Manya: Autopilot & Lens intelligence
 
-Hi Manya! You're on **Test & sandbox**: making sure every flow works for real, on desktop and on a phone, with good data for the judges and the video. You need no code for this; you need a PayPal developer login, a phone, and a sharp eye.
+Hi Manya! You own the "brains" of **Autopilot** and **Lens**: making Autopilot notice what's unusual and learn monthly bills, and making Lens remember what you've snapped. Most of this is plain, testable TypeScript, the rules Flick's money depends on, plus the screens that show it.
+
+**First:** follow [`setup.md`](setup.md) to run Flick locally with your own PayPal sandbox. Tasks 1 and 2 need **no AI key** (they're rules and tests); task 3 needs one to read photos.
 
 ## Flick in one minute
 
-Flick is our PayPal AI Hackathon entry: **snap anything you need to pay, and Flick pays it**. Four AI agents do the work:
+Snap anything you need to pay, and Flick pays it. **Lens** reads a photo of a bill, receipt, price tag or tip jar and pays it through PayPal. **Autopilot** plans the week's payments from what it has seen (bills Lens read, monthly payments, weekly habits), takes one PayPal approval, and pays each on its day. **Splitter** and **Nudge** handle friends. **Ask Flick** plans across all of them.
 
-- **Lens** reads a photo of a bill, receipt, price tag or tip jar and pays it through a PayPal checkout.
-- **Autopilot** plans the week's payments, takes one PayPal approval, then pays each one on its day.
-- **Splitter** splits a receipt and sends each friend a PayPal invoice.
-- **Nudge** writes reminders and sends them through PayPal.
-- **Ask Flick** is an agent over all four: you type what you want, it plans, you approve.
-- **Money Studio** is a dashboard over all of it, which an AI can build for you.
+## Your area
 
-| | |
-|---|---|
-| Live site | https://flick-frontend-woad.vercel.app |
-| Repo (bugs go in Issues) | https://github.com/minrawsjar/Flick/issues |
-| PayPal developer dashboard | https://developer.paypal.com (keep the toggle on **Sandbox**) |
-| PayPal sandbox site (log in as test accounts) | https://www.sandbox.paypal.com |
+```
+backend/src/rules.ts         the pure rules: planning the week, splitting, checking Lens (start here)
+backend/src/rules.test.ts    their tests (npm test)
+backend/src/seed.ts          the demo's starting data
+backend/src/lens.ts          Lens: reading a photo, paying it
+backend/src/model.ts         the data's types
+frontend/app/_landing/autopilot.tsx   the Autopilot page's phone, grid and controls
+frontend/app/_landing/lens.tsx        the Lens page
+```
 
-**Important:** the one-pager at `/` is a *demo*: its animations aren't real. The pages in the top navbar (**Ask Flick, Lens, Autopilot, Split, Nudge, Friends, Money Studio**) are *live*: they use real AI and the real PayPal sandbox. Test those.
+Others: Utkarsh owns Money Studio, Umang owns Ask Flick and webhooks. Umang may also add a route to `backend/src/server.ts`; coordinate if you both touch it.
 
-## Who does what
+## Task 1: Flag unusual payments (rules + screens)
 
-| Who | Track | You hand them |
-|---|---|---|
-| **Manya (you)** | Test & sandbox | |
-| Utkarsh | Build: Money Studio widgets and agent, bug fixes | Bugs, as GitHub issues |
-| Umang | Story & submission: video, Devpost | Sandbox logins for the video and for judges; your best real photos |
-| Swarnim | Reviews and merges, deploys | Anything blocking you |
+Autopilot should notice when a payment is out of the ordinary, and say so.
 
-## Timeline (IST)
+**The rule** (in `rules.ts`, with tests): a planned payment is **unusual** when
+- its amount is at least **25% above** that payee's average in history (with at least 2 past payments), or
+- it's a payee Flick has **never paid before**.
 
-| When | What |
-|---|---|
-| **Tue 10 Nov** | Task 1 (accounts). Start task 2 (test pass 1). |
-| **Wed 11 Nov** | Finish test pass 1; file bugs. Collect photos (task 4). |
-| **Thu 12 Nov, 14:00** | Feature freeze. Test pass 2 on whatever changed. Then task 3 (demo data) before Umang records. |
-| **Thu 12 Nov, 23:30** | We submit. |
+**Where it shows:**
+- On `/autopilot`: a small warning chip in the grid ("▲ 18% above usual" or "New payee") and a marker on the phone's row.
+- Autopilot's message on the phone mentions it ("City Power is 18% higher than usual: worth a look before you approve.").
+- Ask Flick sees it: add the flag to each payment in `overview()` in [`backend/src/agent.ts`](../../backend/src/agent.ts). It's one line; tell Umang, since that's his file.
 
-## Ground rules
+**Make the demo show it:** in `seed.ts`, give City Power three monthly bills in the history, around $52 to $56, so this week's $64.20 is flagged. The tests in `rules.test.ts` that check the seeded week must still pass; update them if the plan legitimately changes.
 
-- **Never put passwords in GitHub**, not in issues and not in files. Share sandbox logins in the team chat only.
-- **The live site's data is shared.** Ask Swarnim before anything that resets it.
-- Sandbox money is fake, so pay, refund and invoice as much as you like.
+**Done when:**
+- [ ] `npm test` has new tests: above the threshold, just below it, a new payee, and too little history.
+- [ ] After `curl -X POST localhost:4000/api/reset`, `/autopilot` flags City Power, and nothing else.
+- [ ] Ask Flick, asked "anything unusual this week?", mentions City Power.
 
-## Task 1: Sandbox accounts (do this first)
+## Task 2: Learn monthly bills from history
 
-Our PayPal app runs on a **US** sandbox business account (India accounts can't send payouts). The friends and the person paying should be US accounts too.
+Today Autopilot learns **weekly** habits by itself, but **monthly** payments only when someone ticks "Pay it every month" in Lens. Teach `planWeek` to spot them too:
 
-1. developer.paypal.com → **Sandbox** → **Testing Tools → Sandbox Accounts → Create account**:
-   - one **Personal, United States**: this is **"You"**, the person who approves payments on PayPal's page;
-   - three more **Personal, United States**: for **Maya**, **Leo** and **Priya**.
-2. For each, open **⋮ → View/edit account** and note the email and password (in the team chat, not GitHub).
-3. On the live site, open **Friends**, and change Maya's, Leo's and Priya's emails (the pencil) to their new sandbox emails.
+- A payee paid in **at least 2 of the last 3 months**, within **±2 days** of the same day of the month, is monthly.
+- If that day falls in this week, plan it, for the most recent amount, with a reason like "You've paid Mobile Co around the 12th for the last 3 months."
+- Never plan the same payee twice in a day (a bill Lens read, or a monthly rule, wins).
 
-**Done when:** each friend's row on `/friends` shows their sandbox email, and you can log in to https://www.sandbox.paypal.com as each of them.
+**Done when:**
+- [ ] Tests: a clear monthly pattern; one that's too irregular; one in a month that already has a bill from Lens.
+- [ ] Nothing in the seeded week changes unexpectedly (or the tests say why).
 
-## Task 2: Test every flow (pass 1 Wed, pass 2 after the freeze)
+## Task 3: Lens remembers what you snapped (needs an AI key)
 
-Test on a laptop (Chrome or Safari) **and** a phone. For each step, note whether it did what's written. Anything that doesn't is a bug (see the end of this task).
+When you snap your own photo, Lens forgets the picture: reload `/lens` and it shows a drawing instead.
 
-### Lens (`/lens`)
-- [ ] Tap each sample (bill, receipt, price tag, tip jar): the phone shows a scan, then the result card; "What Lens read" fills in with sensible values.
-- [ ] On the **bill**: tap **Pay with PayPal** → PayPal's sandbox page opens → log in as **You** → approve → you're back on `/lens` with a "Paid with PayPal" message.
-- [ ] **Snap your own** on your phone: a real electricity or phone bill, a restaurant receipt, a price tag, a tip-jar QR. Note anything Lens reads wrong (amount, date, name).
-- [ ] On a receipt, **Split with 3 friends** takes you to `/split` with that receipt's items.
+- **Backend:** when Lens reads a photo, keep a small copy with the scan, a JPEG at most 480px wide (about 40 KB), as a data URL. Do the shrinking in the browser before upload: `/lens` already scales photos down in `shrink()` in `lens.tsx`. Keep photos only on the **10 newest** scans, so the state file stays small.
+- **`/lens`:** show your photo (not the drawing) for the current scan, even after a reload. Add a **Recent scans** row under the phone or the tiles: thumbnail, title, amount and status (read, waiting for PayPal, paid). Tapping one shows it in the phone, ready to pay if it isn't paid yet.
 
-### Autopilot (`/autopilot`)
-- [ ] Change an amount and a day in the grid; the phone updates.
-- [ ] **Approve with PayPal** → approve as **You** → back on `/autopilot`, every payment now "Scheduled".
-- [ ] **Next day** until Sunday: payments turn "Paid" on their days. In the developer dashboard (or logged in as the business account) you can see the payouts.
-- [ ] After approving, skip one (via Ask Flick: "skip the coffee tip"): it shows "Skipped", and You get that money refunded.
-- [ ] **Plan next week** on Sunday plans a new week.
+**Done when:**
+- [ ] Snap your own → reload → your photo is still there.
+- [ ] Recent scans lists the last few, and tapping a bill you haven't paid lets you pay it through your sandbox.
+- [ ] `backend/.data/state.json` stays well under 1 MB after 20 snaps.
 
-### Split (`/split`)
-- [ ] Type a sentence in **Tick it for me** ("Maya and I shared the salmon, Leo had the miso, we all had tea"): the ticks match what you said.
-- [ ] **Send 3 PayPal requests**: each friend shows "Sent", and the invoice links open.
-- [ ] Log in to sandbox.paypal.com as **Maya**: the invoice is there. **Pay it.**
+## When you're stuck
 
-### Nudge (`/nudge`)
-- [ ] Pick a friend and each tone: a new draft appears (written by AI).
-- [ ] **Send**: log in as that friend; there's a reminder email or notification.
-- [ ] **Check who's paid**: Maya (paid above) shows "Paid you back".
-
-### Friends (`/friends`)
-- [ ] Add a friend; they appear as a new column on `/split`.
-- [ ] Bad email or duplicate name: a clear error. Removing someone who still owes you: refused, with a reason.
-
-### Ask Flick (`/ask`)
-- [ ] Each of the four suggestion chips gives a sensible answer or plan.
-- [ ] Try three of your own, e.g. "split my last receipt with Maya and Priya", "remind Leo, make it funny", "approve my week".
-- [ ] On the approval card, say **yes** to one action and **no** to another: only the yes runs.
-- [ ] Ask "what was that bill again?" after a few messages; it should remember the conversation.
-
-### Money Studio (`/dashboard`)
-- [ ] The **This week**, **Owed to you** and **Agents** pages show data.
-- [ ] Open the AI chat, try "Build my Sunday recap": it adds widgets.
-
-### Everywhere
-- [ ] Light and dark mode (the sun/moon button): nothing unreadable.
-- [ ] On a phone: every page fits, nothing scrolls sideways, the navbar's second row scrolls.
-- [ ] The one-pager (`/`): everything animates, the scrolling band never has a gap.
-
-### Filing a bug
-
-Open a **GitHub issue** at https://github.com/minrawsjar/Flick/issues with:
-
-- **Title**: page + what's wrong ("/split: invoice link opens a blank page")
-- **Steps**, **expected**, **what happened**, device and browser, and a screenshot or screen recording.
-- A label: **P0** (breaks the demo: fix first), **P1** (looks wrong or confusing), **P2** (nice to fix).
-
-Then tell Utkarsh in the chat about any P0.
-
-**Done when:** every box above is ticked or has an issue, for laptop and phone.
-
-## Task 3: Demo data (Thu, after the freeze, before Umang records)
-
-The video and the judges should see a lived-in Flick, not an empty one. With Swarnim (who resets the live backend):
-
-1. Reset the live demo to its starting data.
-2. Set the friends' sandbox emails again (task 1, step 3).
-3. Snap one real receipt in Lens and split it, so Money Studio has a real split.
-4. Leave the week **unapproved** at Sunday, so Umang can approve it on camera.
-
-**Done when:** `/autopilot` shows the six planned payments, `/nudge` shows Leo and Maya owing money, and Money Studio's pages all have data.
-
-## Task 4: Photos and logins for Umang
-
-- [ ] 6 to 8 **real photos** that Lens reads perfectly: a bill, a receipt, a price tag, a tip-jar QR. Clear, flat, good light. Share the best in the chat.
-- [ ] A **judges' login**: the **You** sandbox account's email and password, for the Devpost submission. Send it to Umang privately.
+`rules.ts` is short and every function has a comment saying what it's for. The README's "The backend" section explains the money flow. Then Swarnim.
