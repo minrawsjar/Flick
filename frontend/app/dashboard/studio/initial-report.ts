@@ -17,11 +17,11 @@ const sum = (id: string) => ({ id, aggregation: 'sum' as const });
 const avg = (id: string) => ({ id, aggregation: 'avg' as const });
 const countd = (id: string) => ({ id, aggregation: 'countd' as const });
 
-// Same stack as --pp-font in app/globals.css.
-const PAYPAL_FONT = '"PayPal Open", "Helvetica Neue", Helvetica, Arial, sans-serif';
+// Charts draw on canvas, so they need the font stack itself: --font-sans in app/globals.css.
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Helvetica Neue", Arial, sans-serif';
 
 const typography = (fontSize: number, fontWeight: 'normal' | 'bold' = 'normal') => ({
-  fontFamily: PAYPAL_FONT,
+  fontFamily: FONT,
   fontSize,
   fontWeight,
   fontStyle: 'normal' as const,

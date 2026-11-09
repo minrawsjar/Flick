@@ -35,16 +35,16 @@ export function ReportHeader({
   onEditingChange: (editing: boolean) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-start gap-x-6 gap-y-3 border-b border-pp-border bg-white px-8 py-5">
+    <div className="flex flex-wrap items-start gap-x-6 gap-y-3 border-b border-separator bg-card px-8 py-5">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-pp-muted">{reportName}</p>
-        <h1 className="truncate text-[28px] font-semibold leading-tight text-pp-navy">{pageTitle}</h1>
+        <p className="truncate text-sm font-semibold text-secondary">{reportName}</p>
+        <h1 className="truncate text-[28px] font-semibold leading-tight text-ink">{pageTitle}</h1>
         <DataFreshness asOf={asOf} />
       </div>
       <div className="flex items-center gap-2">
         {editing && pageIsEmpty && (
-          <p className="mr-2 text-sm text-pp-muted">
-            Drag a widget from <span className="font-semibold text-pp-navy">Compose</span> to get started.
+          <p className="mr-2 text-sm text-secondary">
+            Drag a widget from <span className="font-semibold text-ink">Compose</span> to get started.
           </p>
         )}
         {editing && (
@@ -55,7 +55,7 @@ export function ReportHeader({
             <IconButton label="Redo" disabled={!canRedo} onClick={onRedo}>
               <RedoIcon />
             </IconButton>
-            <span className="mx-2 h-6 w-px bg-pp-border" aria-hidden />
+            <span className="mx-2 h-6 w-px bg-separator" aria-hidden />
             <Button onClick={onDiscard} size="sm">
               Discard
             </Button>
@@ -105,9 +105,9 @@ function DataFreshness({ asOf }: { asOf: string }) {
   const at = useSyncExternalStore(subscribeNow, () => now, () => 0);
 
   return (
-    <p className="mt-1 flex items-center gap-2 text-sm text-pp-muted">
+    <p className="mt-1 flex items-center gap-2 text-sm text-secondary">
       <span className="inline-flex items-center gap-1.5">
-        <span className="size-2 rounded-full bg-pp-success" aria-hidden />
+        <span className="size-2 rounded-full bg-paid" aria-hidden />
         PayPal sandbox
       </span>
       <span aria-hidden>·</span>
@@ -120,7 +120,7 @@ function DataFreshness({ asOf }: { asOf: string }) {
         disabled={refreshing}
         aria-label="Refresh data"
         title="Refresh data"
-        className="inline-flex size-7 items-center justify-center rounded-full text-pp-blue hover:bg-pp-highlight disabled:text-pp-muted"
+        className="inline-flex size-7 items-center justify-center rounded-full text-ink hover:bg-fill/60 disabled:text-secondary"
       >
         <RefreshIcon className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
       </button>

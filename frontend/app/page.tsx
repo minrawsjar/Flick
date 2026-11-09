@@ -1,10 +1,10 @@
-import { ArrowDown, ArrowUpRight, ScanLine } from "lucide-react";
+import { ArrowDown, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { Bot, botColors } from "@/components/bot";
 import { Phone } from "@/components/phone";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Glow, Reveal, Section, type Face } from "@/components/ui";
+import { Glow, Logo, Reveal, Section, type Face } from "@/components/ui";
 import { Agents } from "./_landing/agents";
 import { Autopilot, WeekScreen } from "./_landing/autopilot";
 import { agents, friends, owed, week } from "./_landing/data";
@@ -26,14 +26,6 @@ const links = [
   ["#nudge", "Nudge"],
   ["#studio", "Studio"],
 ] as const;
-
-function Logo() {
-  return (
-    <span className="flex size-6 items-center justify-center rounded-[7px] bg-ink text-on-ink">
-      <ScanLine size={14} strokeWidth={2.25} />
-    </span>
-  );
-}
 
 function Nav() {
   return (

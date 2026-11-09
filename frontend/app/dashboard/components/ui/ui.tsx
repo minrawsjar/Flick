@@ -8,10 +8,10 @@ import { useEffect, useEffectEvent, useRef, type ButtonHTMLAttributes, type Reac
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-pp-blue text-white hover:bg-pp-blue-dark disabled:bg-pp-border disabled:text-pp-muted',
-  secondary: 'border border-pp-navy text-pp-navy hover:bg-pp-highlight disabled:border-pp-border disabled:text-pp-muted',
-  ghost: 'text-pp-blue hover:bg-pp-highlight disabled:text-pp-muted',
-  danger: 'bg-pp-danger text-white hover:brightness-90',
+  primary: 'bg-ink text-on-ink hover:bg-ink/80 disabled:bg-separator disabled:text-secondary',
+  secondary: 'border border-ink text-ink hover:bg-fill/60 disabled:border-separator disabled:text-secondary',
+  ghost: 'text-ink hover:bg-fill/60 disabled:text-secondary',
+  danger: 'bg-danger text-white hover:brightness-90',
 };
 
 export function Button({
@@ -24,7 +24,7 @@ export function Button({
   return (
     <button
       type="button"
-      className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-blue disabled:cursor-not-allowed ${sizing} ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed ${sizing} ${VARIANTS[variant]} ${className}`}
       {...props}
     />
   );
@@ -36,7 +36,7 @@ export function IconButton({ label, className = '', ...props }: ButtonHTMLAttrib
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-flex size-9 shrink-0 items-center justify-center rounded-full text-pp-navy transition-colors hover:bg-pp-highlight focus-visible:outline-2 focus-visible:outline-pp-blue disabled:cursor-not-allowed disabled:text-pp-border disabled:hover:bg-transparent ${className}`}
+      className={`inline-flex size-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-fill/60 focus-visible:outline-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:text-separator disabled:hover:bg-transparent ${className}`}
       {...props}
     />
   );
@@ -68,12 +68,12 @@ export function Dialog({
       ref={ref}
       onClose={onClose}
       onClick={(event) => event.target === ref.current && onClose()}
-      className="m-auto w-[min(440px,calc(100vw-32px))] rounded-lg bg-white p-0 font-paypal text-pp-ink shadow-xl backdrop:bg-pp-navy/40"
+      className="m-auto w-[min(440px,calc(100vw-32px))] rounded-lg bg-card p-0 font-sans text-ink shadow-xl backdrop:bg-black/40"
     >
       {open && (
         <div className="p-6">
-          <h2 className="text-xl font-semibold text-pp-navy">{title}</h2>
-          <div className="mt-3 text-[15px] text-pp-muted">{children}</div>
+          <h2 className="text-xl font-semibold text-ink">{title}</h2>
+          <div className="mt-3 text-[15px] text-secondary">{children}</div>
           <div className="mt-6 flex flex-wrap justify-end gap-3">{actions}</div>
         </div>
       )}
@@ -112,7 +112,7 @@ export function Menu({
     <div
       ref={ref}
       role="menu"
-      className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-md border border-pp-border bg-white py-1 shadow-lg"
+      className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-md border border-separator bg-card py-1 shadow-lg"
     >
       {children}
     </div>
@@ -124,7 +124,7 @@ export function MenuItem({ danger, ...props }: ButtonHTMLAttributes<HTMLButtonEl
     <button
       type="button"
       role="menuitem"
-      className={`block w-full px-4 py-2 text-left text-sm hover:bg-pp-highlight ${danger ? 'text-pp-danger' : 'text-pp-ink'}`}
+      className={`block w-full px-4 py-2 text-left text-sm hover:bg-fill/60 ${danger ? 'text-danger' : 'text-ink'}`}
       {...props}
     />
   );

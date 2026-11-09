@@ -1,21 +1,35 @@
-// AG Studio theme for the PayPal dashboard. Every value points at a design token from
+// AG Studio theme for Money Studio. Every value points at one of Flick's design tokens in
 // app/globals.css, the same variables the shell's Tailwind classes use, so Studio renders as
-// part of the page rather than a component embedded in it: change a token there and the shell,
-// widgets, grids and charts all follow.
+// part of the page and follows it into dark mode. Chart series take the agents' colours.
 
 import { studioTheme } from 'ag-studio';
+import { botColors } from '@/components/bot';
 
-const token = (name: string) => `var(--pp-${name})`;
+// Flick's tokens under the names this theme was written with.
+const tokens: Record<string, string> = {
+  font: 'var(--font-sans)',
+  ink: 'var(--color-ink)',
+  navy: 'var(--color-ink)',
+  blue: 'var(--color-ink)',
+  muted: 'var(--color-secondary)',
+  surface: 'var(--color-card)',
+  border: 'var(--color-separator)',
+  gridline: 'color-mix(in srgb, var(--color-separator) 45%, transparent)',
+  highlight: 'color-mix(in srgb, var(--color-fill) 60%, transparent)',
+  canvas: 'var(--color-grouped)',
+};
+const token = (name: string) => tokens[name];
 const line = (color: string) => ({ width: 1, color: token(color) });
 
+const series = [botColors.cyan, botColors.violet, botColors.green, botColors.orange, botColors.blue, botColors.pink, botColors.yellow, botColors.red, '#8e8e93', '#30b0c7'];
 const palette = Object.fromEntries(
-  Array.from({ length: 10 }, (_, i) => [
-    [`chartPaletteFills${i + 1}Color`, token(`chart-${i + 1}`)],
-    [`chartPaletteStrokes${i + 1}Color`, token(`chart-${i + 1}`)],
-  ]).flat(),
+  series.flatMap((color, i) => [
+    [`chartPaletteFills${i + 1}Color`, color],
+    [`chartPaletteStrokes${i + 1}Color`, color],
+  ]),
 );
 
-export const agStudioPayPalTheme = studioTheme.withParams({
+export const agStudioTheme = studioTheme.withParams({
   // Shared by Studio's UI, grids and charts.
   fontFamily: token('font'),
   fontSize: 14,
@@ -43,10 +57,10 @@ export const agStudioPayPalTheme = studioTheme.withParams({
   studioCanvasRowHeight: 18,
   studioCanvasFontFamily: token('font'),
 
-  // Widgets are the shell's cards: white, 1px border, 8px radius.
+  // Widgets are the page's cards: no border, 16px radius.
   studioWidgetBackgroundColor: token('surface'),
-  studioWidgetBorder: line('border'),
-  studioWidgetBorderRadius: 8,
+  studioWidgetBorder: false,
+  studioWidgetBorderRadius: 16,
   studioWidgetPadding: 10,
   studioWidgetTitleFontFamily: token('font'),
   studioWidgetTitleFontSize: 16,

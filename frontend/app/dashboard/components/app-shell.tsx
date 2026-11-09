@@ -1,50 +1,28 @@
 'use client';
 
+import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { BellIcon, HelpIcon } from './ui/icons';
-import { AgStudioLogo } from './ui/logo';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { Logo } from '@/components/ui';
 
-// The app frame, laid out like the PayPal Developer Dashboard: a white top bar, a left sidebar
-// and a light canvas. Shared by the dashboard, its loading skeleton and its error page.
-
-function PayPalWordmark({ className = '' }: { className?: string }) {
-  return (
-    <span className={`font-bold italic tracking-tight ${className}`}>
-      <span className="text-pp-blue-dark">Pay</span>
-      <span className="text-pp-sky">Pal</span>
-    </span>
-  );
-}
-
-function BrandLockup() {
-  return (
-    <div className="flex items-center gap-3">
-      <AgStudioLogo className="-ml-3 h-12 w-auto" />
-      <span className="h-6 w-px bg-pp-border" aria-hidden />
-      <span className="flex items-baseline gap-1 text-xs text-pp-muted">
-        powered by <PayPalWordmark className="text-base" /> APIs
-      </span>
-    </div>
-  );
-}
+// Money Studio's frame: a top bar, the reports sidebar and the canvas, in Flick's tokens so it
+// follows the page into dark mode. Shared by the dashboard, its loading skeleton and its error page.
 
 function TopBar() {
   return (
-    <header className="flex h-16 shrink-0 items-center gap-6 border-b border-pp-border bg-white px-6">
-      <BrandLockup />
-      <div className="ml-auto flex items-center gap-1 text-pp-navy">
-        <span className="inline-flex size-9 items-center justify-center rounded-full" title="Help">
-          <HelpIcon />
-        </span>
-        <span className="inline-flex size-9 items-center justify-center rounded-full" title="Notifications">
-          <BellIcon />
-        </span>
-        <span className="ml-2 flex items-center gap-2">
-          <span className="flex size-9 items-center justify-center rounded-full bg-pp-navy text-sm font-semibold text-white">
-            AG
-          </span>
-          <span className="hidden text-sm font-semibold sm:inline">Demo merchant</span>
-        </span>
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-separator/60 bg-card px-5">
+      <Link href="/" className="flex items-center gap-2 text-[15px]">
+        <Logo />
+        Flick
+      </Link>
+      <span className="h-5 w-px bg-separator" aria-hidden />
+      <span className="text-[15px] font-semibold">Money Studio</span>
+      <span className="hidden text-xs text-secondary sm:inline">AG Studio over your PayPal sandbox data</span>
+      <div className="ml-auto flex items-center gap-2">
+        <ThemeToggle />
+        <Link href="/" className="rounded-full bg-fill px-3 py-1 text-[13px] transition-colors hover:bg-fill/70">
+          Back to Flick
+        </Link>
       </div>
     </header>
   );
@@ -58,10 +36,10 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-dvh flex-col bg-pp-canvas font-paypal text-pp-ink">
+    <div className="flex h-dvh flex-col bg-grouped font-sans text-ink">
       <TopBar />
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-64 shrink-0 flex-col border-r border-pp-border bg-white" aria-label="Reports">
+        <nav className="flex w-64 shrink-0 flex-col border-r border-separator bg-card" aria-label="Reports">
           {sidebar}
         </nav>
         <main className="flex min-w-0 flex-1 flex-col">{children}</main>

@@ -1,6 +1,6 @@
 "use client";
 
-import { AudioLines, Mic } from "lucide-react";
+import { AudioLines, Mic, ScanLine } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { usd } from "@/lib/format";
 import { Bot, botColors, type BotColor, type BotShape } from "./bot";
@@ -9,6 +9,15 @@ import { Bot, botColors, type BotColor, type BotShape } from "./bot";
 // Phone-scale pieces first (they render inside <Phone> at 262px), then page-scale ones.
 
 export type Face = { color: BotColor; shape: BotShape };
+
+/** Flick's mark: a scan frame in an ink square. */
+export function Logo({ size = 24 }: { size?: number }) {
+  return (
+    <span className="flex shrink-0 items-center justify-center rounded-[7px] bg-ink text-on-ink" style={{ width: size, height: size }}>
+      <ScanLine size={size * 0.58} strokeWidth={2.25} />
+    </span>
+  );
+}
 
 
 export function Title({ children, right }: { children: ReactNode; right?: ReactNode }) {
