@@ -193,7 +193,7 @@ body {
 .caret { animation: caret 1s step-end infinite; }
 .loop-drift { animation: drift 16s ease-in-out infinite; }
 .loop-bob { animation: bob 4.5s ease-in-out infinite; }
-.loop-marquee { animation: marquee 45s linear infinite; }
+.loop-marquee { animation: marquee 135s linear infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

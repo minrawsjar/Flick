@@ -103,6 +103,11 @@ const snappable = [
   ["Parking", "violet"],
 ] as const;
 
+// One pass of the band: the list three times over (about 5,000px), so it's always wider than the
+// screen. The band scrolls two identical passes by half its width and starts over, which is only
+// seamless while a single pass can fill the screen on its own.
+const pass = [...snappable, ...snappable, ...snappable];
+
 /** Everything Lens can read, scrolling by. */
 function Marquee() {
   return (
@@ -111,8 +116,8 @@ function Marquee() {
       <div className="loop-marquee flex w-max" aria-hidden>
         {[0, 1].map((copy) => (
           <div key={copy} className="flex shrink-0 gap-12 pr-12">
-            {snappable.map(([thing, color]) => (
-              <span key={thing} className="flex items-center gap-2.5 whitespace-nowrap text-[19px] text-secondary">
+            {pass.map(([thing, color], i) => (
+              <span key={i} className="flex items-center gap-2.5 whitespace-nowrap text-[19px] text-secondary">
                 <span className="size-2.5 rounded-full" style={{ background: `var(--color-${color})` }} />
                 {thing}
               </span>
