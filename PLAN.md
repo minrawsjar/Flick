@@ -1,9 +1,10 @@
 # Flick — PayPal AI Hackathon build plan (frontend first, Air Agents theme)
 
-## Status (2026-11-10)
-- Done: frontend/backend split; interactive one-pager at `/` (Air Agents style, dark mode); Money Studio restyled with Flick tokens + Flick tables; complete backend (Lens, Autopilot, Splitter, Nudge, PayPal orders/payouts/invoices/refunds, JSON store, `npm test`, `npm run check`).
-- Decisions: Autopilot plans with rules, not AI (never invents a payment); AI = any OpenAI-compatible API, OpenRouter default (`AI_API_KEY`, `AI_MODEL`); money flow = checkout captured into the app's sandbox account, then Payouts to billers (Vault skipped).
-- Next: user adds keys and runs `npm run check`; wire the one-pager demos to the live API (Lens upload, approve week, split, nudge); deploy to Render; video.
+## Status (2026-11-10, late)
+- Done: frontend/backend split; Air Agents-style one-pager with dark mode, **live on the backend** (real Lens reads incl. own photos, PayPal sandbox checkouts for bills and the week, payouts per day, real invoices for splits, AI-drafted PayPal reminders), demo fallback without backend; Money Studio restyled, opens on Flick pages (This week / Owed to you / Agents); backend complete with `npm test` and `npm run check` (all green on the US sandbox app).
+- Decisions: Autopilot plans with rules, not AI; AI via OpenRouter, `AI_MODEL=google/gemini-2.5-flash-lite,openai/gpt-6-luna` (bake-off winner + fallback), Studio `openai/gpt-6-luna,openai/gpt-5.4-mini`; money flow = checkout captured into the US sandbox business account, then Payouts.
+- Sandbox: app must be on the **US** business account (India accounts can't send Payouts); `npm run check` revokes PayPal's cached token so feature changes apply at once.
+- Next: user makes US personal sandbox accounts (buyer + Maya/Leo/Priya) → put friend emails in `backend/src/seed.ts` and `POST /api/reset`; try a full approve → return flow in the browser; deploy (Render, two services); video; submit by ~10am PST Nov 12.
 
 ## Context
 - Hackathon https://paypalaihackathon.devpost.com/ — must meaningfully use PayPal (sandbox) + AI. **Deadline Nov 12, 2026 12:00pm PST** (today Nov 9 → ~2.5 days). Submit: hosted demo URL, public repo + LICENSE, <3 min YouTube video, tools write-up.
