@@ -2,21 +2,7 @@
 
 import { CircleCheck, Info } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { returned, useLive } from "@/lib/live";
-
-/** Says whether the page is running live against the backend, or on demo data. */
-export function LiveBadge() {
-  const live = useLive();
-  if (live.mode === "loading") return <p className="mt-4 h-5" />;
-  return (
-    <p className="mt-4 flex items-center justify-center gap-1.5 text-[13px] text-secondary">
-      <span className={`size-2 rounded-full ${live.mode === "live" ? "bg-[#34c759]" : "bg-fill"}`} />
-      {live.mode === "live"
-        ? `Live: real PayPal sandbox${live.state?.config.ai ? " and AI" : ""}. Every demo below does it for real.`
-        : "Demo data: start the backend to make every demo below real."}
-    </p>
-  );
-}
+import { returned } from "@/lib/live";
 
 const messages: Record<string, [ok: boolean, text: string]> = {
   week: [true, "Week approved with PayPal. Autopilot takes it from here."],

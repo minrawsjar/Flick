@@ -9,7 +9,7 @@ import { Agents } from "./_landing/agents";
 import { Autopilot, WeekScreen } from "./_landing/autopilot";
 import { agents, friends, owed, week } from "./_landing/data";
 import { HeroLens, Snap } from "./_landing/lens";
-import { LiveBadge, ReturnNotice } from "./_landing/live-notice";
+import { ReturnNotice } from "./_landing/live-notice";
 import { Nudge, NudgeScreen } from "./_landing/nudge";
 import { Split } from "./_landing/split";
 import { Studio } from "./_landing/studio";
@@ -88,7 +88,6 @@ function Hero() {
             GitHub <ArrowUpRight size={18} aria-hidden />
           </a>
         </div>
-        <LiveBadge />
       </Reveal>
       <Reveal className="relative mx-auto mt-16 flex h-[560px] max-w-5xl items-start justify-center sm:h-[600px]">
         {/* The agents' colours, drifting behind the phones. */}
