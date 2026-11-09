@@ -72,7 +72,13 @@ export function seed(now = new Date()): State {
       { id: 'debt_maya', friendId: 'maya', amount: 18.4, what: 'movie night', createdAt: `${day(-7)}T21:00:00.000Z`, status: 'requested', reminders: 0 },
     ],
     checkouts: {},
-    activity: [],
+    activity: [
+      { id: 'act_seed5', at: `${day(-1)}T18:05:00.000Z`, agent: 'autopilot', text: 'Paid Leo: Five-a-side pitch', amount: 3.6 },
+      { id: 'act_seed4', at: `${day(-2)}T10:30:00.000Z`, agent: 'autopilot', text: 'Paid Corner Grocery: Groceries', amount: 38.5 },
+      { id: 'act_seed3', at: `${day(-6)}T18:20:00.000Z`, agent: 'lens', text: 'Read a bill: City Power, $64.20', amount: 64.2 },
+      { id: 'act_seed2', at: `${day(-7)}T21:10:00.000Z`, agent: 'splitter', text: 'Split movie night and asked Maya for $18.40', amount: 18.4 },
+      { id: 'act_seed1', at: `${day(-13)}T09:00:00.000Z`, agent: 'splitter', text: 'Split the airport cab and asked Leo for $27.00', amount: 27 },
+    ],
   };
   state.week.payments = planWeek(starts, state);
   return state;

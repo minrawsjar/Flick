@@ -1,5 +1,6 @@
-// The built-in "PayPal overview" report: pages for revenue, receivables, cash and catalogue, as
-// AG Studio report state. Field ids ('invoices.paidAmount') refer to the data sources in ./data.ts.
+// The built-in Money Studio report, as AG Studio report state: Flick's own pages first (this week,
+// what friends owe, what the agents did), then the PayPal account's revenue, receivables, cash and
+// catalogue. Field ids ('flickPayments.amount') refer to the data sources in ./data.ts.
 
 import type { AgPageState, AgReportState, AgWidgetLayoutState } from 'ag-studio';
 
@@ -41,7 +42,138 @@ const kpi = (text: string, value: { id: string; aggregation?: 'sum' | 'avg' | 'c
   },
 });
 
-// --- Pages ------------------------------------------------------------------------
+// --- Flick's pages -----------------------------------------------------------------
+
+const week: AgPageState = {
+  id: 'week',
+  widgets: {
+    'kpi-planned': kpi('This week', sum('flickPayments.amount')),
+    'kpi-paid': kpi('Paid so far', sum('flickPayments.paid')),
+    'kpi-to-pay': kpi('Still to pay', sum('flickPayments.toPay')),
+    'kpi-owed': kpi('Owed to you', sum('flickRequests.outstanding')),
+    'by-day': {
+      type: 'column-chart-stacked',
+      dataMapping: {
+        categoryKey: [{ id: 'flickPayments.date' }],
+        valueKey: [sum('flickPayments.amount')],
+        legendKey: [{ id: 'flickPayments.status' }],
+      },
+      format: {
+        ...title("This week's payments by day"),
+        style: { theme: { common: { legend: { enabled: true } } } },
+      },
+    },
+    'where-it-goes': {
+      type: 'donut-chart',
+      dataMapping: {
+        categoryKey: [{ id: 'flickHistory.payee' }],
+        valueKey: [sum('flickHistory.amount')],
+      },
+      format: {
+        ...title('Where the money went, past weeks'),
+        style: { custom: { pieDataLabel: { enabled: true }, totalLabel: { enabled: true } } },
+      },
+    },
+    plan: {
+      type: 'grid',
+      dataMapping: {
+        cols: [
+          { id: 'flickPayments.date' },
+          { id: 'flickPayments.payee' },
+          { id: 'flickPayments.what' },
+          { id: 'flickPayments.status' },
+          sum('flickPayments.amount'),
+          { id: 'flickPayments.reason' },
+        ],
+      },
+      sort: [{ field: { id: 'flickPayments.date' }, direction: 'asc' }],
+      format: title("Autopilot's plan, and why"),
+    },
+  },
+  widgetLayout: {
+    'kpi-planned': at(0, 0, 6, 7),
+    'kpi-paid': at(6, 0, 6, 7),
+    'kpi-to-pay': at(12, 0, 6, 7),
+    'kpi-owed': at(18, 0, 6, 7),
+    'by-day': at(0, 7, 15, 17),
+    'where-it-goes': at(15, 7, 9, 17),
+    plan: at(0, 24, 24, 22),
+  },
+};
+
+const owed: AgPageState = {
+  id: 'owed',
+  widgets: {
+    'kpi-owed': kpi('Still owed to you', sum('flickRequests.outstanding')),
+    'kpi-repaid': kpi('Paid back', sum('flickRequests.repaid')),
+    'kpi-reminders': kpi('Reminders sent', sum('flickRequests.reminders')),
+    'by-friend': {
+      type: 'column-chart-stacked',
+      dataMapping: {
+        categoryKey: [{ id: 'flickRequests.friend' }],
+        valueKey: [sum('flickRequests.amount')],
+        legendKey: [{ id: 'flickRequests.status' }],
+      },
+      format: {
+        ...title('Requested from each friend'),
+        style: { theme: { common: { legend: { enabled: true } } } },
+      },
+    },
+    requests: {
+      type: 'grid',
+      dataMapping: {
+        cols: [
+          { id: 'flickRequests.friend' },
+          { id: 'flickRequests.what' },
+          { id: 'flickRequests.requested' },
+          { id: 'flickRequests.status' },
+          sum('flickRequests.reminders'),
+          sum('flickRequests.amount'),
+        ],
+      },
+      sort: [{ field: { id: 'flickRequests.requested' }, direction: 'desc' }],
+      format: title('Requests, as PayPal invoices'),
+    },
+  },
+  widgetLayout: {
+    'kpi-owed': at(0, 0, 8, 7),
+    'kpi-repaid': at(8, 0, 8, 7),
+    'kpi-reminders': at(16, 0, 8, 7),
+    'by-friend': at(0, 7, 10, 18),
+    requests: at(10, 7, 14, 18),
+  },
+};
+
+const agents: AgPageState = {
+  id: 'agents',
+  widgets: {
+    'by-agent': {
+      type: 'donut-chart',
+      dataMapping: {
+        categoryKey: [{ id: 'flickActivity.agent' }],
+        valueKey: [countd('flickActivity.id')],
+      },
+      format: {
+        ...title('What each agent did'),
+        style: { custom: { pieDataLabel: { enabled: true }, totalLabel: { enabled: true } } },
+      },
+    },
+    log: {
+      type: 'grid',
+      dataMapping: {
+        cols: [{ id: 'flickActivity.date' }, { id: 'flickActivity.agent' }, { id: 'flickActivity.text' }, sum('flickActivity.amount')],
+      },
+      sort: [{ field: { id: 'flickActivity.date' }, direction: 'desc' }],
+      format: title('Activity'),
+    },
+  },
+  widgetLayout: {
+    'by-agent': at(0, 0, 8, 20),
+    log: at(8, 0, 16, 20),
+  },
+};
+
+// --- PayPal's pages -------------------------------------------------------------------
 
 const revenue: AgPageState = {
   id: 'revenue',
@@ -397,6 +529,6 @@ const catalogue: AgPageState = {
 };
 // The report opens on its first page.
 export const dashboardReport: AgReportState = {
-  selectedPageId: revenue.id,
-  pages: [revenue, receivables, cash, catalogue],
+  selectedPageId: week.id,
+  pages: [week, owed, agents, revenue, receivables, cash, catalogue],
 };

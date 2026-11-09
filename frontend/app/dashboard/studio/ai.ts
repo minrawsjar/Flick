@@ -11,12 +11,12 @@ const PROMPT_STARTERS: AgAiPromptStarter[] = [
     prompt: 'Summarise what this page shows: every widget, the fields it reads, and what stands out.',
   },
   {
-    label: 'Overdue invoices',
-    prompt: 'Which customers owe the most on overdue invoices?',
+    label: 'Sunday recap',
+    prompt: "Build a Sunday recap page: what Autopilot paid this week by payee, what's still to pay, and who still owes me.",
   },
   {
-    label: 'Revenue by month',
-    prompt: 'Add a chart of paid invoice revenue by month.',
+    label: 'Who owes me',
+    prompt: 'Which friends owe me the most, and for how long?',
   },
 ];
 
