@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import { json } from 'node:stream/consumers';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
-import { aiBaseUrl, aiHeaders, aiKey, studioModels } from './ai.ts';
+import { aiBaseUrl, aiHeaders, aiKey, spendAi, studioModels } from './ai.ts';
 import { send } from './http.ts';
 
 // Proxy for AG Studio's OpenAI adapter (frontend/app/dashboard/studio/openai-adapter.ts). The adapter
@@ -30,6 +30,11 @@ export async function aiResponses(req: IncomingMessage, res: ServerResponse) {
   const models = studioModels();
   const model = typeof body.model === 'string' && body.model ? body.model : models[0];
   if (!models.includes(model)) return send(res, 400, { error: { message: `Model "${model}" is not enabled.` } });
+  try {
+    spendAi();
+  } catch (err) {
+    return send(res, 429, { error: { message: (err as Error).message } });
+  }
 
   // Stopping the chat in Studio drops the browser's connection, which cancels the upstream call too.
   const abort = new AbortController();

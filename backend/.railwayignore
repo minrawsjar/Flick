@@ -1,0 +1,4 @@
+# Never upload secrets, local state or installed packages: Railway sets the variables and installs itself.
+.env
+.data
+node_modules

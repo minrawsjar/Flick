@@ -36,6 +36,19 @@ export function studioModels(): string[] {
   return models.length ? models : [aiModel()];
 }
 
+// The API is public once deployed and the key is paid for, so AI calls are capped per hour: a
+// runaway client gets a 429 instead of draining the credit.
+// ponytail: one global in-memory budget; per-visitor limits if real abuse ever shows up.
+const hourlyLimit = () => Number(process.env.AI_HOURLY_LIMIT) || 300;
+let budget = { since: Date.now(), used: 0 };
+
+/** Counts one AI call against the hourly cap; throws 429 once it's used up. */
+export function spendAi() {
+  if (Date.now() - budget.since > 3_600_000) budget = { since: Date.now(), used: 0 };
+  if (budget.used >= hourlyLimit()) throw new HttpError(429, "Flick's AI has hit its hourly limit. Try again in a little while.");
+  budget.used += 1;
+}
+
 export function aiHeaders(key: string): Record<string, string> {
   return {
     'Content-Type': 'application/json',
@@ -57,6 +70,7 @@ export type Message =
 export async function askJson<T>(name: string, schema: object, messages: Message[]): Promise<T> {
   const key = aiKey();
   if (!key) throw new HttpError(503, 'AI is off: set AI_API_KEY in backend/.env.');
+  spendAi();
 
   const res = await fetch(`${aiBaseUrl()}/chat/completions`, {
     method: 'POST',
