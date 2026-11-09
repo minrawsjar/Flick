@@ -110,6 +110,8 @@ export type LensAnswer = {
 
 const KINDS = ['bill', 'receipt', 'product', 'tip'] as const;
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+// Bills shout ("CITY POWER"); people's apps shouldn't.
+const calm = (name: string) => (/[A-Z]/.test(name) && name === name.toUpperCase() ? name.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase()) : name);
 const amount = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 100_000 ? cents(v) : 0);
 const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v);
 
@@ -128,7 +130,7 @@ export function checkLens(answer: Partial<LensAnswer>, id: string, at: string): 
     id,
     at,
     kind,
-    title: text(answer.title, 80) || 'Something to pay',
+    title: calm(text(answer.title, 80)) || 'Something to pay',
     summary: text(answer.summary, 120),
     amount: kind === 'unknown' ? 0 : amount(answer.amount),
     currency: /^[A-Z]{3}$/.test(text(answer.currency, 3)) ? text(answer.currency, 3) : 'USD',

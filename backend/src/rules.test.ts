@@ -98,6 +98,8 @@ test('Lens output is checked before it can become a payment', () => {
     '2026-11-09T10:00:00Z',
   );
   assert.equal(scan.title, 'City Power');
+  assert.equal(checkLens({ kind: 'bill', title: 'CITY POWER' }, 's', 't').title, 'City Power', 'all caps is calmed');
+  assert.equal(checkLens({ kind: 'bill', title: 'IKEA Family' }, 's', 't').title, 'IKEA Family', 'mixed case is kept');
   assert.equal(scan.currency, 'USD');
   assert.equal(scan.due, null, 'Feb 30 is not a date');
   assert.equal(scan.repeats, null);

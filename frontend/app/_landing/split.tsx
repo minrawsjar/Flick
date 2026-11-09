@@ -1,31 +1,54 @@
 "use client";
 
+import type { Debt, Scan } from "@backend/model";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import type { CustomHeaderProps } from "ag-grid-react";
-import { Check, LoaderCircle } from "lucide-react";
+import { ArrowUpRight, Check, LoaderCircle, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Bot } from "@/components/bot";
 import { Grid } from "@/components/grid";
 import { Phone } from "@/components/phone";
 import { Activity, Bubble, Primary, Speaking, Tile } from "@/components/ui";
 import { usd } from "@/lib/format";
+import { act, useLive } from "@/lib/live";
 import { agents, friends, receipt, TAX, TIP, you, type Friend, type Item } from "./data";
 
-// Splitter: tick who had what on the receipt. Each item is shared equally by the people who
-// had it, and tax and tip follow in proportion. Friends get a PayPal invoice for their share.
+// Splitter: tick who had what on the receipt. Each item is shared equally by the people who had
+// it, and tax and tip follow in proportion. Friends get a PayPal invoice for their share. Live,
+// the receipt can be one Lens just read, and the invoices are real (sandbox) PayPal invoices.
 
 type Person = Friend["id"];
 const people = [you, ...friends];
+const cents = (n: number) => Math.round(n * 100) / 100;
 
-function split(items: Item[]) {
-  const each = { you: 0, maya: 0, leo: 0, priya: 0 } satisfies Record<Person, number>;
-  const nobody: Item[] = [];
+type Bill = { merchant: string; items: Item[]; tax: number; tip: number; scanned: boolean };
+
+const demoSubtotal = receipt.reduce((sum, i) => sum + i.price, 0);
+const demoBill: Bill = { merchant: "Nori Sushi", items: receipt, tax: cents(demoSubtotal * TAX), tip: cents(demoSubtotal * TIP), scanned: false };
+
+/** A receipt Lens read: everyone starts with a tick on every item. */
+const billFrom = (scan: Scan): Bill => ({
+  merchant: scan.title,
+  items: scan.items.map((item, i) => ({ id: `item${i}`, name: item.name, price: item.price, you: true, maya: true, leo: true, priya: true })),
+  tax: scan.tax,
+  tip: scan.tip,
+  scanned: true,
+});
+
+/** Who owes what, the same way the backend works it out (backend/src/rules.ts): you take the rounding. */
+function shares(items: Item[], tax: number, tip: number) {
+  const nobody = items.filter((item) => !people.some((p) => item[p.id]));
+  const subtotal = items.filter((item) => !nobody.includes(item)).reduce((sum, item) => sum + item.price, 0);
+  const total = cents(subtotal + tax + tip);
+  const raw = { you: 0, maya: 0, leo: 0, priya: 0 } satisfies Record<Person, number>;
   for (const item of items) {
     const who = people.filter((p) => item[p.id]);
-    if (!who.length) nobody.push(item);
-    for (const p of who) each[p.id] += (item.price / who.length) * (1 + TAX + TIP);
+    for (const p of who) raw[p.id] += item.price / who.length;
   }
-  return { each, nobody };
+  const each = { ...raw };
+  for (const f of friends) each[f.id] = subtotal ? cents((raw[f.id] * total) / subtotal) : 0;
+  each.you = cents(total - friends.reduce((sum, f) => sum + each[f.id], 0));
+  return { each, nobody, total };
 }
 
 function FaceHeader({ displayName, face }: CustomHeaderProps & { face: Friend }) {
@@ -74,95 +97,139 @@ const columns: ColDef<Item>[] = [
   ),
 ];
 
+type Sending = Partial<Record<Person, "sending" | "sent" | "failed">>;
+
 /** Splitter on the phone: the shares, and the requests going out. */
-function SplitScreen({ each, nobody, sent, onSend }: { each: Record<Person, number>; nobody: Item[]; sent: number; onSend: () => void }) {
-  const total = Object.values(each).reduce((a, b) => a + b, 0);
+function SplitScreen({ merchant, each, total, nobody, status, onSend }: { merchant: string; each: Record<Person, number>; total: number; nobody: Item[]; status: Sending; onSend: () => void }) {
+  const asked = friends.filter((f) => each[f.id] > 0);
+  const sent = asked.filter((f) => status[f.id] === "sent");
+  const started = Object.keys(status).length > 0;
+  const finished = started && asked.every((f) => status[f.id] === "sent" || status[f.id] === "failed");
   return (
     <div className="flex h-full flex-col bg-page">
       <Speaking agent={agents.splitter} label="Splitter" />
       <div className="flex flex-1 flex-col justify-end gap-2 overflow-hidden px-3">
-        <Bubble from="you">Split Nori Sushi with Maya, Leo and Priya.</Bubble>
+        <Bubble from="you">Split {merchant} with Maya, Leo and Priya.</Bubble>
         <Bubble from="agent">
           {nobody.length
             ? `Nobody has the ${nobody.map((i) => i.name.toLowerCase()).join(" or ")} yet. Tick who had it.`
-            : `${usd(total)} with tax and an 18% tip. Here's each share:`}
+            : `${usd(total)} with tax and tip. Here's each share:`}
         </Bubble>
         <div className="divide-y divide-separator/50 rounded-card bg-fill/50 px-2.5">
-          {friends.map((f, i) => (
+          {friends.map((f) => (
             <div key={f.id} className="flex items-center gap-2 py-1.5 text-[13px]">
-              <Bot {...f} size={24} mood={sent > i ? "awake" : "idle"} />
+              <Bot {...f} size={24} mood={status[f.id] === "sent" ? "awake" : "idle"} />
               <span className="flex-1">{f.name}</span>
               <span className="tabular-nums">{usd(each[f.id])}</span>
               <span className="flex w-12 justify-end text-[11px]">
-                {sent > i ? (
+                {status[f.id] === "sent" ? (
                   <span className="rise flex items-center gap-0.5 text-paid">
                     <Check size={11} strokeWidth={2.5} /> Sent
                   </span>
-                ) : sent === i ? (
+                ) : status[f.id] === "failed" ? (
+                  <span className="flex items-center gap-0.5 text-danger">
+                    <X size={11} strokeWidth={2.5} /> Failed
+                  </span>
+                ) : status[f.id] === "sending" ? (
                   <LoaderCircle size={12} className="spinner text-secondary" />
                 ) : null}
               </span>
             </div>
           ))}
         </div>
-        {sent >= friends.length && <Activity>Sent 3 PayPal invoices · you paid {usd(each.you)}</Activity>}
+        {finished && sent.length > 0 && (
+          <Activity>
+            Sent {sent.length} PayPal {sent.length === 1 ? "invoice" : "invoices"} · you paid {usd(each.you)}
+          </Activity>
+        )}
       </div>
       <div className="px-3 pb-5 pt-2">
-        <Primary onClick={onSend} disabled={nobody.length > 0 || sent >= 0}>
-          {sent >= friends.length ? "Requests sent" : `Send ${friends.length} PayPal requests`}
+        <Primary onClick={onSend} disabled={nobody.length > 0 || started || !asked.length}>
+          {finished ? "Requests sent" : `Send ${asked.length} PayPal ${asked.length === 1 ? "request" : "requests"}`}
         </Primary>
       </div>
     </div>
   );
 }
 
-export function Split() {
-  const [items, setItems] = useState(receipt);
-  /** -1 before sending; then how many requests have gone out. */
-  const [sent, setSent] = useState(-1);
-  const sending = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const { each, nobody } = split(items);
+function SplitBill({ bill, live }: { bill: Bill; live: boolean }) {
+  const [items, setItems] = useState(bill.items);
+  const [status, setStatus] = useState<Sending>({});
+  const [links, setLinks] = useState<{ name: string; url?: string; amount: number }[]>([]);
+  const [error, setError] = useState<string>();
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const { each, nobody, total } = shares(items, bill.tax, bill.tip);
 
   const context = useMemo(
     () => ({
       toggle: ((id, person) => {
         setItems((all) => all.map((item) => (item.id === id ? { ...item, [person]: !item[person] } : item)));
-        // A changed share cancels requests still going out.
-        sending.current.forEach(clearTimeout);
-        setSent(-1);
+        // A changed share cancels requests still going out (demo), and starts a fresh split.
+        timers.current.forEach(clearTimeout);
+        setStatus({});
+        setLinks([]);
       }) satisfies Toggle,
     }),
     [],
   );
 
-  const send = () => {
-    setSent(0);
-    sending.current = friends.map((_, i) => setTimeout(() => setSent(i + 1), 500 + i * 550));
+  const asked = friends.filter((f) => each[f.id] > 0);
+
+  const send = async () => {
+    setError(undefined);
+    if (!live) {
+      setStatus(Object.fromEntries(asked.map((f) => [f.id, "sending"])));
+      timers.current = asked.map((f, i) => setTimeout(() => setStatus((s) => ({ ...s, [f.id]: "sent" })), 500 + i * 550));
+      return;
+    }
+    setStatus(Object.fromEntries(asked.map((f) => [f.id, "sending"])));
+    try {
+      const result = await act<{ debts: Debt[]; failed: { friendId: string; error: string }[] }>("split", {
+        merchant: bill.merchant,
+        items: items.map((i) => ({ name: i.name, price: i.price, people: people.filter((p) => i[p.id]).map((p) => p.id) })),
+        tax: bill.tax,
+        tip: bill.tip,
+      });
+      setStatus(Object.fromEntries([...result.debts.map((d) => [d.friendId, "sent"]), ...result.failed.map((f) => [f.friendId, "failed"])]));
+      setLinks(result.debts.map((d) => ({ name: friends.find((f) => f.id === d.friendId)?.name ?? d.friendId, url: d.payerUrl, amount: d.amount })));
+      if (result.failed.length) setError(result.failed[0].error);
+    } catch (err) {
+      setStatus({});
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
-  const totals = useMemo(
-    () => [{ id: "total", name: "Each pays", price: items.reduce((sum, i) => sum + i.price, 0) * (1 + TAX + TIP), ...each }] as unknown as Item[],
-    [items, each],
-  );
+  const totals = useMemo(() => [{ id: "total", name: "Each pays", price: total, ...each }] as unknown as Item[], [total, each]);
 
   return (
     <div className="grid items-center justify-items-center gap-6 lg:grid-cols-[1fr_auto] lg:justify-items-stretch">
       <div className="order-2 grid w-full min-w-0 gap-3 lg:order-1">
         <Tile>
-          <p className="mb-3 text-[13px] text-secondary">Who had what. Tap to tick; the shares update as you go.</p>
-          <Grid<Item>
-            rowData={items}
-            columnDefs={columns}
-            getRowId={({ data }) => data.id}
-            pinnedBottomRowData={totals}
-            context={context}
-            headerHeight={52}
-          />
+          <p className="mb-3 text-[13px] text-secondary">
+            {bill.scanned ? `${bill.merchant}, as Lens read it. Tick who had what; the shares update as you go.` : "Who had what. Tap to tick; the shares update as you go."}
+          </p>
+          <Grid<Item> rowData={items} columnDefs={columns} getRowId={({ data }) => data.id} pinnedBottomRowData={totals} context={context} headerHeight={52} />
+          {error && <p className="mt-2 text-[12px] text-wait">{error}</p>}
+          {links.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {links.map((l) =>
+                l.url ? (
+                  <a key={l.name} href={l.url} target="_blank" rel="noreferrer" className="pressable flex items-center gap-1 rounded-full bg-raised px-3 py-1 text-[12px]">
+                    {l.name}&apos;s invoice, {usd(l.amount)} <ArrowUpRight size={12} />
+                  </a>
+                ) : (
+                  <span key={l.name} className="rounded-full bg-raised px-3 py-1 text-[12px]">
+                    {l.name}: invoice sent, {usd(l.amount)}
+                  </span>
+                ),
+              )}
+            </div>
+          )}
         </Tile>
         <Tile className="grid gap-4 sm:grid-cols-3">
           {[
             ["Shared fairly", "Each item splits between whoever had it. Tax and tip follow each person's share."],
-            ["Paid with PayPal", "Every friend gets an invoice they can pay with PayPal or a card."],
+            ["Paid with PayPal", live ? "Every friend gets a real PayPal sandbox invoice, payable with PayPal or a card." : "Every friend gets an invoice they can pay with PayPal or a card."],
             ["Followed up", "Anyone who hasn't paid is handed to Nudge after a few days."],
           ].map(([title, text]) => (
             <div key={title}>
@@ -174,9 +241,16 @@ export function Split() {
       </div>
       <div className="order-1 lg:order-2">
         <Phone width={262} background="var(--color-page)">
-          <SplitScreen each={each} nobody={nobody} sent={sent} onSend={send} />
+          <SplitScreen merchant={bill.merchant} each={each} total={total} nobody={nobody} status={status} onSend={() => void send()} />
         </Phone>
       </div>
     </div>
   );
+}
+
+export function Split() {
+  const live = useLive();
+  const bill = live.receipt ? billFrom(live.receipt) : demoBill;
+  // A new receipt from Lens starts a fresh split.
+  return <SplitBill key={live.receipt?.id ?? "demo"} bill={bill} live={live.mode === "live"} />;
 }

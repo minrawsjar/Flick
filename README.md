@@ -144,7 +144,16 @@ Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 404 for an unk
 
 ## The one-pager
 
-[`app/page.tsx`](frontend/app/page.tsx) lays out the sections. Each lives in [`app/_landing`](frontend/app/_landing) and starts playing when it scrolls into view. Their content comes from [`data.ts`](frontend/app/_landing/data.ts): demo data in the shapes the backend will serve once Lens (vision), Autopilot and the PayPal calls are wired up.
+[`app/page.tsx`](frontend/app/page.tsx) lays out the sections. Each lives in [`app/_landing`](frontend/app/_landing) and starts playing when it scrolls into view.
+
+The page runs **live** when the backend answers and PayPal is configured ([`lib/live.ts`](frontend/lib/live.ts)), and says so under the hero. Then every demo is real:
+
+- **Lens**: tapping a sample draws it into a photo and sends it to the vision model; *Snap your own* takes a photo (or a file). Paying opens PayPal's sandbox checkout (sign in with a sandbox personal account) and comes back to the page; a receipt is handed to Split.
+- **Autopilot**: the backend's week. Edit it in the grid, approve it through PayPal, and each *Next day* pays out.
+- **Split**: sends real sandbox invoices and links to them.
+- **Nudge**: the real requests, a reminder drafted by the AI model, sent as PayPal's own reminder; *Check who's paid* asks PayPal.
+
+Without the backend, the page plays the same demos on [`data.ts`](frontend/app/_landing/data.ts), so it never breaks.
 
 Colours, type and motion are tokens in [`globals.css`](frontend/app/globals.css). The grids use [`components/grid.tsx`](frontend/components/grid.tsx), AG Grid themed as an iOS grouped list from the same tokens. Everything respects `prefers-reduced-motion`.
 

@@ -1,7 +1,8 @@
+import type { Scan } from "@backend/model";
 import type { Face } from "@/components/ui";
 
-// The demo's cast and content. Mock data for now: the same shapes the backend will serve once
-// Lens (vision), Autopilot and the PayPal calls are wired up.
+// The one-pager's cast and demo content. With the backend live (lib/live.ts), the sections use
+// real state instead, in these same shapes.
 
 export const agents = {
   lens: { name: "Lens", color: "cyan", shape: "circle" },
@@ -41,11 +42,20 @@ export type Sample = {
   wire: readonly Step[];
 };
 
+// How Flick pays something, as the backend does it: a checkout you approve, captured into Flick's
+// account, then a payout to whoever it's for.
 const order = (amount: string, to: string): Step[] => [
-  ["POST /v2/checkout/orders", `An order for ${amount} to ${to}`],
+  ["POST /v2/checkout/orders", `A checkout for ${amount}`],
   ["Approve in PayPal", "One tap. No card details shared"],
-  ["POST /v2/checkout/orders/{id}/capture", "The money moves"],
-  ["COMPLETED", "Receipt saved to Money Studio"],
+  ["POST /v2/checkout/orders/{id}/capture", "Flick receives it"],
+  ["POST /v1/payments/payouts", `Flick pays ${to}`],
+];
+
+const splitWire: Step[] = [
+  ["POST /v2/invoicing/invoices", "One request per friend, for their share"],
+  ["POST /v2/invoicing/invoices/{id}/send", "Each friend gets a PayPal email"],
+  ["Friend pays", "With PayPal or a card"],
+  ["PAID", "Nudge stops following up"],
 ];
 
 export const samples: Sample[] = [
@@ -85,12 +95,7 @@ export const samples: Sample[] = [
     ],
     action: "Split with 3 friends",
     done: "Requests sent to Maya, Leo and Priya",
-    wire: [
-      ["POST /v2/invoicing/invoices", "One request per friend, for their share"],
-      ["POST /v2/invoicing/invoices/{id}/send", "Each friend gets a PayPal email"],
-      ["Friend pays", "With PayPal or a card"],
-      ["PAID", "Nudge stops following up"],
-    ],
+    wire: splitWire,
   },
   {
     kind: "tag",
@@ -128,14 +133,40 @@ export const samples: Sample[] = [
     ],
     action: "Tip $5.00",
     done: "Tipped. Bean There says thanks",
-    wire: [
-      ["POST /v1/payments/payouts", "$5.00 to @beanthere"],
-      ["Batch PENDING", "PayPal checks the recipient"],
-      ["Item SUCCESS", "It lands in their PayPal balance"],
-      ["Learned", "Fridays at Bean There, tip $5"],
-    ],
+    wire: order("$5.00", "Bean There Café"),
   },
 ];
+
+/** A real scan from Lens, in the shape the phone and the tiles show. */
+export function sampleFromScan(scan: Scan): Sample {
+  const kind: SampleKind = scan.kind === "product" ? "tag" : scan.kind === "unknown" ? "bill" : scan.kind;
+  // A tip jar has no amount on it: Flick suggests $5.
+  const amount = scan.kind === "tip" ? 5 : scan.amount;
+  const money = `$${amount.toFixed(2)}`;
+  const due = scan.due
+    ? `due ${new Date(`${scan.due}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}`
+    : "";
+  const actions: Record<Scan["kind"], [action: string, done: string]> = {
+    bill: [`Pay ${money} with PayPal`, `Paid. Flick paid ${scan.title}`],
+    product: [`Buy with PayPal · ${money}`, `Paid. Flick paid ${scan.title}`],
+    tip: [`Tip ${money}`, `Tipped ${scan.title}`],
+    receipt: ["Split with 3 friends", "Handed to Splitter"],
+    unknown: ["", ""],
+  };
+  const [action, done] = actions[scan.kind];
+  return {
+    kind,
+    label: scan.title,
+    heard: scan.kind === "product" ? "a price tag" : scan.kind === "unknown" ? "the photo" : `a ${scan.kind}`,
+    title: scan.kind === "unknown" ? "Nothing to pay here" : scan.title,
+    sub: [scan.summary, due].filter(Boolean).join(" · ") || "Read by Lens",
+    amount,
+    fields: scan.fields,
+    action,
+    done,
+    wire: scan.kind === "receipt" ? splitWire : order(money, scan.title),
+  };
+}
 
 // --- Autopilot: this week's plan ------------------------------------------------------
 
@@ -143,7 +174,7 @@ export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export type Day = (typeof DAYS)[number];
 export const WEEKLY_CAP = 200;
 
-export type PayeeIcon = "power" | "phone" | "friend" | "coffee" | "cart" | "ball";
+export type PayeeIcon = "power" | "phone" | "friend" | "coffee" | "cart" | "ball" | "bag" | "bill";
 
 export type Planned = {
   id: string;
@@ -154,6 +185,8 @@ export type Planned = {
   day: Day;
   /** Autopilot's reason, from what it has seen you pay. */
   why: string;
+  /** Live payments carry their status from the backend; demo ones derive it from the day. */
+  status?: "planned" | "scheduled" | "paid" | "skipped" | "failed";
 };
 
 export const week: Planned[] = [

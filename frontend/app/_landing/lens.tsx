@@ -1,12 +1,14 @@
 "use client";
 
-import { CircleCheck, LoaderCircle, Repeat, Zap } from "lucide-react";
+import type { Scan } from "@backend/model";
+import { Camera, CircleCheck, LoaderCircle, Repeat, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Bot } from "@/components/bot";
 import { Phone } from "@/components/phone";
 import { Primary, Tile, useOnScreen, Wire } from "@/components/ui";
 import { usd } from "@/lib/format";
-import { agents, samples, type Sample, type SampleKind } from "./data";
+import { act, approveOnPayPal, handReceipt, returned, useLive } from "@/lib/live";
+import { agents, sampleFromScan, samples, type Sample, type SampleKind } from "./data";
 
 // Lens: point the camera at something you need to pay, and it reads who, how much and when.
 // The hero's phone plays through the samples on its own; the Snap section lets you pick one,
@@ -138,9 +140,15 @@ export function LensScreen({
   onAct,
   recurring = true,
   onRecurring,
+  photo,
+  hint,
 }: {
   sample: Sample;
   stage: LensStage;
+  /** A real photo to show instead of the drawn sample. */
+  photo?: string;
+  /** Replaces the camera's hint, e.g. with an error. */
+  hint?: string;
   /** Changes on each new scan, to replay the animations. */
   run?: number;
   onAct?: () => void;
@@ -165,9 +173,15 @@ export function LensScreen({
           style={{ transform: read ? "translateY(-23%) scale(0.72)" : "none", transitionTimingFunction: "var(--ease-spring)" }}
         >
           <div key={run} className="rise absolute inset-0 flex items-center justify-center pb-10">
-            <div className="-rotate-3">
-              <Doc kind={sample.kind} width={128} />
-            </div>
+            {photo ? (
+              // A data URL from the person's own camera; next/image adds nothing here.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photo} alt="" className="max-h-[78%] max-w-[78%] rounded-md object-contain shadow-[0_6px_14px_rgba(0,0,0,0.35)]" />
+            ) : (
+              <div className="-rotate-3">
+                <Doc kind={sample.kind} width={128} />
+              </div>
+            )}
           </div>
           <div className="absolute inset-x-[18%] bottom-[22%] top-[6%]">
             <Corner on={read} className="left-0 top-0 rounded-tl-lg border-b-0 border-r-0" />
@@ -188,7 +202,7 @@ export function LensScreen({
                   <LoaderCircle size={11} className="spinner" /> Reading {sample.heard}…
                 </span>
               ) : (
-                "Point at a bill, receipt, tag or tip jar"
+                (hint ?? "Point at a bill, receipt, tag or tip jar")
               )}
             </p>
           </div>
@@ -205,7 +219,7 @@ export function LensScreen({
             </div>
             <p className="text-[12px] text-secondary">{sample.sub}</p>
 
-            {stage === "read" && (
+            {stage === "read" && sample.action && (
               <>
                 <Primary onClick={onAct} className="mt-2.5">
                   {sample.action}
@@ -279,59 +293,189 @@ export function HeroLens({ width }: { width: number }) {
 }
 
 // --- Snap: pick a sample, watch Lens read it and Flick pay it -----------------------------
+//
+// With the backend live and AI on, every tap is real: a sample is drawn into a photo and read by the
+// vision model, your own photo too, and paying goes through PayPal's sandbox checkout. Otherwise
+// it plays the demo.
+
+/** A sample's drawing as a photo of paper on a table, for the real Lens to read. */
+async function photoOf(button: HTMLElement): Promise<string> {
+  const svg = button.querySelector("svg")!.cloneNode(true) as SVGSVGElement;
+  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svg.setAttribute("width", "480");
+  svg.setAttribute("height", "600");
+  svg.setAttribute("style", "font-family: Helvetica, Arial, sans-serif");
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 760;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#2a241d";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 80, 80, 480, 600);
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** A phone photo, scaled down to upload quickly; Lens reads it just as well. */
+async function shrink(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+type View = { sample: Sample; scan?: Scan; photo?: string; live?: boolean };
 
 export function Snap() {
-  const [sample, setSample] = useState(samples[0]);
+  const live = useLive();
+  const canRead = live.mode === "live" && Boolean(live.state?.config.ai);
+  const [view, setView] = useState<View | null>(null);
   const [stage, setStage] = useState<LensStage>("idle");
   const [run, setRun] = useState(0);
   const [shown, setShown] = useState(0);
   const [at, setAt] = useState(-1);
   const [recurring, setRecurring] = useState(true);
+  const [error, setError] = useState<string>();
   const box = useRef<HTMLDivElement>(null);
 
-  const snap = (next: Sample) => {
-    setSample(next);
+  // Until you tap something, a live page shows the latest real scan: the one just paid, if PayPal
+  // just sent you back, or else the newest, ready to pay.
+  const auto = (() => {
+    if (view || live.mode !== "live" || !live.state) return null;
+    const paid = returned?.paid === "scan" ? live.state.scans.find((s) => s.status === "paid") : undefined;
+    const scan = paid ?? live.state.scans.find((s) => s.kind !== "unknown");
+    return scan ? { sample: sampleFromScan(scan), scan, paid: scan.status === "paid" } : null;
+  })();
+  const current: View = view ?? auto ?? { sample: samples[0] };
+  const currentStage: LensStage = view ? stage : auto ? (auto.paid ? "paid" : "read") : stage;
+  const fieldsShown = view ? shown : auto ? current.sample.fields.length : shown;
+  const wireAt = view ? at : auto?.paid ? current.sample.wire.length - 1 : at;
+
+  const start = (next: View) => {
+    setView(next);
     setStage("scanning");
     setShown(0);
     setAt(-1);
+    setError(undefined);
     setRun((r) => r + 1);
   };
 
-  useOnScreen(box, () => snap(samples[0]));
+  const readLive = async (image: string, preview: View) => {
+    start({ ...preview, live: true });
+    try {
+      const scan = await act<Scan>("lens/read", { image });
+      const sample = sampleFromScan(scan);
+      setView({ sample, scan, photo: preview.photo, live: true });
+      setShown(sample.fields.length);
+      setStage("read");
+    } catch (err) {
+      setView(null);
+      setStage("idle");
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
-  // Fields appear as Lens reads them; then each PayPal call lights up as it happens.
+  const tapSample = async (s: Sample, button: HTMLElement) => {
+    if (!canRead) return start({ sample: s });
+    await readLive(await photoOf(button), { sample: s });
+  };
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    const photo = await shrink(file);
+    await readLive(photo, { sample: { ...samples[0], heard: "your photo", fields: [] }, photo });
+  };
+
+  useOnScreen(box, () => {
+    if (live.mode === "demo") start({ sample: samples[0] });
+  });
+
+  // Demo only: fields appear as Lens "reads", then each PayPal call lights up in turn.
   useEffect(() => {
+    if (!view || view.live) return;
     if (stage === "scanning") {
-      const timers = sample.fields.map((_, i) => setTimeout(() => setShown(i + 1), 450 + i * 200));
-      timers.push(setTimeout(() => setStage("read"), 650 + sample.fields.length * 200));
+      const timers = view.sample.fields.map((_, i) => setTimeout(() => setShown(i + 1), 450 + i * 200));
+      timers.push(setTimeout(() => setStage("read"), 650 + view.sample.fields.length * 200));
       return () => timers.forEach(clearTimeout);
     }
     if (stage === "paying") {
-      const timers = sample.wire.map((_, i) => setTimeout(() => setAt(i), 150 + i * 650));
-      timers.push(setTimeout(() => setStage("paid"), 150 + sample.wire.length * 650));
+      const timers = view.sample.wire.map((_, i) => setTimeout(() => setAt(i), 150 + i * 650));
+      timers.push(setTimeout(() => setStage("paid"), 150 + view.sample.wire.length * 650));
       return () => timers.forEach(clearTimeout);
     }
-  }, [stage, run, sample]);
+  }, [stage, run, view]);
 
-  const pay = () => setStage("paying");
+  const pay = async () => {
+    const { scan } = current;
+    if (!scan) {
+      setView(current);
+      setStage("paying");
+      return;
+    }
+    // A real receipt goes to Splitter, with its items.
+    if (scan.kind === "receipt") {
+      handReceipt(scan);
+      document.getElementById("split")?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    setView({ ...current, live: true });
+    setStage("paying");
+    setAt(0);
+    try {
+      const { approveUrl } = await act<{ approveUrl: string }>("lens/pay", {
+        scanId: scan.id,
+        repeat: recurring,
+        ...(scan.kind === "tip" && { amount: current.sample.amount }),
+      });
+      setAt(1);
+      approveOnPayPal(approveUrl);
+    } catch (err) {
+      setStage("read");
+      setAt(-1);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const { sample } = current;
+  const done = sample.kind === "bill" && !recurring && !current.scan ? "Paid with PayPal" : sample.done;
 
   return (
     <div ref={box} className="grid items-center justify-items-center gap-6 lg:grid-cols-[auto_1fr] lg:justify-items-stretch">
       <Phone width={262} background="#0b0b0c" dark>
-        <LensScreen sample={sample} stage={stage} run={run} onAct={pay} recurring={recurring} onRecurring={setRecurring} />
+        <LensScreen
+          sample={sample}
+          stage={currentStage}
+          run={run}
+          onAct={pay}
+          recurring={recurring}
+          onRecurring={setRecurring}
+          photo={current.photo}
+          hint={error ? "Lens couldn't read that. Try another photo." : undefined}
+        />
       </Phone>
 
       <div className="grid w-full min-w-0 gap-3 md:grid-cols-2">
         <Tile>
-          <p className="text-[13px] text-secondary">Snap something. Tap a photo.</p>
+          <p className="text-[13px] text-secondary">{canRead ? "Tap a photo, or snap your own: the real Lens reads it." : "Snap something. Tap a photo."}</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {samples.map((s) => (
               <button
                 key={s.kind}
                 type="button"
-                aria-pressed={s === sample}
-                onClick={() => snap(s)}
-                className={`pressable flex cursor-pointer flex-col items-center gap-2 rounded-2xl p-3 transition-colors ${s === sample ? "bg-ink text-on-ink" : "bg-raised"}`}
+                aria-pressed={current.sample.kind === s.kind && !current.photo}
+                onClick={(e) => void tapSample(s, e.currentTarget)}
+                disabled={currentStage === "scanning" && Boolean(view?.live)}
+                className={`pressable flex cursor-pointer flex-col items-center gap-2 rounded-2xl p-3 transition-colors disabled:cursor-wait ${current.sample.kind === s.kind && !current.photo ? "bg-ink text-on-ink" : "bg-raised"}`}
               >
                 <span className="flex h-[70px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_50%_40%,#4a4033,#1f1b16_80%)]">
                   <Doc kind={s.kind} width={46} />
@@ -340,21 +484,32 @@ export function Snap() {
               </button>
             ))}
           </div>
+          {canRead && (
+            <label className="pressable mt-2 flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-ink text-[13px] text-on-ink">
+              <Camera size={15} /> Snap your own
+              <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => void upload(e.target.files?.[0])} />
+            </label>
+          )}
+          {error && <p className="mt-2 text-[12px] leading-4 text-wait">{error}</p>}
         </Tile>
 
         <Tile>
           <p className="flex items-center justify-between text-[13px] text-secondary">
             <span className="flex items-center gap-1.5">
-              <Bot {...agents.lens} size={18} mood={stage === "scanning" ? "speaking" : "idle"} /> What Lens read
+              <Bot {...agents.lens} size={18} mood={currentStage === "scanning" ? "speaking" : "idle"} /> What Lens read
             </span>
-            {stage === "scanning" && <LoaderCircle size={13} className="spinner" />}
+            {currentStage === "scanning" && <LoaderCircle size={13} className="spinner" />}
           </p>
           <dl className="mt-3 divide-y divide-separator/50 font-mono text-[12px]">
             {sample.fields.map(([k, v], i) => (
               <div
-                key={`${run}-${k}`}
+                key={`${run}-${k}-${i}`}
                 className="flex justify-between gap-3 py-1.5 transition-[opacity,transform] duration-300"
-                style={{ opacity: i < shown ? 1 : 0, transform: i < shown ? "none" : "translateY(4px)" }}
+                style={{
+                  opacity: i < fieldsShown ? 1 : 0,
+                  transform: i < fieldsShown ? "none" : "translateY(4px)",
+                  transitionDelay: view?.live ? `${i * 110}ms` : undefined,
+                }}
               >
                 <dt className="text-secondary">{k}</dt>
                 <dd className="truncate text-right">{v}</dd>
@@ -365,15 +520,18 @@ export function Snap() {
 
         <Tile className="md:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[13px] text-secondary">How Flick pays it, on the PayPal sandbox</p>
-            {stage === "read" && (
-              <button type="button" onClick={pay} className="pressable cursor-pointer rounded-full bg-ink px-3 py-1 text-[12px] text-on-ink">
+            <p className="text-[13px] text-secondary">
+              {live.mode === "live" ? "How Flick pays it: real calls to the PayPal sandbox" : "How Flick pays it, on the PayPal sandbox"}
+            </p>
+            {currentStage === "read" && sample.action && (
+              <button type="button" onClick={() => void pay()} className="pressable cursor-pointer rounded-full bg-ink px-3 py-1 text-[12px] text-on-ink">
                 {sample.action}
               </button>
             )}
-            {stage === "paid" && <span className="rise text-[12px] text-paid">{sample.kind === "bill" && !recurring ? "Paid with PayPal" : sample.done}</span>}
+            {currentStage === "paying" && current.scan && <span className="text-[12px] text-secondary">Opening PayPal…</span>}
+            {currentStage === "paid" && <span className="rise text-[12px] text-paid">{done}</span>}
           </div>
-          <Wire steps={sample.wire} at={at} />
+          <Wire steps={sample.wire} at={wireAt} />
         </Tile>
       </div>
     </div>
