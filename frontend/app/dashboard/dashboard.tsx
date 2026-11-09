@@ -141,7 +141,6 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
       state: current,
       updatedAt: new Date().toISOString(),
     }));
-    console.log('[AG Studio] saved report', saved.name, current);
   };
   const discard = () =>
     load(saved, reportState.pageToSelect(saved.state, state.selectedPageId));
@@ -275,13 +274,8 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
               onApiReady={(event) => {
                 apiRef.current = event.api;
               }}
-              onStudioReady={(event) => {
-                const current = event.api.getState();
-                console.log('[AG Studio] initial state', current);
-                setStudioState(current);
-              }}
+              onStudioReady={(event) => setStudioState(event.api.getState())}
               onStateUpdated={(event) => {
-                console.log('[AG Studio] state updated', event.state);
                 const { undo, redo } = event.api.getHistory();
                 setStudioState(event.state);
                 setHistory({ canUndo: undo.length > 0, canRedo: redo.length > 0 });
