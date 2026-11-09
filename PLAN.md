@@ -1,5 +1,10 @@
 # Flick — PayPal AI Hackathon build plan (frontend first, Air Agents theme)
 
+## Status (2026-11-10)
+- Done: frontend/backend split; interactive one-pager at `/` (Air Agents style, dark mode); Money Studio restyled with Flick tokens + Flick tables; complete backend (Lens, Autopilot, Splitter, Nudge, PayPal orders/payouts/invoices/refunds, JSON store, `npm test`, `npm run check`).
+- Decisions: Autopilot plans with rules, not AI (never invents a payment); AI = any OpenAI-compatible API, OpenRouter default (`AI_API_KEY`, `AI_MODEL`); money flow = checkout captured into the app's sandbox account, then Payouts to billers (Vault skipped).
+- Next: user adds keys and runs `npm run check`; wire the one-pager demos to the live API (Lens upload, approve week, split, nudge); deploy to Render; video.
+
 ## Context
 - Hackathon https://paypalaihackathon.devpost.com/ — must meaningfully use PayPal (sandbox) + AI. **Deadline Nov 12, 2026 12:00pm PST** (today Nov 9 → ~2.5 days). Submit: hosted demo URL, public repo + LICENSE, <3 min YouTube video, tools write-up.
 - Judging: Tech implementation · Design · Impact · Innovation · Presentation. Targets: Grand / Most Creative / Best Demo / Agentic Commerce + **Best Use of AG Grid** (wants polish: custom widgets, theming, layout + Studio Agent Framework: "custom agent talking to Studio's built-in agents").
