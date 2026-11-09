@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { aiKey, studioModels } from './ai.ts';
 import { aiResponses } from './ai-proxy.ts';
+import * as agent from './agent.ts';
 import * as autopilot from './autopilot.ts';
 import * as friends from './friends.ts';
 import { cancelCheckout, captureCheckout, frontendUrl } from './checkout.ts';
@@ -9,7 +10,7 @@ import { HttpError, readBody, send } from './http.ts';
 import * as lens from './lens.ts';
 import * as nudge from './nudge.ts';
 import { PayPalApiError } from './paypal.ts';
-import { split } from './split.ts';
+import { assign, split } from './split.ts';
 import { reset, save, state } from './store.ts';
 
 // Flick's API. The browser never calls it directly: the frontend rewrites /api/* to here
@@ -50,9 +51,14 @@ const routes: Record<string, Handler> = {
 
   // Splitter and Nudge
   'POST /api/split': async ({ body }) => split(await body()),
+  'POST /api/split/assign': async ({ body }) => assign(await body()),
   'POST /api/nudge/draft': async ({ body }) => nudge.draft(await body()),
   'POST /api/nudge/send': async ({ body }) => nudge.send(await body()),
   'POST /api/debts/refresh': () => nudge.refresh(),
+
+  // Ask Flick: the agent proposes, the person decides (agent.ts)
+  'POST /api/agent': async ({ body }) => agent.ask(await body()),
+  'POST /api/agent/decide': async ({ body }) => agent.decide(await body()),
 
   // PayPal sends the person back here after approving (or cancelling) a checkout; ?token= is the order id.
   'GET /api/paypal/return': async ({ res, url }) => {

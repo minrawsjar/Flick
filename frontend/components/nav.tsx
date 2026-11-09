@@ -9,6 +9,7 @@ import { Logo } from "./ui";
 // agents' working pages, and Money Studio.
 
 const links = [
+  ["/ask", "Ask Flick"],
   ["/lens", "Lens"],
   ["/autopilot", "Autopilot"],
   ["/split", "Split"],

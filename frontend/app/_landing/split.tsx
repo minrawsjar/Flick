@@ -3,7 +3,7 @@
 import type { Debt, Scan } from "@backend/model";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import type { CustomHeaderProps } from "ag-grid-react";
-import { ArrowUpRight, Check, LoaderCircle, UserPlus, X } from "lucide-react";
+import { ArrowUpRight, Check, LoaderCircle, Sparkles, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { Bot, type BotColor, type BotShape } from "@/components/bot";
@@ -167,6 +167,8 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
   const [status, setStatus] = useState<Sending>({});
   const [links, setLinks] = useState<{ name: string; url?: string; amount: number }[]>([]);
   const [error, setError] = useState<string>();
+  const [said, setSaid] = useState("");
+  const [assigning, setAssigning] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const { each, nobody, total } = shares(items, bill.tax, bill.tip, people);
   const columns = useMemo(() => columnsFor(people), [people]);
@@ -185,6 +187,32 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
   );
 
   const asked = people.filter((p) => p.id !== "you" && each[p.id] > 0);
+
+  // "Maya and I shared the salmon, we all had tea": the AI model ticks the grid from a sentence.
+  const tickFromWords = async () => {
+    setAssigning(true);
+    setError(undefined);
+    try {
+      const { assignments } = await act<{ assignments: { item: number; people: string[] }[] }>("split/assign", {
+        items: items.map((i) => ({ name: i.name, price: i.price })),
+        people: people.map((p) => ({ id: p.id, name: p.name })),
+        text: said,
+      });
+      setItems((all) =>
+        all.map((item, i) => {
+          const found = assignments.find((a) => a.item === i);
+          return found ? { ...item, ...Object.fromEntries(people.map((p) => [p.id, found.people.includes(p.id)])) } : item;
+        }),
+      );
+      timers.current.forEach(clearTimeout);
+      setStatus({});
+      setLinks([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const send = async () => {
     setError(undefined);
@@ -225,6 +253,27 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
               </Link>
             )}
           </div>
+          {live && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void tickFromWords();
+              }}
+              className="mb-3 flex gap-2"
+            >
+              <input
+                value={said}
+                onChange={(e) => setSaid(e.target.value)}
+                placeholder="Or just say it: Maya and I shared the salmon, Leo had the miso, we all had tea…"
+                maxLength={600}
+                aria-label="Who had what, in your words"
+                className="h-10 min-w-0 flex-1 rounded-full bg-raised px-4 text-[14px] outline-none ring-1 ring-separator/60 focus:ring-2 focus:ring-ink"
+              />
+              <button type="submit" disabled={assigning || !said.trim()} className="pressable flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-ink px-4 text-[13px] text-on-ink disabled:opacity-40">
+                {assigning ? <LoaderCircle size={14} className="spinner" /> : <Sparkles size={14} />} Tick it for me
+              </button>
+            </form>
+          )}
           <Grid<Item> rowData={items} columnDefs={columns} getRowId={({ data }) => data.id} pinnedBottomRowData={totals} context={context} headerHeight={52} />
           {error && <p className="mt-2 text-[12px] text-wait">{error}</p>}
           {links.length > 0 && (

@@ -7,6 +7,7 @@ import { Nav } from "@/components/nav";
 import { Glow, Reveal, Section, type Face } from "@/components/ui";
 import { ShowDemo } from "@/lib/live";
 import { Agents } from "./_landing/agents";
+import { AskDemo } from "./_landing/ask";
 import { Autopilot, WeekScreen } from "./_landing/autopilot";
 import { agents, friends, owed, week } from "./_landing/data";
 import { HeroLens, Snap } from "./_landing/lens";
@@ -231,9 +232,19 @@ export default function Home() {
           <Nudge />
         </Section>
         <Section
-          id="studio"
+          id="ask"
           compact
           tone="white"
+          label="Ask Flick"
+          title="One sentence. Every agent."
+          intro="Tell Flick what you need in plain words. It reads your real data, plans across Lens, Autopilot, Splitter and Nudge, and asks before it does anything."
+        >
+          <AskDemo />
+        </Section>
+        <Section
+          id="studio"
+          compact
+          tone="grey"
           label="Money Studio"
           title="Your money HQ, built by an agent."
           intro="Every payment, request and reminder lands in Money Studio, an AG Studio workspace over your PayPal data."

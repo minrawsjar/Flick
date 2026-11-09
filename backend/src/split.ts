@@ -1,3 +1,4 @@
+import { askJson } from './ai.ts';
 import { need } from './http.ts';
 import { id, usd, type Debt } from './model.ts';
 import { sendInvoice } from './paypal.ts';
@@ -55,4 +56,55 @@ export async function split(body: Record<string, unknown>) {
   }
   save();
   return { total, each, debts, failed };
+}
+
+// --- Who had what, from a sentence ------------------------------------------------------
+
+const ASSIGN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['assignments'],
+  properties: {
+    assignments: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, required: ['item', 'people'], properties: { item: { type: 'integer' }, people: { type: 'array', items: { type: 'string' } } } },
+    },
+  },
+};
+
+/**
+ * Turns "I had the salmon, Maya and Leo shared the dragon roll, we all had tea" into ticks: which
+ * people had each item. Items the sentence doesn't mention are left out, not guessed.
+ */
+export async function assign(body: Record<string, unknown>) {
+  const { items, people, text } = body;
+  need(Array.isArray(items) && items.length >= 1 && items.length <= 50, 'items must list 1 to 50 things.');
+  need(Array.isArray(people) && people.length >= 1 && people.length <= 20, 'people must list who was there.');
+  need(typeof text === 'string' && text.trim() && text.length <= 600, 'text must say who had what, in up to 600 characters.');
+  const ids = new Set((people as { id: string }[]).map((p) => String(p.id)));
+
+  const { assignments } = await askJson<{ assignments: { item: number; people: string[] }[] }>('split_assign', ASSIGN_SCHEMA, [
+    {
+      role: 'system',
+      content:
+        'You work out who had what on a shared bill from what the person says. "I", "me" and "my" are the person with id "you". "We all", "everyone" and "shared" mean every person listed. ' +
+        "Match items loosely (\"the salmon\" is \"Salmon roll\"). Leave out items the description doesn't cover; never guess. Use only the given item indexes and people ids.",
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        items: (items as { name: unknown; price: unknown }[]).map((i, index) => ({ index, name: String(i?.name), price: Number(i?.price) })),
+        people: (people as { id: unknown; name: unknown }[]).map((p) => ({ id: String(p?.id), name: String(p?.name) })),
+        description: text.trim(),
+      }),
+    },
+  ]);
+
+  // Model output is untrusted: keep real items and people only, once each.
+  const seen = new Set<number>();
+  return {
+    assignments: (Array.isArray(assignments) ? assignments : [])
+      .filter((a) => Number.isInteger(a?.item) && a.item >= 0 && a.item < items.length && !seen.has(a.item) && seen.add(a.item))
+      .map((a) => ({ item: a.item, people: [...new Set((Array.isArray(a.people) ? a.people : []).map(String))].filter((p) => ids.has(p)) })),
+  };
 }

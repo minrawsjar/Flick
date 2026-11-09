@@ -25,7 +25,8 @@ export const aiBaseUrl = () => (process.env.AI_BASE_URL || DEFAULT_BASE_URL).rep
 export const aiModels = () => (process.env.AI_MODEL || DEFAULT_MODEL).split(',').map((m) => m.trim()).filter(Boolean);
 export const aiModel = () => aiModels()[0];
 // OpenRouter tries `models` in order when one is rate-limited or down; other providers take one `model`.
-const modelParams = () => (aiBaseUrl().includes('openrouter.ai') && aiModels().length > 1 ? { models: aiModels() } : { model: aiModel() });
+const pick = (models: string[]) => (aiBaseUrl().includes('openrouter.ai') && models.length > 1 ? { models } : { model: models[0] });
+const modelParams = () => pick(aiModels());
 
 /** Models AG Studio's assistant may use, from STUDIO_MODELS (comma-separated); the first is the default. */
 export function studioModels(): string[] {
@@ -94,4 +95,36 @@ export async function askJson<T>(name: string, schema: object, messages: Message
   } catch {
     throw new HttpError(502, 'The AI model sent back something that is not JSON.');
   }
+}
+
+// --- Tool use (the Ask Flick agent, agent.ts) ------------------------------------------
+
+export type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } };
+export type ChatMessage =
+  | { role: 'system' | 'user'; content: string }
+  | { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string };
+export type Tool = { type: 'function'; function: { name: string; description: string; parameters: object } };
+
+/** The agent's models: AGENT_MODEL (comma-separated, fallbacks after), or else the Studio assistant's, which are chosen for tool use. */
+export const agentModels = () => (process.env.AGENT_MODEL ? process.env.AGENT_MODEL.split(',').map((m) => m.trim()).filter(Boolean) : studioModels());
+
+/** One turn of a conversation with tools: the assistant's reply, which may ask to call some. */
+export async function chat(messages: ChatMessage[], tools: Tool[]): Promise<Extract<ChatMessage, { role: 'assistant' }>> {
+  const key = aiKey();
+  if (!key) throw new HttpError(503, 'AI is off: set AI_API_KEY in backend/.env.');
+  spendAi();
+
+  const res = await fetch(`${aiBaseUrl()}/chat/completions`, {
+    method: 'POST',
+    headers: aiHeaders(key),
+    body: JSON.stringify({ ...pick(agentModels()), messages, tools, tool_choice: 'auto', temperature: 0.2 }),
+    signal: AbortSignal.timeout(90_000),
+  });
+  if (!res.ok) throw new HttpError(502, `The AI model answered ${res.status}: ${(await res.text()).slice(0, 300)}`);
+
+  const reply = (await res.json()) as { choices?: { message?: { content?: string | null; tool_calls?: ToolCall[] } }[] };
+  const message = reply.choices?.[0]?.message;
+  if (!message) throw new HttpError(502, 'The AI model sent back nothing.');
+  return { role: 'assistant', content: message.content ?? null, ...(message.tool_calls?.length && { tool_calls: message.tool_calls }) };
 }

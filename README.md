@@ -129,6 +129,9 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `POST /api/friends/update` `{ id, email?, name? }` | Changes a friend's PayPal email or name |
 | `POST /api/friends/remove` `{ id }` | Removes a friend who owes nothing |
 | `POST /api/split` `{ merchant, items: [{ name, price, people }], tax, tip }` | Splits a bill and invoices each friend |
+| `POST /api/split/assign` `{ items, people, text }` | Who had what, from a sentence (AI) |
+| `POST /api/agent` `{ messages }` | Ask Flick: the agent reads, plans and replies, or proposes actions (`pending`) |
+| `POST /api/agent/decide` `{ messages, decisions }` | Runs the approved actions, then the agent carries on |
 | `POST /api/nudge/draft` `{ debtId, tone }` | A reminder in a `Friendly`, `Funny` or `Straight` tone |
 | `POST /api/nudge/send` `{ debtId, text }` | Sends it through PayPal |
 | `POST /api/debts/refresh` | Marks requests that have been paid |
@@ -151,9 +154,10 @@ Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 404 for an unk
 
 The one-pager is a **mock demo** of what Flick can do: its sections always play on demo data. The navbar leads to the **working pages**, one per agent, which run on the live backend ([`lib/live.ts`](frontend/lib/live.ts)):
 
+- **`/ask`** (Ask Flick): one conversation that reaches every agent. The AI model reads your real data through tools (the week, scans with receipt items, friends, who owes what, usual amounts per payee), plans, and proposes actions: pay a scan, approve or change the week, split a bill, remind a friend, add a friend. Reads run on their own; **every action waits for your approval** before it runs, and checkouts are approved again on PayPal's page ([`agent.ts`](backend/src/agent.ts)).
 - **`/lens`**: tapping a sample draws it into a photo and sends it to the vision model; *Snap your own* takes a photo (or a file). Paying opens PayPal's sandbox checkout (sign in with a sandbox personal account) and comes back to the page; a receipt goes to `/split`.
 - **`/autopilot`**: the backend's week. Edit it in the grid, approve it through PayPal, and each *Next day* pays out.
-- **`/split`**: sends real sandbox invoices and links to them.
+- **`/split`**: sends real sandbox invoices and links to them. *Tick it for me* takes a sentence ("Maya and I shared the salmon, we all had tea") and the AI model ticks the grid.
 - **`/nudge`**: the real requests, a reminder drafted by the AI model, sent as PayPal's own reminder; *Check who's paid* asks PayPal.
 - **`/friends`**: the people you split with, each linked by their PayPal email (PayPal has no public API to confirm whose account an email is, so the email is the link). Add, change or remove them; Split's columns follow.
 - **`/dashboard`**: Money Studio.
