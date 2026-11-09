@@ -2,7 +2,6 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { aiModels, openAiKey } from './ai.ts';
 import { aiResponses } from './ai-proxy.ts';
 import { getDashboardData } from './dashboard-data.ts';
-import { getBalances, listInvoices, listPlans, listProducts, searchTransactions, TRANSACTION_SEARCH_MAX_DAYS } from './paypal.ts';
 import { send } from './send.ts';
 
 // Flick's API. The browser never calls it directly: the frontend rewrites /api/* to here
@@ -15,17 +14,7 @@ type Handler = (req: IncomingMessage, res: ServerResponse) => unknown;
 const routes: Record<string, Handler> = {
   'GET /api/health': () => ({ ok: true }),
 
-  // Raw PayPal responses, one per endpoint page.
-  'GET /api/products': listProducts,
-  'GET /api/plans': listPlans,
-  'GET /api/invoices': listInvoices,
-  'GET /api/transactions': () => {
-    const end = new Date();
-    return searchTransactions(new Date(end.getTime() - TRANSACTION_SEARCH_MAX_DAYS * 86_400_000), end);
-  },
-  'GET /api/balances': getBalances,
-
-  // All of the above, joined into the AG Studio dashboard's tables.
+  // Every PayPal endpoint the demo reads, joined into the AG Studio dashboard's tables.
   'GET /api/dashboard': () => getDashboardData(),
 
   // Empty when no OpenAI key is configured, which hides the assistant.

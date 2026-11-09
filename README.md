@@ -13,10 +13,12 @@
 
 Snap anything you need to pay once: Flick pays it now, learns it, and runs your week's payments on autopilot with one PayPal approval every Sunday.
 
-Built on the PayPal + AG Grid hackathon starter, which reads PayPal sandbox data over the [PayPal REST API](https://developer.paypal.com/api/rest/) and shows it two ways:
+It has two parts so far:
 
-- **Endpoint pages**: one [AG Grid](https://www.ag-grid.com/react-data-grid/) per PayPal endpoint the demo calls, showing what each returns.
-- **Dashboard** (`/dashboard`): an [AG Studio](https://www.ag-grid.com/studio/) report over all of that data, joined together, which you can edit and save in the browser.
+- **The one-pager** (`/`): an animated, interactive tour. Phones show the app, and each section is a demo you can play with: Lens reading a bill, a receipt, a price tag or a tip jar and paying it; Autopilot's week in an editable [AG Grid](https://www.ag-grid.com/react-data-grid/); Splitter's who-had-what grid; Nudge drafting reminders. It runs on demo data for now.
+- **Money Studio** (`/dashboard`): an [AG Studio](https://www.ag-grid.com/studio/) report over the PayPal sandbox data, read over the [PayPal REST API](https://developer.paypal.com/api/rest/) and joined together, which you can edit and save in the browser.
+
+Built on the [PayPal + AG Grid hackathon starter](https://github.com/paypaldev/hackathon-paypal-ag-grid-boilerplate). The design language (bot faces, phone frame, colours and motion) is ported from [Air Agents](https://github.com/ahmedfahim21/Spatial-Agents) (MIT).
 
 ## Layout
 
@@ -80,37 +82,41 @@ backend/src/paypal.ts           Every PayPal call: OAuth token, paging, retries,
 backend/src/dashboard-data.ts   Turns those responses into the dashboard's related tables
 backend/src/ai-proxy.ts         Proxy for the dashboard's AI assistant
 frontend/lib/api.ts             How the frontend calls the backend
-frontend/app/(endpoints)/       One page per endpoint, each rendering an AG Grid
+frontend/app/page.tsx           The one-pager
+frontend/app/_landing/          Its interactive sections, and their demo data
+frontend/components/            Bot faces, the phone frame, UI pieces, the themed AG Grid
 frontend/app/dashboard/         The AG Studio dashboard
 ```
 
 [`paypal.ts`](backend/src/paypal.ts) calls the REST API with plain `fetch`, no SDK. It gets an OAuth access token with the client-credentials grant and caches it until just before it expires. It follows `page`/`total_pages` paging, and retries on 401, 429 and 5xx responses. Its types are hand-written for the fields this demo reads, in the API's own snake_case.
 
-Every page is a server component that calls `await connection()`, so it renders per request with live data instead of being prerendered at build time. PayPal credentials never leave the backend.
+The dashboard is a server component that calls `await connection()`, so it renders per request with live data instead of being prerendered at build time. PayPal credentials never leave the backend.
 
-## Endpoint pages
+## The one-pager
 
-Each page in [`app/(endpoints)`](frontend/app/(endpoints)) fetches one backend route, which calls one function in `paypal.ts`; the page maps the response to flat rows and passes them with plain column definitions to the shared [`DataGrid`](frontend/app/(endpoints)/data-grid.tsx). The page header shows the REST calls behind it.
+[`app/page.tsx`](frontend/app/page.tsx) lays out the sections. Each lives in [`app/_landing`](frontend/app/_landing) and starts playing when it scrolls into view. Their content comes from [`data.ts`](frontend/app/_landing/data.ts): demo data in the shapes the backend will serve once Lens (vision), Autopilot and the PayPal calls are wired up.
 
-| Page | `paypal.ts` function | REST calls |
-|---|---|---|
-| [`/products`](frontend/app/(endpoints)/products/page.tsx) | `listProducts()` | `GET /v1/catalogs/products`, then `GET /v1/catalogs/products/{id}` per product |
-| [`/plans`](frontend/app/(endpoints)/plans/page.tsx) | `listPlans()` | `GET /v1/billing/plans`, then `GET /v1/billing/plans/{id}` per plan |
-| [`/invoices`](frontend/app/(endpoints)/invoices/page.tsx) | `listInvoices()` | `GET /v2/invoicing/invoices`, then `GET /v2/invoicing/invoices/{id}` per invoice |
-| [`/transactions`](frontend/app/(endpoints)/transactions/page.tsx) | `searchTransactions(start, end)` | `GET /v1/reporting/transactions` |
-| [`/balances`](frontend/app/(endpoints)/balances/page.tsx) | `getBalances()` | `GET /v1/reporting/balances` |
+Colours, type and motion are tokens in [`globals.css`](frontend/app/globals.css). The grids use [`components/grid.tsx`](frontend/components/grid.tsx), AG Grid themed as an iOS grouped list from the same tokens. Everything respects `prefers-reduced-motion`.
+
+## PayPal endpoints
+
+The dashboard reads these, all through [`paypal.ts`](backend/src/paypal.ts):
+
+| Function | REST calls |
+|---|---|
+| `listProducts()` | `GET /v1/catalogs/products`, then `GET /v1/catalogs/products/{id}` per product |
+| `listPlans()` | `GET /v1/billing/plans`, then `GET /v1/billing/plans/{id}` per plan |
+| `listInvoices()` | `GET /v2/invoicing/invoices`, then `GET /v2/invoicing/invoices/{id}` per invoice |
+| `searchTransactions(start, end)` | `GET /v1/reporting/transactions` |
+| `getBalances()` | `GET /v1/reporting/balances` |
 
 Things worth knowing about these endpoints:
 
-- **List endpoints return summaries.** Products have no type or category, plans no billing cycles, and invoices no line items, payments or refunds. So each record is fetched again in full, which is why these pages take a second or two.
+- **List endpoints return summaries.** Products have no type or category, plans no billing cycles, and invoices no line items, payments or refunds. So each record is fetched again in full, which is why the dashboard takes a second or two to load.
 - **Billing plans keep their price in `billing_cycles`.** There is an optional `TRIAL` cycle, then the `REGULAR` cycle; `total_cycles: 0` means it bills until cancelled.
 - **Transaction Search covers at most 31 days per request** and rejects fractional seconds in dates. New activity can take up to three hours to appear. `fields=all` adds `payer_info` to each `transaction_info`. Event codes are [PayPal T-codes](https://developer.paypal.com/docs/transaction-search/transaction-event-codes/) (`T0001` = payout); status is `S` success, `P` pending, `D` denied, `V` reversed or `F` partially refunded.
-- **Amounts are decimal strings with a currency**, e.g. `{ "value": "2.99", "currency_code": "USD" }`. `amountOf()` turns them into numbers, and the grid formats money columns in each row's currency.
+- **Amounts are decimal strings with a currency**, e.g. `{ "value": "2.99", "currency_code": "USD" }`. `amountOf()` turns them into numbers.
 
-### The grid
-
-Pages are server components, so the column definitions they pass to the grid must be plain data, with no functions. Money columns use the `type: 'money'` column type, defined in `data-grid.tsx`, which formats the value in the row's `currency`. Date columns use AG Grid's built-in `cellDataType: 'dateString'` or `'dateTimeString'`. Every column can be sorted and filtered, and the search box filters across all columns.
-
-## Dashboard
+## Money Studio
 
 [`/dashboard`](frontend/app/dashboard/page.tsx) gets its data from the backend's `/api/dashboard`, which fetches all five endpoints at once. [`dashboard-data.ts`](backend/src/dashboard-data.ts) turns them into related tables: customers, invoices, invoice line items, invoice payments, products, plans, transactions, payouts and balances. AG Studio's data sources, relationships, theme, default report and AI assistant are configured in [`app/dashboard/studio`](frontend/app/dashboard/studio). Reports you create or edit are saved in the browser's localStorage.
