@@ -17,7 +17,7 @@ export function Phone({
   children,
   tab,
   width = 262,
-  background = "#f2f2f7",
+  background = "var(--color-phone)",
   dark = false,
 }: {
   children: ReactNode;
@@ -29,7 +29,7 @@ export function Phone({
 }) {
   return (
     <div
-      className="relative shrink-0 rounded-[46px] bg-[linear-gradient(145deg,#4a4a4d,#1a1a1c_30%,#0c0c0d_70%,#3a3a3c)] p-[7px] shadow-[0_40px_80px_-24px_rgba(0,0,0,0.4),0_12px_24px_-12px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+      className="relative shrink-0 rounded-[46px] ring-1 ring-white/10 bg-[linear-gradient(145deg,#4a4a4d,#1a1a1c_30%,#0c0c0d_70%,#3a3a3c)] p-[7px] shadow-[0_40px_80px_-24px_rgba(0,0,0,0.4),0_12px_24px_-12px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(255,255,255,0.08)]"
       style={{ width, height: width * 2.12 }}
     >
       <div className="relative flex h-full flex-col overflow-hidden rounded-[39px] text-left" style={{ background }}>
@@ -44,7 +44,7 @@ export function Phone({
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
         {tab && (
-          <div className="absolute inset-x-2.5 bottom-3 z-10 flex h-[52px] items-center justify-around rounded-full bg-white/85 px-1 shadow-[0_2px_12px_rgba(0,0,0,0.12)] backdrop-blur">
+          <div className="absolute inset-x-2.5 bottom-3 z-10 flex h-[52px] items-center justify-around rounded-full bg-card/85 px-1 shadow-[0_2px_12px_rgba(0,0,0,0.12)] backdrop-blur">
             {tabs.map(([name, Icon]) => (
               <span
                 key={name}

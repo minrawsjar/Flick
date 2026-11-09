@@ -3,7 +3,7 @@
 import { AudioLines, Mic } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { usd } from "@/lib/format";
-import { Bot, type BotColor, type BotShape } from "./bot";
+import { Bot, botColors, type BotColor, type BotShape } from "./bot";
 
 // Building blocks ported from Air Agents (web/src/Screens.tsx, Payments.tsx and App.tsx, MIT).
 // Phone-scale pieces first (they render inside <Phone> at 262px), then page-scale ones.
@@ -26,21 +26,21 @@ export function Group({ children }: { children: ReactNode }) {
 
 export function Bubble({ from, children }: { from: "you" | "agent"; children: ReactNode }) {
   return from === "you" ? (
-    <p className="ml-auto max-w-[82%] rounded-[17px] bg-ink px-3 py-2 text-[13px] leading-[18px] text-white">{children}</p>
+    <p className="ml-auto max-w-[82%] rounded-[17px] bg-ink px-3 py-2 text-[13px] leading-[18px] text-on-ink">{children}</p>
   ) : (
     <p className="mr-auto max-w-[82%] rounded-[17px] bg-fill px-3 py-2 text-[13px] leading-[18px]">{children}</p>
   );
 }
 
 export function Activity({ children }: { children: ReactNode }) {
-  return <p className="rise mx-auto w-fit rounded-full bg-[#f2f2f7] px-2.5 py-1 text-[11px] text-secondary">{children}</p>;
+  return <p className="rise mx-auto w-fit rounded-full bg-fill/50 px-2.5 py-1 text-[11px] text-secondary">{children}</p>;
 }
 
 export function InputBar() {
   return (
     <div className="flex items-center gap-2 px-3 pb-5 pt-2">
       <span className="flex h-9 flex-1 items-center rounded-full border border-separator px-3 text-[13px] text-secondary">Message</span>
-      <span className="flex size-9 items-center justify-center rounded-full bg-ink text-white">
+      <span className="flex size-9 items-center justify-center rounded-full bg-ink text-on-ink">
         <Mic size={16} />
       </span>
     </div>
@@ -84,7 +84,7 @@ export function Meter({ label, used, of }: { label: string; used: number; of: nu
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-fill">
         <div
           className="h-full rounded-full transition-[width] duration-500"
-          style={{ width: `${Math.min(100, (used / of) * 100)}%`, background: over ? "#ff9500" : "#000" }}
+          style={{ width: `${Math.min(100, (used / of) * 100)}%`, background: over ? "#ff9500" : "var(--color-ink)" }}
         />
       </div>
     </div>
@@ -98,7 +98,7 @@ export function Primary({ children, onClick, disabled, className = "" }: { child
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`pressable flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-ink px-4 text-[13px] text-white disabled:cursor-default disabled:bg-ink/25 ${className}`}
+      className={`pressable flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-ink px-4 text-[13px] text-on-ink disabled:cursor-default disabled:bg-ink/25 ${className}`}
     >
       {children}
     </button>
@@ -174,6 +174,11 @@ export function useOnScreen(box: React.RefObject<HTMLElement | null>, start: () 
   }, [box]);
 }
 
+/** A soft blurred blob of colour, for glows behind phones and headlines. */
+export function Glow({ color, opacity = 0.3, className = "" }: { color: string; opacity?: number; className?: string }) {
+  return <span aria-hidden className={`pointer-events-none absolute rounded-full blur-3xl ${className}`} style={{ background: color, opacity }} />;
+}
+
 export function Section({
   id,
   tone,
@@ -181,6 +186,8 @@ export function Section({
   title,
   intro,
   compact = false,
+  agent,
+  glow,
   children,
 }: {
   id: string;
@@ -189,19 +196,34 @@ export function Section({
   title: string;
   intro: string;
   compact?: boolean;
+  /** Whose section it is: their face sits by the label, and their colour glows behind the demo. */
+  agent?: Face;
+  /** Which side of the demo the glow sits on (where its phone is). */
+  glow?: "left" | "right";
   children: ReactNode;
 }) {
   return (
     <section id={id} className={`tone-${tone} overflow-hidden px-4 sm:px-6 ${compact ? "py-16 lg:py-14" : "py-24 sm:py-36"}`}>
       <div className="mx-auto max-w-6xl">
         <Reveal className={`mx-auto text-center ${compact ? "max-w-4xl" : "max-w-3xl"}`}>
-          <p className={`text-secondary ${compact ? "text-[15px]" : "text-[17px] sm:text-[19px]"}`}>{label}</p>
+          <p className={`flex items-center justify-center gap-2 text-secondary ${compact ? "text-[15px]" : "text-[17px] sm:text-[19px]"}`}>
+            {agent && <Bot {...agent} size={24} mood="awake" />}
+            {label}
+          </p>
           <h2 className={`mt-1 leading-[1.07] tracking-[-0.022em] text-balance ${compact ? "text-[34px] sm:text-[44px]" : "text-[40px] sm:text-[64px]"}`}>{title}</h2>
           <p className={`mx-auto text-secondary text-pretty ${compact ? "mt-2 max-w-3xl text-[17px] leading-[1.4]" : "mt-5 max-w-2xl text-[19px] leading-[1.45] sm:text-[21px]"}`}>
             {intro}
           </p>
         </Reveal>
-        <Reveal className={compact ? "mt-8 lg:mt-10" : "mt-14 sm:mt-20"}>{children}</Reveal>
+        <Reveal className={`relative ${compact ? "mt-8 lg:mt-10" : "mt-14 sm:mt-20"}`}>
+          {agent && glow && (
+            <Glow
+              color={botColors[agent.color]}
+              className={`top-1/2 size-[460px] -translate-y-1/2 ${glow === "left" ? "-left-24" : "-right-24"}`}
+            />
+          )}
+          <div className="relative">{children}</div>
+        </Reveal>
       </div>
     </section>
   );
@@ -217,9 +239,9 @@ export function Wire({ steps, at }: { steps: readonly (readonly [string, string]
   return (
     <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
       {steps.map(([code, what], i) => (
-        <li key={code} className={`rounded-2xl p-3 transition-colors duration-300 ${at >= i ? "bg-ink text-white" : "bg-white text-secondary"}`}>
+        <li key={code} className={`rounded-2xl p-3 transition-colors duration-300 ${at >= i ? "bg-ink text-on-ink" : "bg-raised text-secondary"}`}>
           <p className="font-mono text-[11px] leading-4">{code.replaceAll("/", "/\u200b")}</p>
-          <p className={`mt-1 text-[12px] leading-4 ${at >= i ? "text-white/70" : ""}`}>{what}</p>
+          <p className={`mt-1 text-[12px] leading-4 ${at >= i ? "text-on-ink/70" : ""}`}>{what}</p>
         </li>
       ))}
     </ol>

@@ -51,7 +51,7 @@ function TickCell({ value, node, data, colDef, context }: ICellRendererParams<It
         aria-checked={Boolean(value)}
         aria-label={`${person} had ${data?.name}`}
         onClick={() => context.toggle(data!.id, person)}
-        className={`pressable flex size-7 cursor-pointer items-center justify-center rounded-full transition-colors ${value ? "bg-ink text-white" : "border-[1.5px] border-separator"}`}
+        className={`pressable flex size-7 cursor-pointer items-center justify-center rounded-full transition-colors ${value ? "bg-ink text-on-ink" : "border-[1.5px] border-separator"}`}
       >
         {value && <Check size={14} strokeWidth={2.5} />}
       </button>
@@ -78,7 +78,7 @@ const columns: ColDef<Item>[] = [
 function SplitScreen({ each, nobody, sent, onSend }: { each: Record<Person, number>; nobody: Item[]; sent: number; onSend: () => void }) {
   const total = Object.values(each).reduce((a, b) => a + b, 0);
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full flex-col bg-page">
       <Speaking agent={agents.splitter} label="Splitter" />
       <div className="flex flex-1 flex-col justify-end gap-2 overflow-hidden px-3">
         <Bubble from="you">Split Nori Sushi with Maya, Leo and Priya.</Bubble>
@@ -87,7 +87,7 @@ function SplitScreen({ each, nobody, sent, onSend }: { each: Record<Person, numb
             ? `Nobody has the ${nobody.map((i) => i.name.toLowerCase()).join(" or ")} yet. Tick who had it.`
             : `${usd(total)} with tax and an 18% tip. Here's each share:`}
         </Bubble>
-        <div className="divide-y divide-separator/50 rounded-card bg-[#f2f2f7] px-2.5">
+        <div className="divide-y divide-separator/50 rounded-card bg-fill/50 px-2.5">
           {friends.map((f, i) => (
             <div key={f.id} className="flex items-center gap-2 py-1.5 text-[13px]">
               <Bot {...f} size={24} mood={sent > i ? "awake" : "idle"} />
@@ -173,7 +173,7 @@ export function Split() {
         </Tile>
       </div>
       <div className="order-1 lg:order-2">
-        <Phone width={262} background="#fff">
+        <Phone width={262} background="var(--color-page)">
           <SplitScreen each={each} nobody={nobody} sent={sent} onSend={send} />
         </Phone>
       </div>

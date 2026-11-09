@@ -15,7 +15,7 @@ export function NudgeScreen({ who, tone, typed, sent }: { who: Owed; tone: Tone;
   const draft = who.drafts[tone];
   const typing = typed < draft.length;
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full flex-col bg-page">
       <Speaking agent={agents.nudge} label={typing ? "Drafting" : "Nudge"} />
       <div className="flex flex-1 flex-col justify-end gap-2 overflow-hidden px-3">
         <Bubble from="agent">
@@ -23,7 +23,7 @@ export function NudgeScreen({ who, tone, typed, sent }: { who: Owed; tone: Tone;
         </Bubble>
         <Bubble from="you">
           {draft.slice(0, typed)}
-          {typing && <span className="caret ml-px inline-block h-3 w-px translate-y-0.5 bg-white" />}
+          {typing && <span className="caret ml-px inline-block h-3 w-px translate-y-0.5 bg-on-ink" />}
         </Bubble>
         {sent && (
           <>
@@ -75,7 +75,7 @@ export function Nudge() {
 
   return (
     <div ref={box} className="grid items-center justify-items-center gap-6 lg:grid-cols-[auto_1fr] lg:justify-items-stretch">
-      <Phone width={262} background="#fff">
+      <Phone width={262} background="var(--color-page)">
         <NudgeScreen who={who} tone={tone} typed={typed} sent={sent} />
       </Phone>
 
@@ -120,7 +120,7 @@ export function Nudge() {
                 type="button"
                 aria-pressed={t === tone}
                 onClick={() => pick(index, t)}
-                className={`pressable h-9 cursor-pointer rounded-full px-4 text-[13px] transition-colors ${t === tone ? "bg-ink text-white" : "bg-white"}`}
+                className={`pressable h-9 cursor-pointer rounded-full px-4 text-[13px] transition-colors ${t === tone ? "bg-ink text-on-ink" : "bg-raised"}`}
               >
                 {t}
               </button>
@@ -131,7 +131,7 @@ export function Nudge() {
           </p>
           <div className="mt-auto flex gap-2 pt-4">
             {sent ? (
-              <p className="rise flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-[#e8f8ec] text-[13px] text-paid">
+              <p className="rise flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-paid/15 text-[13px] text-paid">
                 <Check size={15} /> Reminder sent to {who.friend.name}
               </p>
             ) : (

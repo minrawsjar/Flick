@@ -125,9 +125,9 @@ const PayeeCell = ({ data }: ICellRendererParams<Planned>) =>
 
 const pill: Record<Status, string> = {
   planned: "bg-fill text-secondary",
-  waiting: "bg-[#fff4e5] text-wait",
-  scheduled: "bg-ink text-white",
-  paid: "bg-[#e8f8ec] text-paid",
+  waiting: "bg-wait/15 text-wait",
+  scheduled: "bg-ink text-on-ink",
+  paid: "bg-paid/15 text-paid",
 };
 
 const StatusCell = ({ value }: ICellRendererParams<Planned, Status>) =>
@@ -220,7 +220,7 @@ export function Autopilot() {
           </p>
           <div className="mt-auto pt-4">
             {approved ? (
-              <p className="rise flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#e8f8ec] text-[13px] text-paid">
+              <p className="rise flex h-10 items-center justify-center gap-1.5 rounded-full bg-paid/15 text-[13px] text-paid">
                 <Check size={15} /> Approved · {usd(sum)}
               </p>
             ) : (
@@ -241,7 +241,7 @@ export function Autopilot() {
           <p className="text-[13px] text-secondary">Then watch it run</p>
           <ol className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px]">
             {DAYS.map((d, i) => (
-              <li key={d} className={`rounded-lg py-1.5 transition-colors duration-300 ${i === today ? "bg-ink text-white" : i < today ? "bg-fill" : "bg-white text-secondary"}`}>
+              <li key={d} className={`rounded-lg py-1.5 transition-colors duration-300 ${i === today ? "bg-ink text-on-ink" : i < today ? "bg-fill" : "bg-raised text-secondary"}`}>
                 {d}
               </li>
             ))}

@@ -31,6 +31,7 @@ const modules = [
 // ink as the accent. Same tokens as the rest of the page (app/globals.css).
 export const gridTheme = themeQuartz.withParams({
   fontFamily: "inherit",
+  browserColorScheme: "inherit",
   fontSize: 14,
   foregroundColor: "var(--color-ink)",
   backgroundColor: "var(--color-card)",
@@ -47,8 +48,8 @@ export const gridTheme = themeQuartz.withParams({
   columnBorder: false,
   rowHeight: 52,
   cellHorizontalPadding: 12,
-  rowHoverColor: "#f5f5f7",
-  pinnedRowBackgroundColor: "#f5f5f7",
+  rowHoverColor: "color-mix(in srgb, var(--color-fill) 35%, transparent)",
+  pinnedRowBackgroundColor: "var(--color-grouped)",
   focusShadow: "none",
   inputFocusBorder: { color: "var(--color-ink)" },
 });

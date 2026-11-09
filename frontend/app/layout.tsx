@@ -5,6 +5,10 @@ import "./globals.css";
 // SF on Apple devices; Inter everywhere else (see --font-sans in globals.css).
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 
+// Re-applies a light or dark choice made with the nav's toggle (components/theme-toggle.tsx)
+// before first paint, so a dark page never flashes white.
+const themeScript = `try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}`;
+
 export const metadata: Metadata = {
   title: {
     template: "%s · Flick",
@@ -16,7 +20,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    // The theme script sets data-theme before React hydrates, hence suppressHydrationWarning.
+    <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-full">{children}</body>
     </html>
   );

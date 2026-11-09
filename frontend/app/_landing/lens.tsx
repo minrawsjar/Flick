@@ -195,7 +195,7 @@ export function LensScreen({
         )}
 
         {read && (
-          <div key={`card-${run}`} className="rise absolute inset-x-1.5 bottom-1.5 rounded-[18px] bg-white p-3 text-ink">
+          <div key={`card-${run}`} className="rise absolute inset-x-1.5 bottom-1.5 rounded-[18px] bg-card p-3 text-ink">
             <p className="flex items-center gap-1.5 text-[11px] text-secondary">
               <Bot {...agents.lens} size={16} mood="awake" /> Lens read {sample.heard}
             </p>
@@ -331,7 +331,7 @@ export function Snap() {
                 type="button"
                 aria-pressed={s === sample}
                 onClick={() => snap(s)}
-                className={`pressable flex cursor-pointer flex-col items-center gap-2 rounded-2xl p-3 transition-colors ${s === sample ? "bg-ink text-white" : "bg-white"}`}
+                className={`pressable flex cursor-pointer flex-col items-center gap-2 rounded-2xl p-3 transition-colors ${s === sample ? "bg-ink text-on-ink" : "bg-raised"}`}
               >
                 <span className="flex h-[70px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_50%_40%,#4a4033,#1f1b16_80%)]">
                   <Doc kind={s.kind} width={46} />
@@ -367,7 +367,7 @@ export function Snap() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[13px] text-secondary">How Flick pays it, on the PayPal sandbox</p>
             {stage === "read" && (
-              <button type="button" onClick={pay} className="pressable cursor-pointer rounded-full bg-ink px-3 py-1 text-[12px] text-white">
+              <button type="button" onClick={pay} className="pressable cursor-pointer rounded-full bg-ink px-3 py-1 text-[12px] text-on-ink">
                 {sample.action}
               </button>
             )}

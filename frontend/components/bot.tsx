@@ -1,7 +1,6 @@
-"use client";
-
 import { useId } from "react";
 
+// No "use client": useId works in server components too, so pages can read botColors directly.
 // Ported verbatim from Air Agents (github.com/ahmedfahim21/Spatial-Agents, web/src/Bot.tsx, MIT).
 // The cast: 8 colours × 5 shapes.
 export const botColors = {
