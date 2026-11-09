@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { aiKey, studioModels } from './ai.ts';
 import { aiResponses } from './ai-proxy.ts';
 import * as autopilot from './autopilot.ts';
+import * as friends from './friends.ts';
 import { cancelCheckout, captureCheckout, frontendUrl } from './checkout.ts';
 import { getDashboardData } from './dashboard-data.ts';
 import { HttpError, readBody, send } from './http.ts';
@@ -41,6 +42,11 @@ const routes: Record<string, Handler> = {
   'POST /api/week/tick': () => autopilot.tick(),
   'POST /api/week/retry': () => autopilot.retry(),
   'POST /api/week/next': () => autopilot.nextWeek(),
+
+  // Friends, by their PayPal email
+  'POST /api/friends/add': async ({ body }) => friends.add(await body()),
+  'POST /api/friends/update': async ({ body }) => friends.update(await body()),
+  'POST /api/friends/remove': async ({ body }) => friends.remove(await body()),
 
   // Splitter and Nudge
   'POST /api/split': async ({ body }) => split(await body()),

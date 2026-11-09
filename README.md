@@ -110,7 +110,7 @@ The sandbox REST app's own account plays Flick. You approve payments on PayPal's
 - **Splitter** works out who owes what on a receipt (tax and tip follow each person's share, and you take the rounding so it adds up to the cent) and sends each friend a PayPal invoice (`POST /api/split`).
 - **Nudge** drafts a reminder in the tone you pick and sends it as PayPal's own invoice reminder (`POST /api/nudge/send`). `POST /api/debts/refresh` asks PayPal which invoices have been paid.
 
-Out-of-the-box payee and friend emails are placeholders: payouts to them succeed in the sandbox as "unclaimed". Put your sandbox accounts' emails in [`seed.ts`](backend/src/seed.ts) to see the money arrive.
+Out-of-the-box payee and friend emails are placeholders: payouts to them succeed in the sandbox as "unclaimed". Change friends' emails to your sandbox personal accounts on `/friends` (or in [`seed.ts`](backend/src/seed.ts)) to see the invoices and money arrive.
 
 ### Routes
 
@@ -125,6 +125,9 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `POST /api/week/tick` | Moves the demo a day on and pays what's due |
 | `POST /api/week/retry` | Retries payments that failed |
 | `POST /api/week/next` | Closes the week (paid payments become history) and plans the next |
+| `POST /api/friends/add` `{ name, email }` | Adds a friend by their PayPal email (they become a payee too) |
+| `POST /api/friends/update` `{ id, email?, name? }` | Changes a friend's PayPal email or name |
+| `POST /api/friends/remove` `{ id }` | Removes a friend who owes nothing |
 | `POST /api/split` `{ merchant, items: [{ name, price, people }], tax, tip }` | Splits a bill and invoices each friend |
 | `POST /api/nudge/draft` `{ debtId, tone }` | A reminder in a `Friendly`, `Funny` or `Straight` tone |
 | `POST /api/nudge/send` `{ debtId, text }` | Sends it through PayPal |
@@ -152,6 +155,7 @@ The one-pager is a **mock demo** of what Flick can do: its sections always play 
 - **`/autopilot`**: the backend's week. Edit it in the grid, approve it through PayPal, and each *Next day* pays out.
 - **`/split`**: sends real sandbox invoices and links to them.
 - **`/nudge`**: the real requests, a reminder drafted by the AI model, sent as PayPal's own reminder; *Check who's paid* asks PayPal.
+- **`/friends`**: the people you split with, each linked by their PayPal email (PayPal has no public API to confirm whose account an email is, so the email is the link). Add, change or remove them; Split's columns follow.
 - **`/dashboard`**: Money Studio.
 
 If the backend can't be reached, the working pages say so and play the demo instead.

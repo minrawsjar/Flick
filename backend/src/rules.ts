@@ -147,3 +147,17 @@ export function checkLens(answer: Partial<LensAnswer>, id: string, at: string): 
     status: 'read',
   };
 }
+
+// --- Friends' faces -----------------------------------------------------------------------
+
+const COLORS = ['violet', 'orange', 'blue', 'red', 'green', 'pink', 'yellow', 'cyan'] as const;
+const SHAPES = ['hexagon', 'drop', 'squircle', 'circle', 'capsule'] as const;
+
+/** A bot face for a new friend: an unused colour if there is one, in a shape nobody has in it. */
+export function pickFace(taken: { color: string; shape: string }[]) {
+  const used = new Set(taken.map((f) => `${f.color}/${f.shape}`));
+  const colorsInUse = new Set(taken.map((f) => f.color));
+  const colors = [...COLORS.filter((c) => !colorsInUse.has(c)), ...COLORS.filter((c) => colorsInUse.has(c))];
+  for (const color of colors) for (const shape of SHAPES) if (!used.has(`${color}/${shape}`)) return { color, shape };
+  return { color: COLORS[taken.length % COLORS.length], shape: SHAPES[taken.length % SHAPES.length] };
+}

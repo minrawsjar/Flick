@@ -13,6 +13,7 @@ const links = [
   ["/autopilot", "Autopilot"],
   ["/split", "Split"],
   ["/nudge", "Nudge"],
+  ["/friends", "Friends"],
 ] as const;
 
 function Links({ className = "" }: { className?: string }) {

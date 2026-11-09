@@ -101,10 +101,22 @@ export function Meter({ label, used, of }: { label: string; used: number; of: nu
 }
 
 /** Black capsule: the one main action. */
-export function Primary({ children, onClick, disabled, className = "" }: { children: ReactNode; onClick?: () => void; disabled?: boolean; className?: string }) {
+export function Primary({
+  children,
+  onClick,
+  disabled,
+  type = "button",
+  className = "",
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  type?: "button" | "submit";
+  className?: string;
+}) {
   return (
     <button
-      type="button"
+      type={type}
       onClick={onClick}
       disabled={disabled}
       className={`pressable flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-ink px-4 text-[13px] text-on-ink disabled:cursor-default disabled:bg-ink/25 ${className}`}

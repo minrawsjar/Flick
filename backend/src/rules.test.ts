@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkLens, dueNow, planWeek, shares } from './rules.ts';
+import { checkLens, dueNow, pickFace, planWeek, shares } from './rules.ts';
 import { seed } from './seed.ts';
 
 // Run with `npm test`. Covers the rules every money movement depends on.
@@ -111,4 +111,14 @@ test('Lens output is checked before it can become a payment', () => {
   assert.equal(nonsense.amount, 0, 'never pay what Lens could not read');
   assert.equal(checkLens({ kind: 'tip', amount: -5 }, 's', 't').amount, 0);
   assert.equal(checkLens({ kind: 'tip', amount: Number.NaN }, 's', 't').amount, 0);
+});
+
+test('new friends get a face nobody has, in a fresh colour while there are any', () => {
+  const { friends } = seed(monday);
+  const face = pickFace([{ color: 'red', shape: 'circle' }, ...friends]);
+  assert.ok(!['red', 'violet', 'orange', 'blue'].includes(face.color), `fresh colour, got ${face.color}`);
+  const colors = ['violet', 'orange', 'blue', 'red', 'green', 'pink', 'yellow', 'cyan'];
+  const shapes = ['hexagon', 'drop', 'squircle', 'circle', 'capsule'];
+  const everyFaceButOne = colors.flatMap((color) => shapes.map((shape) => ({ color, shape }))).filter((f) => !(f.color === 'green' && f.shape === 'drop'));
+  assert.deepEqual(pickFace(everyFaceButOne), { color: 'green', shape: 'drop' }, 'the one face left');
 });

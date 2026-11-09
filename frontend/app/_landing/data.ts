@@ -11,7 +11,7 @@ export const agents = {
   nudge: { name: "Nudge", color: "pink", shape: "capsule" },
 } as const satisfies Record<string, Face & { name: string }>;
 
-export type Friend = Face & { id: "you" | "maya" | "leo" | "priya"; name: string };
+export type Friend = Face & { id: string; name: string };
 
 export const you: Friend = { id: "you", name: "You", color: "red", shape: "circle" };
 export const friends: Friend[] = [
@@ -203,7 +203,8 @@ export const week: Planned[] = [
 export const TAX = 0.08875;
 export const TIP = 0.18;
 
-export type Item = { id: string; name: string; price: number } & Record<Friend["id"], boolean>;
+/** A receipt line, with a tick per person id ("you", "maya"…) for who had it. */
+export type Item = { id: string; name: string; price: number; [person: string]: string | number | boolean };
 
 export const receipt: Item[] = [
   { id: "salmon", name: "Salmon roll", price: 14, you: true, maya: true, leo: false, priya: false },
