@@ -48,7 +48,7 @@ function overview() {
     today: week.today < 0 ? `the Sunday before the week of ${week.starts} (planning day)` : `${DAYS[week.today]}, week of ${week.starts}`,
     week: {
       approval: week.approval?.status ?? 'not approved',
-      payments: week.payments.map((p) => ({ id: p.id, payee: p.payee, what: p.what, amount: p.amount, day: p.day, status: p.status, why: p.why })),
+      payments: week.payments.map((p) => ({ id: p.id, payee: p.payee, what: p.what, amount: p.amount, day: p.day, status: p.status, why: p.why, unusual: p.unusual })),
     },
     usual_amounts: [...usual].map(([id, amounts]) => ({ payee: payee(id)?.name ?? id, average: cents(amounts.reduce((a, b) => a + b, 0) / amounts.length), times: amounts.length })),
     friends: state.friends.map((f) => ({ id: f.id, name: f.name, paypal_email: f.email })),

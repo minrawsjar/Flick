@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkLens, dueNow, pickFace, planWeek, shares } from './rules.ts';
+import type { Past } from './model.ts';
+import { checkLens, dueNow, pickFace, planWeek, shares, unusual } from './rules.ts';
 import { seed } from './seed.ts';
 
 // Run with `npm test`. Covers the rules every money movement depends on.
@@ -39,6 +40,39 @@ test('a paid bill and an old habit drop out of the plan', () => {
   const payees = planWeek('2026-11-09', state).map((p) => p.payee);
   assert.ok(!payees.includes('City Power'));
   assert.ok(!payees.includes('Leo'));
+});
+
+test('the seeded week flags City Power, and nothing else', () => {
+  const { week } = seed(monday);
+  assert.deepEqual(
+    week.payments.filter((p) => p.unusual).map((p) => [p.payee, p.unusual]),
+    [['City Power', { kind: 'above-usual', percent: 27, usual: 50.47 }]],
+  );
+});
+
+const bills = (amounts: number[]): Past[] => amounts.map((amount, i) => ({ payeeId: 'gym', what: 'Membership', amount, date: `2026-0${i + 1}-05` }));
+
+test('a payment at least 25% above the usual is flagged', () => {
+  assert.deepEqual(unusual('gym', 50, bills([40, 40])), { kind: 'above-usual', percent: 25, usual: 40 }, 'exactly 25% counts');
+  assert.deepEqual(unusual('gym', 64.2, bills([51.8, 49.4, 50.2])), { kind: 'above-usual', percent: 27, usual: 50.47 });
+});
+
+test('a payment just below 25% above the usual is not', () => {
+  assert.equal(unusual('gym', 49.99, bills([40, 40])), null);
+  assert.equal(unusual('gym', 30, bills([40, 40])), null, 'less than usual is fine');
+});
+
+test("a payee Flick has never paid is flagged, even from a bill Lens read", () => {
+  assert.deepEqual(unusual('gym', 10, [{ payeeId: 'leo', what: 'Pitch', amount: 3.6, date: '2026-11-01' }]), { kind: 'new-payee' });
+  const state = seed(monday);
+  state.payees.push({ id: 'gym', name: 'Gym', email: 'pay@gym.example.com', icon: 'bill' });
+  state.scans.push({ ...state.scans[0], id: 'scan_gym', payeeId: 'gym', title: 'Gym', amount: 30 });
+  const gym = planWeek('2026-11-09', state).find((p) => p.payee === 'Gym');
+  assert.deepEqual(gym?.unusual, { kind: 'new-payee' });
+});
+
+test('one past payment is too little history to call anything unusual', () => {
+  assert.equal(unusual('gym', 400, bills([40])), null);
 });
 
 test('only approved payments whose day has come are due', () => {
