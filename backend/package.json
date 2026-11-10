@@ -12,7 +12,8 @@
     "typecheck": "tsc",
     "test": "node --test 'src/**/*.test.ts'",
     "check": "node --env-file-if-exists=.env scripts/check.ts",
-    "loop": "node --env-file-if-exists=.env scripts/loop.ts"
+    "loop": "node --env-file-if-exists=.env scripts/loop.ts",
+    "api": "node --env-file-if-exists=.env scripts/api.ts"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -105,7 +105,8 @@ const columnsFor = (people: Friend[]): ColDef<Item>[] => [
 type Sending = Record<string, "sending" | "sent" | "failed">;
 
 /** Splitter on the phone: the shares, and the requests going out. */
-function SplitScreen({ merchant, people, each, total, nobody, status, onSend }: { merchant: string; people: Friend[]; each: Record<string, number>; total: number; nobody: Item[]; status: Sending; onSend: () => void }) {
+/** `busy`: the shares are about to change (the AI is ticking the grid), so sending waits. */
+function SplitScreen({ merchant, people, each, total, nobody, status, onSend, busy = false }: { merchant: string; people: Friend[]; each: Record<string, number>; total: number; nobody: Item[]; status: Sending; onSend: () => void; busy?: boolean }) {
   const friends = people.filter((p) => p.id !== "you");
   const asked = friends.filter((f) => each[f.id] > 0);
   const sent = asked.filter((f) => status[f.id] === "sent");
@@ -154,7 +155,7 @@ function SplitScreen({ merchant, people, each, total, nobody, status, onSend }: 
         )}
       </div>
       <div className="px-3 pb-5 pt-2">
-        <Primary onClick={onSend} disabled={nobody.length > 0 || started || !asked.length}>
+        <Primary onClick={onSend} disabled={nobody.length > 0 || started || !asked.length || busy}>
           {finished ? "Requests sent" : `Send ${asked.length} PayPal ${asked.length === 1 ? "request" : "requests"}`}
         </Primary>
       </div>
@@ -215,6 +216,8 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
   };
 
   const send = async () => {
+    // Real invoices go out with the shares on screen: never the ones the AI is about to replace.
+    if (assigning) return;
     setError(undefined);
     setStatus(Object.fromEntries(asked.map((f) => [f.id, "sending"])));
     if (!live) {
@@ -307,7 +310,7 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
       </div>
       <div className="order-1 lg:order-2">
         <Phone width={262} background="var(--color-page)">
-          <SplitScreen merchant={bill.merchant} people={people} each={each} total={total} nobody={nobody} status={status} onSend={() => void send()} />
+          <SplitScreen merchant={bill.merchant} people={people} each={each} total={total} nobody={nobody} status={status} onSend={() => void send()} busy={assigning} />
         </Phone>
       </div>
     </div>

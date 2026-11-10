@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Flick backend state (backend/.data/state.json)
 .data/
+
+# The frontend end-to-end test's own build (frontend/scripts/e2e.mjs)
+.next-e2e/

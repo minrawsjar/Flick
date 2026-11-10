@@ -247,6 +247,13 @@ const TOOLS: Tool[] = [
 type Pending = { id: string; summary: string };
 type Turn = { messages: ChatMessage[]; reply?: string; pending?: Pending[]; links: Link[]; steps: string[] };
 
+const plain = (text: string) =>
+  text
+    .replace(/\*\*(.+?)\*\*|__(.+?)__/g, '$1$2')
+    .replace(/(^|\s)[*_]([^*_\s][^*_]*?)[*_](?=[\s.,!?]|$)/g, '$1$2')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/`([^`]+)`/g, '$1');
+
 const args = (call: ToolCall): Args => {
   try {
     const parsed = JSON.parse(call.function.arguments || '{}');
@@ -269,6 +276,8 @@ function openCalls(messages: ChatMessage[]) {
 async function run(messages: ChatMessage[], links: Link[] = [], steps: string[] = []): Promise<Turn> {
   for (let step = 0; step < MAX_STEPS; step++) {
     const reply = await chat([{ role: 'system', content: PROMPT() }, ...messages], TOOLS);
+    // The chat shows plain text: models add markdown anyway (**bold**, headings), so it goes.
+    if (reply.content) reply.content = plain(reply.content);
     messages.push(reply);
     if (!reply.tool_calls) return { messages, reply: reply.content ?? '', links, steps };
 

@@ -93,7 +93,8 @@ const routes: Record<string, Handler> = {
       if (captureId && checkout.kind === 'basket') await scout.paid(checkout);
       redirect(res, `${pageFor(orderId)}?paid=${checkout.kind}`);
     } catch (err) {
-      console.error('PayPal return:', err);
+      // An order Flick never made (a stale or made-up link) needs no stack trace.
+      console.error('PayPal return:', err instanceof HttpError ? err.message : err);
       redirect(res, `${pageFor(orderId)}?checkout=failed`);
     }
   },

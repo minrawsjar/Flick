@@ -168,7 +168,17 @@ Approving a week with **Save PayPal** asks PayPal to keep the person's account f
 
 [`push.ts`](backend/src/push.ts) sends each new item as a notification to the installed app, with Web Push and no library: VAPID-signed requests (RFC 8292), each message encrypted for its browser (RFC 8291, checked against the RFC's own example in `push.test.ts`). It only posts to the browsers' push services. On iPhone, notifications need Flick on the home screen.
 
-### Testing the whole loop
+### Testing it all
+
+Four levels, each runnable on its own, with your keys in `backend/.env`. Each end-to-end script starts its own backend on a throwaway state file, so your data is untouched.
+
+| Command | Where | What it proves |
+|---|---|---|
+| `npm test` | `backend/` | The rules money depends on, Scout's, and Web Push encryption against RFC 8291 |
+| `npm run check` | `backend/` | Each PayPal sandbox feature and the AI are switched on |
+| `npm run api` | `backend/` | Every route, used right and wrong: status codes, messages, validation, server-side prices, concurrent writes, real sandbox orders, invoices and reminders, AI answers |
+| `npm run e2e` | `frontend/` | The built site in headless Chrome: every page on phone (light, dark) and desktop with no console errors, failed requests or sideways scroll; then the tab bar, theme, inbox, Lens, Autopilot, Scout, Splitter, Nudge, Friends, Ask Flick, install page and Money Studio, clicked through; and paying a bill on PayPal's page when the buyer login is set |
+| `npm run loop` | `backend/` | The whole money loop, below |
 
 `npm run loop` starts its own backend on a throwaway state file and walks every flow on the sandbox: Lens reads and pays a bill; Autopilot's week is approved with PayPal saved, paid out day by day, and the next week pays itself; Scout buys the usuals; Splitter invoices and Nudge reminds; the inbox acts; Ask Flick buys groceries after approval; Autopilot stops and forgets PayPal. Wherever money moves, it drives a headless Chrome through PayPal's real approval page as a sandbox personal account (`SANDBOX_BUYER_EMAIL`, `SANDBOX_BUYER_PASSWORD` in `backend/.env`).
 
