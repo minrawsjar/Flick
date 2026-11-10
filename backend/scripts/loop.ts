@@ -72,7 +72,9 @@ for (let i = 0; ; i++) {
 
 // --- Chrome, over the DevTools protocol ---------------------------------------------------
 
-const chromePath = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const chromePath =
+  process.env.CHROME ??
+  (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 const debugPort = 9600 + Math.floor(Math.random() * 300);
 const chrome = spawn(chromePath, ['--headless=new', `--remote-debugging-port=${debugPort}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), 'flick-chrome-'))}`, '--window-size=1280,900', 'about:blank'], { stdio: 'ignore' });
 process.on('exit', () => chrome.kill());

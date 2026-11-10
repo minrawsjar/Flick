@@ -18,11 +18,13 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const FRONT = 3300;
 const BACK = 4300;
 const SITE = `http://localhost:${FRONT}`;
-const here = new URL("..", import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows that's "/C:/...", which isn't a directory.
+const here = fileURLToPath(new URL("..", import.meta.url));
 const env = Object.fromEntries(
   readFileSync(new URL("../../backend/.env", import.meta.url), "utf8")
     .split("\n")
@@ -36,12 +38,12 @@ for (const signal of ["SIGTERM", "SIGINT"]) process.once(signal, () => process.e
 // --- Build and start ---------------------------------------------------------------------
 
 console.log("Building the frontend for the test…");
-const build = spawnSync("npx", ["next", "build"], { cwd: here, env: { ...process.env, NEXT_DIST_DIR: ".next-e2e", BACKEND_URL: `http://localhost:${BACK}` }, encoding: "utf8" });
+const build = spawnSync(process.execPath, ["node_modules/next/dist/bin/next", "build"], { cwd: here, env: { ...process.env, NEXT_DIST_DIR: ".next-e2e", BACKEND_URL: `http://localhost:${BACK}` }, encoding: "utf8" });
 if (build.status !== 0) {
   console.error(build.stdout.slice(-2000), build.stderr.slice(-2000));
   process.exit(1);
 }
-const backend = spawn(process.execPath, ["--env-file-if-exists=.env", "scripts/harness.ts", String(BACK), SITE], { cwd: new URL("../../backend", import.meta.url).pathname, stdio: ["ignore", "pipe", "inherit"] });
+const backend = spawn(process.execPath, ["--env-file-if-exists=.env", "scripts/harness.ts", String(BACK), SITE], { cwd: fileURLToPath(new URL("../../backend", import.meta.url)), stdio: ["ignore", "pipe", "inherit"] });
 children.push(backend);
 await new Promise((resolve) => backend.stdout.on("data", (d) => String(d).includes("ready") && resolve()));
 // Next itself, not npx: killing a wrapper would leave the server running. BACKEND_URL again: server
@@ -56,7 +58,10 @@ for (let i = 0; !(await fetch(SITE).then((r) => r.ok, () => false)); i++) {
 // --- Chrome ---------------------------------------------------------------------------------
 
 const debugPort = 9400 + Math.floor(Math.random() * 300);
-const chrome = spawn(process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", ["--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), "flick-e2e-"))}`, "about:blank"], { stdio: "ignore" });
+const chromePath =
+  process.env.CHROME ??
+  (process.platform === "win32" ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
+const chrome = spawn(chromePath, ["--headless=new", `--remote-debugging-port=${debugPort}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), "flick-e2e-"))}`, "about:blank"], { stdio: "ignore" });
 children.push(chrome);
 let ws;
 for (let i = 0; !ws && i < 50; i++) {

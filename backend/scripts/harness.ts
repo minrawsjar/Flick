@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export type Json = Record<string, any>;
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -13,7 +14,7 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Starts the backend on `port` with a fresh state file; it stops when this process does. */
 export async function startBackend(port: number, env: Record<string, string> = {}) {
   const base = `http://localhost:${port}`;
-  const server = spawn(process.execPath, [new URL('../src/server.ts', import.meta.url).pathname], {
+  const server = spawn(process.execPath, [fileURLToPath(new URL('../src/server.ts', import.meta.url))], {
     env: { ...process.env, PORT: String(port), STATE_FILE: join(mkdtempSync(join(tmpdir(), 'flick-test-')), 'state.json'), FRONTEND_URL: base, PUSH_DELAY_MS: '0', AI_HOURLY_LIMIT: '1000', ...env },
     stdio: ['ignore', 'ignore', 'inherit'],
   });
@@ -86,7 +87,8 @@ export function checklist() {
 }
 
 // `node scripts/harness.ts 4200`: just the throwaway backend, for the frontend's end-to-end test.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL, not `file://${argv[1]}`: on Windows argv[1] is "C:\...", so that never matches.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const base = await startBackend(Number(process.argv[2] ?? 4200), process.argv[3] ? { FRONTEND_URL: process.argv[3] } : {});
   console.log(`ready ${base}`);
   await new Promise(() => {});
