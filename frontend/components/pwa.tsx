@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { Bell, BellOff, LoaderCircle } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { encode } from "uqr";
 
 // Flick as an installed app: the service worker (public/sw.js), and how this browser installs it.
@@ -80,5 +81,83 @@ export function QrCode({ text, size = 168 }: { text: string; size?: number }) {
       <rect width={n} height={n} fill="#fff" />
       <path d={path} fill="#000" />
     </svg>
+  );
+}
+
+// --- Notifications ------------------------------------------------------------------------
+
+const never = () => () => {};
+/** Whether this browser can get Flick's notifications: iPhones only once Flick is on the home screen. */
+const pushSupport = () =>
+  !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)
+    ? /iPhone|iPad/.test(navigator.userAgent)
+      ? "install"
+      : "unsupported"
+    : Notification.permission === "denied"
+      ? "denied"
+      : "ok";
+
+const keyBytes = (b64: string) => Uint8Array.from(atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+
+/** Turns the agents' notifications on or off for this browser (backend/src/push.ts sends them). */
+export function Notify() {
+  const support = useSyncExternalStore(never, pushSupport, () => "unknown");
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (support !== "ok") return;
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg?.pushManager.getSubscription())
+      .then((sub) => setOn(Boolean(sub)))
+      .catch(() => setOn(false));
+  }, [support]);
+
+  const toggle = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) throw new Error("Notifications come with the installed app (production builds only).");
+      if (on) {
+        const sub = await reg.pushManager.getSubscription();
+        await fetch("/api/push/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub?.endpoint }) });
+        await sub?.unsubscribe();
+        setOn(false);
+        return;
+      }
+      if ((await Notification.requestPermission()) !== "granted") throw new Error("Notifications are blocked for Flick in your browser's settings.");
+      const { publicKey } = (await (await fetch("/api/push/key")).json()) as { publicKey: string };
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
+      const res = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: { message?: string } }).error?.message ?? `Flick's backend answered ${res.status}.`);
+      setOn(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (support === "unknown" || support === "unsupported") return null;
+  if (support === "install" || support === "denied") {
+    return <span className="text-[12px] text-secondary">{support === "install" ? "Add Flick to your home screen for notifications" : "Notifications are blocked"}</span>;
+  }
+  return (
+    <span className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        disabled={busy || on === null}
+        aria-pressed={Boolean(on)}
+        className={`pressable flex h-8 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[12px] disabled:cursor-default ${on ? "bg-fill" : "bg-ink text-on-ink"}`}
+      >
+        {busy ? <LoaderCircle size={13} className="spinner" /> : on ? <Bell size={13} /> : <BellOff size={13} />}
+        {on ? "Notifications on" : "Notify me"}
+      </button>
+      {error && <span className="max-w-60 text-right text-[11px] leading-4 text-wait">{error}</span>}
+    </span>
   );
 }

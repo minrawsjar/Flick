@@ -1,18 +1,21 @@
 "use client";
 
-import { ChevronRight, Download, Sparkles } from "lucide-react";
+import { ChevronRight, CircleCheck, Download, LoaderCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { Activity } from "@backend/model";
+import type { impact as impactOf, Item } from "@backend/inbox";
+import { Notify } from "@/components/pwa";
 import { Bot, type BotColor, type BotShape } from "@/components/bot";
 import type { Face } from "@/components/ui";
 import { usd } from "@/lib/format";
-import { daysSince, useLive, type LiveState } from "@/lib/live";
+import { act, approveOnPayPal, daysSince, useLive, type LiveState } from "@/lib/live";
 import { agents, DAYS, owed as demoOwed, week as demoWeek } from "@/app/_landing/data";
 import type { ScoutView } from "@/app/_landing/scout";
 
-// Today: where the installed app opens (app/manifest.ts). Where the week stands, who owes you,
-// a way into each agent, and what they've done. Live state when the backend answers; the demo's
+// Today: where the installed app opens (app/manifest.ts). What needs you, across the agents, with a
+// tap to do it (backend/src/inbox.ts); what Flick did for you this month; where the week stands, who
+// owes you, the next shop, and what the agents did. Live state when the backend answers; the demo's
 // week and requests otherwise.
 
 const LONG = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -73,6 +76,8 @@ export function Today() {
         <h1 className="text-[34px] font-semibold leading-tight tracking-tight">{greeting}</h1>
       </header>
 
+      <InboxCard />
+
       <div className="grid gap-3 lg:grid-cols-2">
         <WeekCard view={view} />
         <OwedCard owed={view.owed} />
@@ -92,6 +97,107 @@ export function Today() {
         </Link>
       </div>
     </div>
+  );
+}
+
+type Inbox = { items: Item[]; impact: ReturnType<typeof impactOf> };
+
+/** What needs you, and this month's impact, from the backend; again whenever the live state changes. */
+function useInbox() {
+  const { state } = useLive();
+  const [inbox, setInbox] = useState<Inbox | null>(null);
+  useEffect(() => {
+    if (!state) return;
+    fetch("/api/inbox", { cache: "no-store" })
+      .then((res) => (res.ok ? (res.json() as Promise<Inbox>) : null))
+      .then(setInbox)
+      .catch(() => {});
+  }, [state]);
+  return inbox;
+}
+
+function InboxCard() {
+  const inbox = useInbox();
+  if (!inbox) return null;
+  const { items, impact } = inbox;
+  const did = [
+    impact.saved > 0 && `saved you ${usd(impact.saved)} on groceries`,
+    impact.paidBack > 0 && `got you ${usd(impact.paidBack)} paid back`,
+    impact.paid.count > 0 && `paid ${impact.paid.count} payment${impact.paid.count === 1 ? "" : "s"}, ${usd(impact.paid.amount)}`,
+    impact.read > 0 && `read ${impact.read} photo${impact.read === 1 ? "" : "s"}`,
+  ].filter(Boolean);
+
+  return (
+    <section className="mb-3 rounded-[24px] bg-card p-5" aria-labelledby="needs-you">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="needs-you" className="text-[15px]">
+            Needs you {items.length > 0 && <span className="text-secondary">· {items.length}</span>}
+          </h2>
+          {did.length > 0 && <p className="mt-0.5 text-[13px] text-secondary">This month Flick {did.join(", ")}.</p>}
+        </div>
+        <Notify />
+      </div>
+      {items.length ? (
+        <ul className="mt-2 divide-y divide-separator/50">
+          {items.map((item) => (
+            <InboxRow key={item.id} item={item} />
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 flex items-center gap-1.5 text-[13px] text-secondary">
+          <CircleCheck size={15} className="text-paid" aria-hidden /> All done. Your agents put anything new here.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** One thing to do. The first tap asks to be sure; the second does it (and money still goes through PayPal). */
+function InboxRow({ item }: { item: Item }) {
+  const [sure, setSure] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string }>();
+
+  const run = async () => {
+    if (!sure) return setSure(true);
+    setBusy(true);
+    try {
+      const out = await act<{ approveUrl?: string | null; done: string }>("inbox/act", { id: item.id });
+      if (out.approveUrl) return approveOnPayPal(out.approveUrl);
+      setNote({ ok: true, text: out.done });
+    } catch (err) {
+      setNote({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+      setSure(false);
+    }
+  };
+
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <Bot {...agents[item.agent]} size={30} mood={busy ? "speaking" : "awake"} />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14px] leading-snug">{item.title}</span>
+        <span className={`block text-[12px] leading-snug ${note ? (note.ok ? "text-paid" : "text-wait") : "text-secondary"}`}>{note?.text ?? item.detail}</span>
+      </span>
+      {item.action ? (
+        <button
+          type="button"
+          onClick={() => void run()}
+          onBlur={() => setSure(false)}
+          disabled={busy}
+          className={`pressable flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full px-3 text-[12px] ${sure ? "bg-ink text-on-ink" : "bg-fill"}`}
+        >
+          {busy && <LoaderCircle size={12} className="spinner" />}
+          {sure ? `Yes, ${item.action.toLowerCase()}${item.amount ? ` · ${usd(item.amount)}` : ""}` : item.action}
+        </button>
+      ) : (
+        <Link href={item.href} className="pressable flex h-8 shrink-0 items-center rounded-full bg-fill px-3 text-[12px]">
+          Open
+        </Link>
+      )}
+    </li>
   );
 }
 

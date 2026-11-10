@@ -4,6 +4,7 @@ import { aiResponses } from './ai-proxy.ts';
 import * as agent from './agent.ts';
 import * as autopilot from './autopilot.ts';
 import * as friends from './friends.ts';
+import * as inbox from './inbox.ts';
 import { cancelCheckout, captureCheckout, frontendUrl } from './checkout.ts';
 import { getDashboardData } from './dashboard-data.ts';
 import { HttpError, readBody, send } from './http.ts';
@@ -11,6 +12,7 @@ import * as lens from './lens.ts';
 import * as nudge from './nudge.ts';
 import * as scout from './scout.ts';
 import { PayPalApiError } from './paypal.ts';
+import * as push from './push.ts';
 import { assign, split } from './split.ts';
 import { reset, save, state } from './store.ts';
 
@@ -41,10 +43,13 @@ const routes: Record<string, Handler> = {
 
   // Autopilot
   'POST /api/week/edit': async ({ body }) => autopilot.edit(await body()),
-  'POST /api/week/approve': () => autopilot.approve(),
+  'POST /api/week/approve': async ({ body }) => autopilot.approve(await body()),
   'POST /api/week/tick': () => autopilot.tick(),
   'POST /api/week/retry': () => autopilot.retry(),
   'POST /api/week/next': () => autopilot.nextWeek(),
+  // Autopilot paying by itself, with PayPal saved for it
+  'POST /api/autopay/cap': async ({ body }) => autopilot.setCap(await body()),
+  'POST /api/autopay/stop': () => autopilot.stopAutopay(),
 
   // Friends, by their PayPal email
   'POST /api/friends/add': async ({ body }) => friends.add(await body()),
@@ -65,6 +70,15 @@ const routes: Record<string, Handler> = {
   'POST /api/scout/online': async ({ body }) => scout.online(await body()),
   'POST /api/scout/buy': async ({ body }) => scout.buy(await body()),
 
+  // What needs the person next, across the agents (inbox.ts), and what Flick did for them this month
+  'GET /api/inbox': () => ({ items: inbox.items(), impact: inbox.impact() }),
+  'POST /api/inbox/act': async ({ body }) => inbox.act(await body()),
+
+  // Notifications for the installed app (push.ts)
+  'GET /api/push/key': () => push.publicKey(),
+  'POST /api/push/subscribe': async ({ body }) => push.subscribe(await body()),
+  'POST /api/push/unsubscribe': async ({ body }) => push.unsubscribe(await body()),
+
   // Ask Flick: the agent proposes, the person decides (agent.ts)
   'POST /api/agent': async ({ body }) => agent.ask(await body()),
   'POST /api/agent/decide': async ({ body }) => agent.decide(await body()),
@@ -73,8 +87,8 @@ const routes: Record<string, Handler> = {
   'GET /api/paypal/return': async ({ res, url }) => {
     const orderId = url.searchParams.get('token') ?? '';
     try {
-      const { checkout, captureId } = await captureCheckout(orderId);
-      if (captureId && checkout.kind === 'week') await autopilot.approved(checkout, captureId);
+      const { checkout, captureId, saved } = await captureCheckout(orderId);
+      if (captureId && checkout.kind === 'week') await autopilot.approved(checkout, captureId, saved);
       if (captureId && checkout.kind === 'scan') await lens.paid(checkout);
       if (captureId && checkout.kind === 'basket') await scout.paid(checkout);
       redirect(res, `${pageFor(orderId)}?paid=${checkout.kind}`);
@@ -139,3 +153,4 @@ createServer(async (req, res) => {
     else send(res, status, { error: { message: err instanceof Error ? err.message : String(err) } });
   }
 }).listen(port, () => console.log(`Flick backend on http://localhost:${port}`));
+push.start();

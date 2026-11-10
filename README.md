@@ -88,7 +88,9 @@ backend/src/checkout.ts         The PayPal approval round trip all payments shar
 backend/src/store.ts            The JSON store; seed.ts is the demo's starting point
 backend/src/ai.ts               The AI connection; ai-proxy.ts serves the dashboard's assistant
 backend/src/dashboard-data.ts   PayPal and Flick data as the dashboard's related tables
+backend/src/inbox.ts            What needs the person next, across the agents; push.ts sends it as notifications
 backend/scripts/check.ts        `npm run check`: tests each sandbox feature and the AI
+backend/scripts/loop.ts         `npm run loop`: the whole money loop on the sandbox, PayPal's approval page included
 frontend/lib/api.ts             How the frontend calls the backend
 frontend/app/page.tsx           The one-pager
 frontend/app/_landing/          Its interactive sections, and their demo data
@@ -126,15 +128,20 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `POST /api/lens/read` `{ image }` | Reads a photo (a data URL) and returns what's on it |
 | `POST /api/lens/pay` `{ scanId, amount?, repeat? }` | Starts paying a bill, product or tip (`amount` for tips); returns `approveUrl` |
 | `POST /api/week/edit` `{ id, amount?, day?, skip? }` | Changes a payment before approval, or skips one (refunded if approved) |
-| `POST /api/week/approve` | One checkout for the week; returns `approveUrl` |
+| `POST /api/week/approve` `{ save? }` | One checkout for the week; returns `approveUrl`. `save`: also save PayPal so Autopilot pays later weeks by itself. With PayPal saved, it pays at once (`approveUrl` is null) |
 | `POST /api/week/tick` | Moves the demo a day on and pays what's due |
 | `POST /api/week/retry` | Retries payments that failed |
-| `POST /api/week/next` | Closes the week (paid payments become history) and plans the next |
+| `POST /api/week/next` | Closes the week (paid payments become history) and plans the next; with PayPal saved, pays it too, within the cap |
+| `POST /api/autopay/cap` `{ cap }` | The most Autopilot pays in a week by itself |
+| `POST /api/autopay/stop` | Stops it, and deletes the saved PayPal at PayPal |
 | `POST /api/friends/add` `{ name, email }` | Adds a friend by their PayPal email (they become a payee too) |
 | `POST /api/friends/update` `{ id, email?, name? }` | Changes a friend's PayPal email or name |
 | `POST /api/friends/remove` `{ id }` | Removes a friend who owes nothing |
 | `POST /api/split` `{ merchant, items: [{ name, price, people }], tax, tip }` | Splits a bill and invoices each friend |
 | `POST /api/split/assign` `{ items, people, text }` | Who had what, from a sentence (AI) |
+| `GET /api/inbox` | What needs the person, across the agents, each with its action; and what Flick did this month |
+| `POST /api/inbox/act` `{ id }` | Does an inbox item's action (opens PayPal where money moves) |
+| `GET /api/push/key`, `POST /api/push/subscribe` `{ subscription }`, `/unsubscribe` `{ endpoint }` | Notifications for the installed app |
 | `POST /api/agent` `{ messages }` | Ask Flick: the agent reads, plans and replies, or proposes actions (`pending`) |
 | `POST /api/agent/decide` `{ messages, decisions }` | Runs the approved actions, then the agent carries on |
 | `POST /api/nudge/draft` `{ debtId, tone }` | A reminder in a `Friendly`, `Funny` or `Straight` tone |
@@ -151,6 +158,20 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 
 Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 404 for an unknown id, 409 when the state doesn't allow it, 502 when PayPal or the AI model failed, 503 when a key isn't set.
 
+### Autopilot that pays by itself
+
+Approving a week with **Save PayPal** asks PayPal to keep the person's account for Flick (PayPal's vault: `payment_source.paypal.attributes.vault`, `store_in_vault: ON_SUCCESS`, `usage_type: MERCHANT`). The capture returns a payment token, which Flick keeps. From then on, `POST /api/week/next` plans the week and pays it with that token, as a merchant-initiated payment (`vault_id`, `stored_credential.payment_initiator: MERCHANT`): no approval page. A week over the cap ($200 to start) waits for approval as before, and so does any week PayPal refuses. Stopping deletes the token at PayPal (`DELETE /v3/vault/payment-tokens/{id}`). In the sandbox app, tick **Save payment methods** (Vault) under Features.
+
+### The inbox and notifications
+
+[`inbox.ts`](backend/src/inbox.ts) turns the state into what needs the person next, each with the one action that does it: approve the week (or pay it, with PayPal saved), retry a failed payment, pay a bill Lens read, remind a friend who has owed for a week, buy the usuals where Scout found them cheapest, stock up before a price rises. Today lists them; the first tap asks to be sure, the second does it, and money still goes through PayPal. It also says what Flick did this month: saved on groceries, paid back by friends, paid out, photos read.
+
+[`push.ts`](backend/src/push.ts) sends each new item as a notification to the installed app, with Web Push and no library: VAPID-signed requests (RFC 8292), each message encrypted for its browser (RFC 8291, checked against the RFC's own example in `push.test.ts`). It only posts to the browsers' push services. On iPhone, notifications need Flick on the home screen.
+
+### Testing the whole loop
+
+`npm run loop` starts its own backend on a throwaway state file and walks every flow on the sandbox: Lens reads and pays a bill; Autopilot's week is approved with PayPal saved, paid out day by day, and the next week pays itself; Scout buys the usuals; Splitter invoices and Nudge reminds; the inbox acts; Ask Flick buys groceries after approval; Autopilot stops and forgets PayPal. Wherever money moves, it drives a headless Chrome through PayPal's real approval page as a sandbox personal account (`SANDBOX_BUYER_EMAIL`, `SANDBOX_BUYER_PASSWORD` in `backend/.env`).
+
 ### Keeping money safe
 
 - Every write to PayPal carries a `PayPal-Request-Id`, so a retry or a reloaded return page can't charge, pay out or invoice twice; captures are also recorded, so an agent acts on each only once.
@@ -165,7 +186,7 @@ Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 404 for an unk
 The one-pager is a **mock demo** of what Flick can do: its sections always play on demo data. The navbar leads to the **working pages**, one per agent, which run on the live backend ([`lib/live.ts`](frontend/lib/live.ts)):
 
 - **`/home`** (Today): where the installed app opens. Where the week stands (paid so far, what's next, whether it needs your OK), who owes you, a way into each agent, and what the agents did lately. *Download statement* saves everything Flick has paid or asked for as a CSV.
-- **`/ask`** (Ask Flick): one conversation that reaches every agent. The AI model reads your real data through tools (the week, scans with receipt items, friends, who owes what, usual amounts per payee), plans, and proposes actions: pay a scan, approve or change the week, split a bill, remind a friend, add a friend. Reads run on their own; **every action waits for your approval** before it runs, and checkouts are approved again on PayPal's page ([`agent.ts`](backend/src/agent.ts)).
+- **`/ask`** (Ask Flick): one conversation that reaches every agent (and Scout: "get my usual groceries, cheapest"). The AI model reads your real data through tools (the week, scans with receipt items, friends, who owes what, usual amounts per payee), plans, and proposes actions: pay a scan, approve or change the week, split a bill, remind a friend, add a friend. Reads run on their own; **every action waits for your approval** before it runs, and checkouts are approved again on PayPal's page ([`agent.ts`](backend/src/agent.ts)).
 - **`/lens`**: tapping a sample draws it into a photo and sends it to the vision model; *Snap your own* takes a photo (or a file). Paying opens PayPal's sandbox checkout (sign in with a sandbox personal account) and comes back to the page; a receipt goes to `/split`.
 - **`/autopilot`**: the backend's week. Edit it in the grid, approve it through PayPal, and each *Next day* pays out.
 - **`/scout`** (Scout): what you buy again and again, priced at every store this week, and bought with one PayPal approval. See [Scout](#scout) below.

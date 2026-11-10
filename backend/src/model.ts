@@ -75,7 +75,7 @@ export type Debt = {
 
 /** A PayPal checkout in flight: what to do once it's approved. */
 export type Checkout =
-  | { kind: 'week'; orderId: string; amount: number; paymentIds: string[]; status: 'awaiting' | 'captured' | 'cancelled' }
+  | { kind: 'week'; orderId: string; amount: number; paymentIds: string[]; status: 'awaiting' | 'captured' | 'cancelled'; save?: boolean }
   | { kind: 'scan'; orderId: string; amount: number; scanId: string; payeeId: string; repeat: boolean; status: 'awaiting' | 'captured' | 'cancelled' }
   | { kind: 'basket'; orderId: string; amount: number; storeId: string; items: { productId: string; qty: number; price: number }[]; status: 'awaiting' | 'captured' | 'cancelled' };
 
@@ -96,6 +96,8 @@ export type State = {
   activity: Activity[];
   /** Scout's purchases; started on first use (scout.ts), so older state files work as they are. */
   scout?: { purchases: Purchase[] };
+  /** Autopilot paying by itself: the PayPal account the person saved for it, and the most it may pay in a week. */
+  autopay?: { savedId: string; email?: string; since: string; cap: number };
 };
 
 // --- Helpers ------------------------------------------------------------------------

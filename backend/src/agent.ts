@@ -5,6 +5,7 @@ import { HttpError, need } from './http.ts';
 import * as lens from './lens.ts';
 import { cents, DAYS, usd, ymd } from './model.ts';
 import * as nudge from './nudge.ts';
+import * as scout from './scout.ts';
 import { shares, unapproved, type SplitItem } from './rules.ts';
 import { split } from './split.ts';
 import { friend, payee, state } from './store.ts';
@@ -20,15 +21,19 @@ const MAX_STEPS = 6;
 
 const PROMPT = () => `You are Flick, a payments assistant inside the Flick app. Today is ${ymd(new Date())}.
 Flick's agents: Lens reads photos of bills, receipts, price tags and tip jars; Autopilot plans the week's
-payments and pays each on its day after one PayPal approval; Splitter splits receipts and sends friends
-PayPal invoices; Nudge reminds friends who owe money.
+payments and pays each on its day after one PayPal approval (or by itself, with PayPal saved for it);
+Splitter splits receipts and sends friends PayPal invoices; Nudge reminds friends who owe money; Scout
+knows the groceries the person buys again and again, prices them at every store and buys them.
 
 How you work:
 - Call get_overview first, and again after changes, to see the person's real data. Never invent payees,
   amounts, people or ids: use only what it returns. "you" is the person; friends have their own ids.
 - To do something, call the action tools. Every action is shown to the person to approve before it runs,
   and you get the outcome back. Propose everything a request needs in one go.
-- Paying a scan or approving the week opens PayPal for the person to approve the payment; say so.
+- Paying a scan, approving the week or buying groceries opens PayPal for the person to approve the payment;
+  say so. With PayPal saved for Autopilot, approving the week pays it straight away instead.
+- For groceries, call get_groceries: buy at the cheapest store that has everything, unless the person
+  names one, and say what it saves against where they usually shop and what's getting dearer.
 - For a split, use the receipt's own items, prices, tax and tip, and the people the person names.
 - Point out anything unusual: a payment well above its usual amount, a request open a long time.
 - Answer briefly and plainly, in dollars. No markdown tables or headings.`;
@@ -63,8 +68,31 @@ function overview() {
   };
 }
 
+/** Scout's view, cut down to what the agent needs: the next shop at every store, and the usuals' trends. */
+function groceries() {
+  const v = scout.view();
+  const name = (id: string) => v.products.find((p) => p.id === id)?.name ?? id;
+  const store = (id: string) => v.stores.find((s) => s.id === id)!;
+  return {
+    today: v.today,
+    usual_store: store(v.basket.usualStore).name,
+    next_shop: v.basket.items.map((i) => ({ product_id: i.productId, product: name(i.productId), qty: i.qty })),
+    quotes: v.basket.quotes.map((q) => ({
+      store_id: q.storeId,
+      store: store(q.storeId).name,
+      where: store(q.storeId).kind === 'online' ? 'online' : `${store(q.storeId).miles} miles away`,
+      total: q.total,
+      delivery: q.delivery,
+      missing: q.missing.map(name),
+    })),
+    usuals: v.products.filter((p) => p.usual).map((p) => ({ product_id: p.id, product: p.name, bought: p.usual!.label, due: p.usual!.due, you_paid: p.usual!.last.price, best_now: p.offers[0].price, trend: p.forecast.verdict, next_4_weeks: `${Math.round(p.forecast.change * 100)}%` })),
+    autopilot_pays_by_itself: Boolean(state.autopay),
+  };
+}
+
 const READS: Record<string, { label: string; run: () => unknown }> = {
   get_overview: { label: 'Read your week, scans, friends and requests', run: overview },
+  get_groceries: { label: "Priced your usual groceries at every store", run: groceries },
 };
 
 // --- What the agent can do, once approved --------------------------------------------------
@@ -73,6 +101,9 @@ type Args = Record<string, unknown>;
 type Link = { label: string; url: string };
 type Action = { summary: (args: Args) => string; run: (args: Args) => Promise<{ result: unknown; link?: Link }> };
 
+/** The agent's grocery list as Scout's items. */
+const basketOf = (items: unknown) =>
+  (Array.isArray(items) ? items : []).map((i: { product_id?: unknown; qty?: unknown }) => ({ productId: i?.product_id, qty: i?.qty ?? 1 }));
 const scanOf = (id: unknown) => state.scans.find((s) => s.id === id) ?? fail(`No scan ${String(id)}`);
 const paymentOf = (id: unknown) => state.week.payments.find((p) => p.id === id) ?? fail(`No payment ${String(id)} this week`);
 const debtOf = (id: unknown) => state.debts.find((d) => d.id === id) ?? fail(`No request ${String(id)}`);
@@ -99,7 +130,22 @@ const ACTIONS: Record<string, Action> = {
     },
     run: async () => {
       const { approveUrl, amount } = await autopilot.approve();
+      if (!approveUrl) return { result: { paid_with_saved_paypal: true, amount } };
       return { result: { opened_paypal_checkout: true, amount }, link: { label: `Approve the week on PayPal, ${usd(amount)}`, url: approveUrl } };
+    },
+  },
+  buy_groceries: {
+    summary: ({ store_id, items }) => {
+      const q = scout.priceBasket({ items: basketOf(items) }).find((x) => x.storeId === store_id) ?? fail(`No store ${String(store_id)}`);
+      const v = scout.view();
+      const usual = scout.priceBasket({ items: basketOf(items) }).find((x) => x.storeId === v.basket.usualStore);
+      const saving = usual && !usual.missing.length && usual.storeId !== q.storeId ? usual.total - q.total : 0;
+      const store = v.stores.find((s) => s.id === store_id)!.name;
+      return `Buy ${q.lines.length} groceries at ${store}, ${usd(q.total)}${q.delivery ? ` with ${usd(q.delivery)} delivery` : ''}, with PayPal${saving > 0.005 ? ` (${usd(saving)} less than your usual store)` : ''}`;
+    },
+    run: async ({ store_id, items }) => {
+      const { approveUrl, amount } = await scout.buy({ storeId: store_id, items: basketOf(items) });
+      return { result: { opened_paypal_checkout: true, amount }, link: { label: `Approve ${usd(amount)} on PayPal`, url: approveUrl } };
     },
   },
   change_payment: {
@@ -182,6 +228,18 @@ const TOOLS: Tool[] = [
   ),
   fn('remind_friend', 'Send a friend who owes money a reminder, written in the chosen tone, through PayPal.', object({ request_id: { type: 'string' }, tone: { type: 'string', enum: [...nudge.TONES] } }, ['request_id', 'tone'])),
   fn('add_friend', 'Add a friend by the email of their PayPal account.', object({ name: { type: 'string' }, email: { type: 'string' } }, ['name', 'email'])),
+  fn('get_groceries', "Scout's view: the person's usual groceries (what, how often, what they paid), the next shop priced at every store with delivery, and which prices are rising.", object({})),
+  fn(
+    'buy_groceries',
+    'Buy groceries at one store with one PayPal checkout. Use product ids from get_groceries.',
+    object(
+      {
+        store_id: { type: 'string', description: 'A store_id from get_groceries.' },
+        items: { type: 'array', items: object({ product_id: { type: 'string' }, qty: { type: 'integer' } }, ['product_id', 'qty']) },
+      },
+      ['store_id', 'items'],
+    ),
+  ),
 ];
 
 // --- The conversation -----------------------------------------------------------------------

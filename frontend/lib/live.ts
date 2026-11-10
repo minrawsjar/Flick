@@ -71,8 +71,11 @@ export async function act<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 
-/** Sends the person to PayPal to approve a checkout; PayPal brings them back to /?paid=… */
-export const approveOnPayPal = (approveUrl: string) => window.location.assign(approveUrl);
+/**
+ * Sends the person to PayPal to approve a checkout; PayPal brings them back to the page with ?paid=….
+ * No URL: it was paid already (Autopilot's saved PayPal), so there's nothing to approve.
+ */
+export const approveOnPayPal = (approveUrl: string | null | undefined) => (approveUrl ? window.location.assign(approveUrl) : void refresh());
 
 /** Where PayPal just brought the person back from, read once when the page loads. */
 export const returned =

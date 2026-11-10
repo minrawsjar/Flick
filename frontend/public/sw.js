@@ -5,6 +5,9 @@
 // - Photos shared to Flick from another app (Android's share sheet, app/manifest.ts share_target)
 //   arrive here as a POST to /share; the photo is kept for /lens, which reads it with Lens.
 
+// - Notifications (backend/src/push.ts): each push is a JSON { title, body, url, tag }; tapping one
+//   opens that page in the app.
+
 // Bump to drop every cached page and file. ponytail: old /_next/static chunks pile up until then.
 const VERSION = "flick-v1";
 const SHARED = "flick-share";
@@ -41,6 +44,33 @@ self.addEventListener("fetch", (event) => {
   // to the network, untouched.
   if (url.pathname.startsWith("/api/")) return;
   if (request.mode === "navigate") return event.respondWith(networkFirst(request, url.pathname));
+});
+
+self.addEventListener("push", (event) => {
+  let message = { title: "Flick", body: "Something needs you.", url: "/home", tag: "flick" };
+  try {
+    message = { ...message, ...event.data.json() };
+  } catch {}
+  event.waitUntil(
+    self.registration.showNotification(message.title, {
+      body: message.body,
+      tag: message.tag,
+      icon: "/pwa-icon/192",
+      badge: "/pwa-icon/192",
+      data: { url: message.url },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url ?? "/home", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((open) => {
+      const tab = open.find((c) => new URL(c.url).origin === self.location.origin);
+      return tab ? tab.navigate(url).then((c) => (c ?? tab).focus()) : self.clients.openWindow(url);
+    }),
+  );
 });
 
 async function networkFirst(request, key) {

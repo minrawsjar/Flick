@@ -276,7 +276,12 @@ export type Order = {
   status: 'CREATED' | 'SAVED' | 'APPROVED' | 'VOIDED' | 'COMPLETED' | 'PAYER_ACTION_REQUIRED';
   links?: Link[];
   purchase_units?: { payments?: { captures?: { id: string; status: string; amount: Money }[] } }[];
+  /** After a capture that asked to save PayPal: the saved method ("payment token") and its customer. */
+  payment_source?: { paypal?: { email_address?: string; attributes?: { vault?: { id?: string; status?: string; customer?: { id?: string } } } } };
 };
+
+/** A PayPal account saved for later (PayPal's vault): Flick charges it without the person present. */
+export type Saved = { id: string; customerId?: string; email?: string };
 
 export type OrderItem = { name: string; amount: number };
 
@@ -292,6 +297,7 @@ export async function createOrder({
   currency = 'USD',
   returnUrl,
   cancelUrl,
+  save = false,
 }: {
   /** Our own id for this checkout; also makes the call idempotent. */
   reference: string;
@@ -300,6 +306,8 @@ export async function createOrder({
   currency?: string;
   returnUrl: string;
   cancelUrl: string;
+  /** Also ask the person to save PayPal for payments Flick makes later (PayPal's vault). */
+  save?: boolean;
 }) {
   const total = items.reduce((sum, item) => sum + Math.round(item.amount * 100), 0) / 100;
   const order = await call<Order>('POST', '/v2/checkout/orders', {
@@ -321,6 +329,7 @@ export async function createOrder({
       ],
       payment_source: {
         paypal: {
+          ...(save && { attributes: { vault: { store_in_vault: 'ON_SUCCESS', usage_type: 'MERCHANT', customer_type: 'CONSUMER' } } }),
           experience_context: {
             brand_name: 'Flick',
             user_action: 'PAY_NOW',
@@ -339,14 +348,52 @@ export async function createOrder({
 
 /** Takes the money for an approved order. Safe to repeat: the request id makes it idempotent. */
 export async function captureOrder(orderId: string) {
-  const order = await call<Order>('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
-    requestId: `capture-${orderId}`,
-    prefer: 'return=representation',
-    body: {},
-  });
+  return completed(await captureOrderRaw(orderId));
+}
+
+/** The capture of a completed order, and the saved PayPal if the order saved one. */
+function completed(order: Order) {
   const capture = order.purchase_units?.[0]?.payments?.captures?.[0];
-  if (order.status !== 'COMPLETED' || !capture) throw new Error(`PayPal order ${orderId} is ${order.status}, not COMPLETED`);
-  return { orderId: order.id, captureId: capture.id, amount: amountOf(capture.amount) };
+  if (order.status !== 'COMPLETED' || !capture) throw new Error(`PayPal order ${order.id} is ${order.status}, not COMPLETED`);
+  const vault = order.payment_source?.paypal?.attributes?.vault;
+  // PayPal can complete the payment without saving the account; then the vault status isn't VAULTED.
+  const saved: Saved | undefined =
+    vault?.id && vault.status === 'VAULTED' ? { id: vault.id, customerId: vault.customer?.id, email: order.payment_source?.paypal?.email_address } : undefined;
+  return { orderId: order.id, captureId: capture.id, amount: amountOf(capture.amount), saved };
+}
+
+/**
+ * Pays with a saved PayPal account, without the person present (a merchant-initiated payment): no
+ * approval page. The order is captured as it's created, or straight after if PayPal leaves it
+ * APPROVED. Safe to repeat: the request ids make it idempotent.
+ */
+export async function chargeSaved({ reference, description, items, savedId }: { reference: string; description: string; items: OrderItem[]; savedId: string }) {
+  const total = items.reduce((sum, item) => sum + Math.round(item.amount * 100), 0) / 100;
+  const order = await call<Order>('POST', '/v2/checkout/orders', {
+    requestId: `saved-${reference}`,
+    prefer: 'return=representation',
+    body: {
+      intent: 'CAPTURE',
+      purchase_units: [
+        {
+          reference_id: reference.slice(0, 256),
+          description: description.slice(0, 127),
+          amount: { ...money(total), breakdown: { item_total: money(total) } },
+          items: items.map((item) => ({ name: item.name.slice(0, 127), quantity: '1', unit_amount: money(item.amount), category: 'DIGITAL_GOODS' })),
+        },
+      ],
+      payment_source: { paypal: { vault_id: savedId, stored_credential: { payment_initiator: 'MERCHANT', usage: 'SUBSEQUENT' } } },
+    },
+  });
+  return completed(order.status === 'APPROVED' ? await captureOrderRaw(order.id) : order);
+}
+
+const captureOrderRaw = (orderId: string) =>
+  call<Order>('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, { requestId: `capture-${orderId}`, prefer: 'return=representation', body: {} });
+
+/** Forgets a saved PayPal account, at PayPal too. */
+export function deleteSaved(savedId: string) {
+  return call<void>('DELETE', `/v3/vault/payment-tokens/${encodeURIComponent(savedId)}`, { requestId: `delete-${savedId}` });
 }
 
 /** Gives part (or all) of a capture back to the person who paid. */

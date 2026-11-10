@@ -15,13 +15,15 @@ export const frontendUrl = () => (process.env.FRONTEND_URL || 'http://localhost:
 type Without<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type NewCheckout = Without<Checkout, 'orderId' | 'status' | 'amount'>;
 
-export async function startCheckout(checkout: NewCheckout, reference: string, description: string, items: OrderItem[]) {
+/** `savePayPal`: also ask to save the person's PayPal, so Autopilot can pay later weeks by itself. */
+export async function startCheckout(checkout: NewCheckout, reference: string, description: string, items: OrderItem[], savePayPal = false) {
   const order = await createOrder({
     reference,
     description,
     items,
     returnUrl: `${frontendUrl()}/api/paypal/return`,
     cancelUrl: `${frontendUrl()}/api/paypal/cancel`,
+    save: savePayPal,
   });
   state.checkouts[order.id] = { ...checkout, orderId: order.id, amount: order.total, status: 'awaiting' } as Checkout;
   save();
@@ -29,17 +31,18 @@ export async function startCheckout(checkout: NewCheckout, reference: string, de
 }
 
 /**
- * Captures an approved checkout. Returns it with the capture id, or with `captureId: undefined` if it
- * was already captured (PayPal's return page reloaded), so the agent acts only once.
+ * Captures an approved checkout. Returns it with the capture id (and the saved PayPal, if it saved
+ * one), or with `captureId: undefined` if it was already captured (PayPal's return page reloaded),
+ * so the agent acts only once.
  */
 export async function captureCheckout(orderId: string) {
   const checkout = state.checkouts[orderId];
   if (!checkout) throw new HttpError(404, `No checkout ${orderId}`);
-  if (checkout.status !== 'awaiting') return { checkout, captureId: undefined };
-  const { captureId } = await captureOrder(orderId);
+  if (checkout.status !== 'awaiting') return { checkout, captureId: undefined, saved: undefined };
+  const { captureId, saved } = await captureOrder(orderId);
   checkout.status = 'captured';
   save();
-  return { checkout, captureId };
+  return { checkout, captureId, saved };
 }
 
 export function cancelCheckout(orderId: string) {
