@@ -13,7 +13,7 @@ export type Face = { color: BotColor; shape: BotShape };
 /** Flick's mark: a scan frame in an ink square. */
 export function Logo({ size = 24 }: { size?: number }) {
   return (
-    <span className="flex shrink-0 items-center justify-center rounded-[7px] bg-ink text-on-ink" style={{ width: size, height: size }}>
+    <span className="flex shrink-0 items-center justify-center bg-ink text-on-ink" style={{ width: size, height: size, borderRadius: size * 0.29 }}>
       <ScanLine size={size * 0.58} strokeWidth={2.25} />
     </span>
   );
@@ -224,9 +224,10 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className={`tone-${tone} overflow-hidden px-4 sm:px-6 ${compact ? "py-16 lg:py-14" : "py-24 sm:py-36"}`}>
+    // The app-section* classes: the working pages' phone layout (app/globals.css).
+    <section id={id} className={`app-section tone-${tone} overflow-hidden px-4 sm:px-6 ${compact ? "py-16 lg:py-14" : "py-24 sm:py-36"}`}>
       <div className="mx-auto max-w-6xl">
-        <Reveal className={`mx-auto text-center ${compact ? "max-w-4xl" : "max-w-3xl"}`}>
+        <Reveal className={`app-section-head mx-auto text-center ${compact ? "max-w-4xl" : "max-w-3xl"}`}>
           <p className={`flex items-center justify-center gap-2 text-secondary ${compact ? "text-[15px]" : "text-[17px] sm:text-[19px]"}`}>
             {agent && <Bot {...agent} size={24} mood="awake" />}
             {label}
@@ -236,7 +237,7 @@ export function Section({
             {intro}
           </p>
         </Reveal>
-        <Reveal className={`relative ${compact ? "mt-8 lg:mt-10" : "mt-14 sm:mt-20"}`}>
+        <Reveal className={`app-section-body relative ${compact ? "mt-8 lg:mt-10" : "mt-14 sm:mt-20"}`}>
           {agent && glow && (
             <Glow
               color={botColors[agent.color]}

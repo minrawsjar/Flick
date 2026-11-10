@@ -1,6 +1,7 @@
 # Flick — PayPal AI Hackathon build plan (frontend first, Air Agents theme)
 
 ## Status (2026-11-10, late)
+- Added: Flick installs as an app (PWA: `/install` with QR code, manifest with shortcuts and a share target, service worker for opening offline); phone-first working pages (tab bar, no phone-in-a-phone, safe areas); **Today** (`/home`) home screen with a CSV statement; photos shared to Flick (Android) go to Lens; icon badge when the week needs you.
 - Done: frontend/backend split; Air Agents-style one-pager with dark mode, **live on the backend** (real Lens reads incl. own photos, PayPal sandbox checkouts for bills and the week, payouts per day, real invoices for splits, AI-drafted PayPal reminders), demo fallback without backend; Money Studio restyled, opens on Flick pages (This week / Owed to you / Agents); backend complete with `npm test` and `npm run check` (all green on the US sandbox app).
 - Decisions: Autopilot plans with rules, not AI; AI via OpenRouter, `AI_MODEL=google/gemini-2.5-flash-lite,openai/gpt-6-luna` (bake-off winner + fallback), Studio `openai/gpt-6-luna,openai/gpt-5.4-mini`; money flow = checkout captured into the US sandbox business account, then Payouts.
 - Sandbox: app must be on the **US** business account (India accounts can't send Payouts); `npm run check` revokes PayPal's cached token so feature changes apply at once.

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUpRight } from "lucide-react";
+import { ArrowDown, ArrowUpRight, Download } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { Bot, botColors } from "@/components/bot";
@@ -159,6 +159,9 @@ function Closing() {
           </Link>
           <Link href="/dashboard" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-white/15 px-6 text-[17px] text-white">
             Open Money Studio <ArrowUpRight size={18} aria-hidden />
+          </Link>
+          <Link href="/install" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-white/15 px-6 text-[17px] text-white standalone:hidden">
+            Get the app <Download size={18} aria-hidden />
           </Link>
         </div>
       </Reveal>

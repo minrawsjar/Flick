@@ -2,7 +2,8 @@ import { BatteryFull, CalendarCheck, LayoutGrid, ScanLine, Signal, Users, Wifi }
 import type { ReactNode } from "react";
 
 // An iPhone, from Air Agents (web/src/Frames.tsx, MIT) with Flick's tabs. Screens render at the
-// app's own layout inside it.
+// app's own layout inside it. On a real phone the working pages drop the frame and show just the
+// screen (the data-phone* rules in app/globals.css).
 
 const tabs = [
   ["This week", CalendarCheck],
@@ -29,11 +30,12 @@ export function Phone({
 }) {
   return (
     <div
+      data-phone
       className="relative shrink-0 rounded-[46px] ring-1 ring-white/10 bg-[linear-gradient(145deg,#4a4a4d,#1a1a1c_30%,#0c0c0d_70%,#3a3a3c)] p-[7px] shadow-[0_40px_80px_-24px_rgba(0,0,0,0.4),0_12px_24px_-12px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(255,255,255,0.08)]"
       style={{ width, height: width * 2.12 }}
     >
-      <div className="relative flex h-full flex-col overflow-hidden rounded-[39px] text-left" style={{ background }}>
-        <div className={`relative z-10 flex h-11 shrink-0 items-center justify-between px-6 text-[13px] ${dark ? "text-white" : ""}`}>
+      <div data-phone-screen className="relative flex h-full flex-col overflow-hidden rounded-[39px] text-left" style={{ background }}>
+        <div data-phone-status className={`relative z-10 flex h-11 shrink-0 items-center justify-between px-6 text-[13px] ${dark ? "text-white" : ""}`}>
           <span>9:41</span>
           <span className="absolute left-1/2 top-2.5 h-[22px] w-[74px] -translate-x-1/2 rounded-full bg-black" />
           <span className="flex items-center gap-1">

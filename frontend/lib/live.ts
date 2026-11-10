@@ -38,6 +38,8 @@ function subscribe(listener: () => void) {
   if (!started) {
     started = true;
     void refresh();
+    // Coming back to the tab or the installed app (from PayPal, or another app): catch up.
+    document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && void refresh());
   }
   return () => listeners.delete(listener);
 }

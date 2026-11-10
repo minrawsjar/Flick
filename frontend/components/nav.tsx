@@ -1,14 +1,19 @@
 "use client";
 
+import { CalendarCheck, Download, House, ScanLine, Sparkles, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { useLive } from "@/lib/live";
 import { ThemeToggle } from "./theme-toggle";
 import { Logo } from "./ui";
 
-// The bar across the top of every page except Money Studio: Flick's mark (the one-pager), the four
-// agents' working pages, and Money Studio.
+// The bar across the top of every page except Money Studio: Flick's mark (the one-pager), the
+// working pages, installing the app, and Money Studio. Below laptop width the working pages get a
+// tab bar at the bottom instead, like the installed app they become (see /install).
 
 const links = [
+  ["/home", "Today"],
   ["/ask", "Ask Flick"],
   ["/lens", "Lens"],
   ["/autopilot", "Autopilot"],
@@ -16,6 +21,8 @@ const links = [
   ["/nudge", "Nudge"],
   ["/friends", "Friends"],
 ] as const;
+
+const people = ["/split", "/nudge", "/friends"];
 
 function Links({ className = "" }: { className?: string }) {
   const path = usePathname();
@@ -35,24 +42,105 @@ function Links({ className = "" }: { className?: string }) {
   );
 }
 
-export function Nav() {
+/** `app`: a working page, which has the tab bar below laptop width instead of a row of links. */
+export function Nav({ app = false }: { app?: boolean }) {
   return (
-    <header className="sticky top-0 z-30 bg-page/75 backdrop-blur-2xl backdrop-saturate-150">
+    <header className="sticky top-0 z-30 bg-page/75 pt-[env(safe-area-inset-top)] backdrop-blur-2xl backdrop-saturate-150">
       <nav className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 text-[15px]">
           <Logo />
           Flick
         </Link>
-        <Links className="hidden md:flex" />
-        <span className="flex items-center gap-2">
+        <Links className="hidden lg:flex" />
+        <span className="flex items-center gap-1.5">
+          <Link href="/install" className="pressable flex items-center gap-1 rounded-full bg-fill px-3 py-1 text-[13px] standalone:hidden">
+            <Download size={14} aria-hidden /> Get the app
+          </Link>
           <ThemeToggle />
           <Link href="/dashboard" className="pressable rounded-full bg-ink px-3 py-1 text-[13px] text-on-ink">
-            Money Studio
+            <span className="max-sm:hidden">Money </span>Studio
           </Link>
         </span>
       </nav>
-      {/* On phones the links get their own row, which scrolls sideways if it must. */}
-      <Links className="flex overflow-x-auto px-3 pb-2 md:hidden" />
+      {/* On phones the one-pager's links get their own row, which scrolls sideways if it must. */}
+      {!app && <Links className="flex overflow-x-auto px-3 pb-2 lg:hidden" />}
+      {app && <PeopleTabs />}
     </header>
+  );
+}
+
+const tabs = [
+  ["/home", "Today", House],
+  ["/lens", "Lens", ScanLine],
+  ["/autopilot", "Week", CalendarCheck],
+  ["/split", "People", Users],
+  ["/ask", "Ask", Sparkles],
+] as const;
+
+/** The working pages' tab bar, below laptop width. Its Week tab (and the app's icon) shows what needs you. */
+export function TabBar() {
+  const path = usePathname();
+  const waiting = useWaiting();
+
+  // The installed app's icon badge (Chrome, Edge, Safari on iOS 16.4+ for home-screen apps).
+  useEffect(() => {
+    if (!("setAppBadge" in navigator)) return;
+    (waiting ? navigator.setAppBadge(waiting) : navigator.clearAppBadge()).catch(() => {});
+  }, [waiting]);
+
+  return (
+    <nav
+      aria-label="Flick"
+      className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+10px)] z-30 mx-auto flex h-[60px] max-w-md items-center justify-around rounded-full bg-card/85 px-1.5 shadow-[0_8px_30px_-6px_rgba(0,0,0,0.25),0_0_0_0.5px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150 lg:hidden"
+    >
+      {tabs.map(([href, label, Icon]) => {
+        const on = href === "/split" ? people.includes(path) : path === href;
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={on ? "page" : undefined}
+            className={`pressable relative flex min-w-[58px] flex-col items-center gap-0.5 rounded-full px-2.5 py-1.5 text-[10px] ${on ? "bg-fill text-ink" : "text-ink/60"}`}
+          >
+            <Icon size={21} strokeWidth={1.75} aria-hidden />
+            {label}
+            {href === "/autopilot" && waiting > 0 && (
+              <span aria-label={`${waiting} waiting for you`} className="absolute right-3 top-1 size-2 rounded-full bg-danger" />
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** Things in the week that need you: approving it, and any payment that failed. */
+function useWaiting() {
+  const { state } = useLive();
+  if (!state) return 0;
+  const { payments, approval } = state.week;
+  const unapproved = approval?.status !== "approved" && payments.some((p) => p.status === "planned");
+  return (unapproved ? 1 : 0) + payments.filter((p) => p.status === "failed").length;
+}
+
+/** Split, Nudge and Friends share the People tab: a switch between them, under the bar. */
+function PeopleTabs() {
+  const path = usePathname();
+  if (!people.includes(path)) return null;
+  return (
+    <div className="flex justify-center px-4 pb-2 lg:hidden">
+      <div className="grid w-full max-w-sm grid-cols-3 rounded-full bg-fill p-0.5 text-[13px]">
+        {(["Split", "Nudge", "Friends"] as const).map((label, i) => (
+          <Link
+            key={label}
+            href={people[i]}
+            aria-current={path === people[i] ? "page" : undefined}
+            className={`rounded-full py-1 text-center transition-colors ${path === people[i] ? "bg-raised shadow-sm" : "text-ink/70"}`}
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }

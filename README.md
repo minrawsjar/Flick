@@ -91,6 +91,10 @@ backend/scripts/check.ts        `npm run check`: tests each sandbox feature and 
 frontend/lib/api.ts             How the frontend calls the backend
 frontend/app/page.tsx           The one-pager
 frontend/app/_landing/          Its interactive sections, and their demo data
+frontend/app/(app)/             The working pages (Today, Ask Flick, Lens, Autopilot, Split, Nudge, Friends, Get the app)
+frontend/app/manifest.ts        The installed app: icons (pwa-icon/), shortcuts, share target
+frontend/public/sw.js           Its service worker: opening offline, photos shared to Flick
+frontend/components/pwa.tsx     Registering it, and how each browser installs it
 frontend/components/            Bot faces, the phone frame, UI pieces, the themed AG Grid
 frontend/app/dashboard/         The AG Studio dashboard
 ```
@@ -154,15 +158,31 @@ Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 404 for an unk
 
 The one-pager is a **mock demo** of what Flick can do: its sections always play on demo data. The navbar leads to the **working pages**, one per agent, which run on the live backend ([`lib/live.ts`](frontend/lib/live.ts)):
 
+- **`/home`** (Today): where the installed app opens. Where the week stands (paid so far, what's next, whether it needs your OK), who owes you, a way into each agent, and what the agents did lately. *Download statement* saves everything Flick has paid or asked for as a CSV.
 - **`/ask`** (Ask Flick): one conversation that reaches every agent. The AI model reads your real data through tools (the week, scans with receipt items, friends, who owes what, usual amounts per payee), plans, and proposes actions: pay a scan, approve or change the week, split a bill, remind a friend, add a friend. Reads run on their own; **every action waits for your approval** before it runs, and checkouts are approved again on PayPal's page ([`agent.ts`](backend/src/agent.ts)).
 - **`/lens`**: tapping a sample draws it into a photo and sends it to the vision model; *Snap your own* takes a photo (or a file). Paying opens PayPal's sandbox checkout (sign in with a sandbox personal account) and comes back to the page; a receipt goes to `/split`.
 - **`/autopilot`**: the backend's week. Edit it in the grid, approve it through PayPal, and each *Next day* pays out.
 - **`/split`**: sends real sandbox invoices and links to them. *Tick it for me* takes a sentence ("Maya and I shared the salmon, we all had tea") and the AI model ticks the grid.
 - **`/nudge`**: the real requests, a reminder drafted by the AI model, sent as PayPal's own reminder; *Check who's paid* asks PayPal.
 - **`/friends`**: the people you split with, each linked by their PayPal email (PayPal has no public API to confirm whose account an email is, so the email is the link). Add, change or remove them; Split's columns follow.
+- **`/install`** (Get the app): installs Flick to a phone's home screen or a computer's dock, in whichever way the browser does it (one tap in Chrome, Edge and Android; the steps in Safari), with a QR code to open it on a phone from a computer.
 - **`/dashboard`**: Money Studio.
 
 If the backend can't be reached, the working pages say so and play the demo instead.
+
+### On a phone, and as an app
+
+Below laptop width the working pages have a tab bar at the bottom (Today, Lens, Week, People, Ask; People switches between Split, Nudge and Friends). On a phone each agent's screen fills the width instead of being drawn inside a phone ([`globals.css`](frontend/app/globals.css), the `data-app` rules). The bars respect the notch and home indicator.
+
+Installed (it's a PWA: [`manifest.ts`](frontend/app/manifest.ts)), Flick opens full screen on Today, and:
+
+- **opens offline**: [`sw.js`](frontend/public/sw.js) serves pages and the last `GET /api/state` from its cache when the network is gone, and the pages say they're showing what Flick last knew. Nothing else under `/api` is cached or replayed, so no payment can happen twice.
+- **takes shared photos** (Android): share a photo from any app to Flick, and Lens reads it on `/lens`, ready to pay.
+- **has shortcuts**: long-press the icon for Snap a bill, This week, Ask Flick or Get paid back.
+- **badges its icon** with what needs you: the week waiting for approval, and any payment that failed.
+- **catches up** whenever you come back to it (from PayPal's page, or another app).
+
+The service worker only runs in production builds (`npm run build && npm start`): in `npm run dev` it would cache files you're editing. To try installing on a phone, the site needs HTTPS: use the deployed site, or a tunnel to port 3000.
 
 Colours, type and motion are tokens in [`globals.css`](frontend/app/globals.css). The grids use [`components/grid.tsx`](frontend/components/grid.tsx), AG Grid themed as an iOS grouped list from the same tokens. Everything respects `prefers-reduced-motion`.
 

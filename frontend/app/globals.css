@@ -123,6 +123,34 @@ body {
 .tone-white { background: var(--color-page); --tile: var(--color-tile); }
 .tone-grey { background: var(--color-grouped); --tile: var(--color-card); }
 
+/* Running as the installed app (from /install), e.g. `standalone:hidden`. */
+@custom-variant standalone (@media (display-mode: standalone));
+
+/* On a phone, the working pages (app/(app)/layout.tsx sets data-app) are the app itself: each
+   agent's screen fills the width with no phone drawn around it (components/phone.tsx marks its
+   parts), and the page's heading is a compact left-aligned title (components/ui.tsx, Section).
+   Plain CSS outranks Tailwind's utilities; !important only beats Phone's inline size. */
+@media (max-width: 767px) {
+  [data-app] [data-phone] {
+    width: 100% !important;
+    max-width: 480px;
+    height: 560px !important;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  [data-app] [data-phone-screen] { border-radius: 28px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-separator) 45%, transparent); }
+  [data-app] [data-phone-status] { display: none; }
+
+  [data-app] .app-section { padding-block: 16px 28px; }
+  [data-app] .app-section-head { text-align: left; }
+  [data-app] .app-section-head > p:first-child { justify-content: flex-start; font-size: 13px; }
+  [data-app] .app-section-head > h2 { font-size: 30px; }
+  [data-app] .app-section-head > p:last-child { margin-top: 6px; font-size: 15px; }
+  [data-app] .app-section-body { margin-top: 18px; }
+}
+
 /* Content settles in as it scrolls into view. */
 .reveal {
   opacity: 0;

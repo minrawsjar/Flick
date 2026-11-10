@@ -157,7 +157,7 @@ export function Ask() {
   });
 
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-4 lg:grid-cols-[1fr_260px]">
+    <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
       <Tile className="flex h-[min(680px,calc(100dvh-220px))] min-h-[460px] flex-col !p-0">
         <div className="flex items-center gap-3 border-b border-separator/40 px-5 py-3">
           <Crew size={26} />
