@@ -14,14 +14,17 @@ const onConnection = (listener: () => void) => {
 };
 const useOnline = () => useSyncExternalStore(onConnection, () => navigator.onLine, () => true);
 
-/** On the working pages: says so when they've fallen back to the demo. */
+/** On the working pages: says so, and why, when they've fallen back to the demo. */
 export function BackendNotice() {
   const live = useLive();
   const online = useOnline();
   if (live.mode !== "demo" || !online) return null;
   return (
     <p className="mx-auto mt-4 w-fit max-w-[calc(100%-2rem)] rounded-full bg-wait/15 px-4 py-1.5 text-center text-[13px] text-wait">
-      Can&apos;t reach Flick&apos;s backend right now, so this page is playing the demo.
+      {/* State came back, so the backend answered: it just has no PayPal keys. */}
+      {live.state
+        ? "PayPal isn't set up on this backend yet (backend/.env), so this page is playing the demo."
+        : "Can't reach Flick's backend right now, so this page is playing the demo."}
     </p>
   );
 }
