@@ -3,6 +3,7 @@
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Check, Coffee, LoaderCircle, Receipt, RotateCcw, ShoppingBag, ShoppingCart, Smartphone, Trophy, Users, Zap, type LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { Unusual } from "@backend/model";
 import { Bot } from "@/components/bot";
 import { Grid } from "@/components/grid";
 import { Phone } from "@/components/phone";
@@ -39,6 +40,10 @@ function autopilotSays(rows: Planned[], approved: boolean, today: number) {
     if (sum > WEEKLY_CAP) return `That's ${usd(sum)}, over your ${usd(WEEKLY_CAP)} weekly cap. I'll wait for you to approve it.`;
     const waiting = active.filter((p) => status(p) === "waiting").length;
     if (waiting) return `${waiting} ${waiting === 1 ? "payment is" : "payments are"} due and waiting. Nothing gets paid until you approve.`;
+    const odd = active.filter((p) => p.unusual);
+    if (odd.length > 1) return `${odd.map((p) => p.payee).join(" and ")} look out of the ordinary: worth a look before you approve.`;
+    const flag = odd[0]?.unusual;
+    if (flag) return `${flag.kind === "new-payee" ? `You haven't paid ${odd[0].payee} before` : `${odd[0].payee} is ${flag.percent}% higher than usual`}: worth a look before you approve.`;
     return `I planned ${active.length} payments for this week, ${usd(sum)}. Approve once and I'll handle the rest.`;
   }
   const paid = active.filter((p) => status(p) === "paid");
@@ -61,6 +66,19 @@ function StatusText({ status, day }: { status: Status; day: Day }) {
   if (status === "failed") return <span className="text-danger">Failed</span>;
   if (status === "skipped") return <span className="line-through">Skipped</span>;
   return <span>{day}</span>;
+}
+
+/** A flagged payment's warning: a chip in the grid, or `short`, a marker on the phone. */
+function Flag({ unusual, short }: { unusual: Unusual; short?: boolean }) {
+  const isNew = unusual.kind === "new-payee";
+  return (
+    <span
+      title={isNew ? "Flick hasn't paid them before" : `Usually ${usd(unusual.usual)}`}
+      className={`inline-block shrink-0 whitespace-nowrap rounded-full bg-wait/15 text-wait ${short ? "px-1.5 text-[10px] leading-[14px]" : "mr-1.5 px-2 text-[12px] leading-[18px]"}`}
+    >
+      {isNew ? (short ? "New" : "New payee") : `▲ ${unusual.percent}%${short ? "" : " above usual"}`}
+    </span>
+  );
 }
 
 function PayeeIconTile({ icon, size = 28 }: { icon: PayeeIcon; size?: number }) {
@@ -96,7 +114,10 @@ export function WeekScreen({ rows, approved, today, approving, onApprove }: { ro
             <PayeeIconTile icon={p.icon} size={26} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] leading-4">{p.payee}</p>
-              <p className="truncate text-[11px] leading-[14px] text-secondary">{p.what}</p>
+              <p className="flex items-center gap-1 text-[11px] leading-[14px] text-secondary">
+                <span className="truncate">{p.what}</span>
+                {p.unusual && <Flag unusual={p.unusual} short />}
+              </p>
             </div>
             <div className="text-right text-[11px] leading-[14px]">
               <p className="text-[13px] tabular-nums leading-4">{usd(p.amount)}</p>
@@ -135,6 +156,14 @@ const PayeeCell = ({ data }: ICellRendererParams<Planned>) =>
     </div>
   );
 
+const WhyCell = ({ data }: ICellRendererParams<Planned>) =>
+  data && (
+    <>
+      {data.unusual && <Flag unusual={data.unusual} />}
+      {data.why}
+    </>
+  );
+
 const pill: Record<Status, string> = {
   planned: "bg-fill text-secondary",
   waiting: "bg-wait/15 text-wait",
@@ -170,13 +199,28 @@ type WeekDriver = {
   reset: () => void;
 };
 
+/**
+ * The demo has no backend to judge an edited amount, so it applies rules.ts's `unusual` here: 25% or
+ * more above the usual. Each demo payment's usual is its planned amount, bar a flagged one's.
+ */
+function rejudge(p: Planned): Planned {
+  const planned = week.find((o) => o.id === p.id);
+  if (!planned || planned.unusual?.kind === "new-payee") return p;
+  const usual = planned.unusual?.kind === "above-usual" ? planned.unusual.usual : planned.amount;
+  const above = p.amount / usual - 1;
+  return { ...p, unusual: above >= 0.25 - 1e-9 ? { kind: "above-usual", percent: Math.round(above * 100), usual } : undefined };
+}
+
+// Copies: AG Grid writes edits into the rows it's given, and `week` must stay as planned.
+const plannedWeek = () => week.map((p) => ({ ...p }));
+
 function useDemoWeek(): WeekDriver {
-  const [rows, setRows] = useState(week);
+  const [rows, setRows] = useState(plannedWeek);
   const [approved, setApproved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [today, setToday] = useState(-1);
   const reset = () => {
-    setRows(week);
+    setRows(plannedWeek());
     setApproved(false);
     setToday(-1);
   };
@@ -186,7 +230,7 @@ function useDemoWeek(): WeekDriver {
     approved,
     today,
     busy,
-    edit: (id, patch) => setRows((all) => all.map((p) => (p.id === id ? { ...p, ...patch } : p))),
+    edit: (id, patch) => setRows((all) => all.map((p) => (p.id === id ? rejudge({ ...p, ...patch }) : p))),
     approve: () => {
       setBusy(true);
       setTimeout(() => {
@@ -218,7 +262,7 @@ function useLiveWeek(state: LiveState | null): WeekDriver | null {
   };
   return {
     live: true,
-    rows: state.week.payments.map((p) => ({ id: p.id, payee: p.payee, what: p.what, icon: p.icon, amount: p.amount, day: p.day, why: p.why, status: p.status })),
+    rows: state.week.payments.map((p) => ({ id: p.id, payee: p.payee, what: p.what, icon: p.icon, amount: p.amount, day: p.day, why: p.why, unusual: p.unusual, status: p.status })),
     approved: state.week.approval?.status === "approved",
     today: state.week.today,
     busy,
@@ -258,7 +302,8 @@ export function Autopilot() {
         cellClass: "tabular-nums",
       },
       { colId: "status", headerName: "Status", width: 116, valueGetter: ({ data }) => data && statusOf(data, w.approved, w.today), cellRenderer: StatusCell },
-      { field: "why", headerName: "Autopilot's reason", flex: 2, minWidth: 220, wrapText: true, autoHeight: true, cellClass: "!py-2.5 !leading-5 text-secondary" },
+      // equals: its chip follows the amount, not `why`, so redraw whenever the row changes.
+      { field: "why", headerName: "Autopilot's reason", cellRenderer: WhyCell, equals: () => false, flex: 2, minWidth: 220, wrapText: true, autoHeight: true, cellClass: "!py-2.5 !leading-5 text-secondary" },
     ];
   }, [w.approved, w.today]);
 

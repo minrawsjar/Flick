@@ -1,4 +1,4 @@
-import type { Scan } from "@backend/model";
+import type { Scan, Unusual } from "@backend/model";
 import type { Face } from "@/components/ui";
 import { money } from "@/lib/format";
 
@@ -200,12 +200,14 @@ export type Planned = {
   day: Day;
   /** Autopilot's reason, from what it has seen you pay. */
   why: string;
+  /** Out of the ordinary: a new payee, or well above the usual amount. */
+  unusual?: Unusual;
   /** Live payments carry their status from the backend; demo ones derive it from the day. */
   status?: "planned" | "scheduled" | "paid" | "skipped" | "failed";
 };
 
 export const week: Planned[] = [
-  { id: "power", payee: "City Power", what: "Electricity", icon: "power", amount: 64.2, day: "Wed", why: "You snapped this bill on Nov 3. It's due Wednesday, Nov 11." },
+  { id: "power", payee: "City Power", what: "Electricity", icon: "power", amount: 64.2, day: "Wed", why: "You snapped this bill on Nov 3. It's due Wednesday, Nov 11.", unusual: { kind: "above-usual", percent: 27, usual: 50.47 } },
   { id: "mobile", payee: "Mobile Co", what: "Phone plan", icon: "phone", amount: 25, day: "Thu", why: "Same amount on the 12th, every month." },
   { id: "pilates", payee: "Maya", what: "Pilates, your half", icon: "friend", amount: 9, day: "Thu", why: "You've split this with Maya four Thursdays running." },
   { id: "coffee", payee: "Bean There", what: "Friday tip", icon: "coffee", amount: 2, day: "Fri", why: "You tip here most Fridays." },
