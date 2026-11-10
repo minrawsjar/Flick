@@ -19,6 +19,8 @@ import { agents, DAYS, week, WEEKLY_CAP, type Day, type PayeeIcon, type Planned 
 const icons: Record<PayeeIcon, LucideIcon> = { power: Zap, phone: Smartphone, friend: Users, coffee: Coffee, cart: ShoppingCart, ball: Trophy, bag: ShoppingBag, bill: Receipt };
 
 type Status = "planned" | "waiting" | "scheduled" | "paid" | "skipped" | "failed";
+/** A grid row: the payment, and the status it shows. */
+type Row = Planned & { shown: Status };
 
 /** `today` is -1 on Sunday, the planning day before the week starts. */
 const dayIndex = (day: Day) => DAYS.indexOf(day);
@@ -36,6 +38,7 @@ function autopilotSays(rows: Planned[], approved: boolean, today: number) {
   const sum = total(active);
   const failed = active.filter((p) => status(p) === "failed");
   if (failed.length) return `PayPal wouldn't pay ${failed.map((p) => p.payee).join(" and ")}. Tap retry when it's sorted.`;
+  if (!active.length) return "Nothing to pay this week.";
   if (!approved) {
     if (sum > WEEKLY_CAP) return `That's ${usd(sum)}, over your ${usd(WEEKLY_CAP)} weekly cap. I'll wait for you to approve it.`;
     const waiting = active.filter((p) => status(p) === "waiting").length;
@@ -128,7 +131,7 @@ export function WeekScreen({ rows, approved, today, approving, onApprove }: { ro
           </div>
         ))}
       </div>
-      {!approved && (
+      {!approved && sum > 0 && (
         <div className="px-3 pt-2.5">
           <Primary onClick={onApprove} disabled={approving}>
             {approving ? (
@@ -287,9 +290,12 @@ export function Autopilot() {
   // Your own week once Autopilot has planned one; until then the sample week, as a walkthrough.
   const real = useLiveWeek(live.mode === "live" && live.state?.week.payments.length ? live.state : null);
   const w = real ?? demo;
+  // Each row carries the status it shows. Worked out in the grid instead, a new week could arrive
+  // before the new day reached its columns, and keep the old day's statuses.
+  const rows = w.rows.map((p) => ({ ...p, shown: statusOf(p, w.approved, w.today) }));
 
   // Editable until approved: the approval covers exactly what's in the grid.
-  const columns = useMemo<ColDef<Planned>[]>(() => {
+  const columns = useMemo<ColDef<Row>[]>(() => {
     const editable = ({ data }: { data?: Planned }) => (data?.status ? data.status === "planned" : !w.approved);
     return [
       { field: "payee", headerName: "Payee", cellRenderer: PayeeCell, flex: 1.3, minWidth: 180 },
@@ -306,11 +312,11 @@ export function Autopilot() {
         valueFormatter: ({ value }) => usd(value ?? 0),
         cellClass: "tabular-nums",
       },
-      { colId: "status", headerName: "Status", width: 116, valueGetter: ({ data }) => data && statusOf(data, w.approved, w.today), cellRenderer: StatusCell },
+      { field: "shown", headerName: "Status", width: 116, cellRenderer: StatusCell },
       // equals: its chip follows the amount, not `why`, so redraw whenever the row changes.
       { field: "why", headerName: "Autopilot's reason", cellRenderer: WhyCell, equals: () => false, flex: 2, minWidth: 220, wrapText: true, autoHeight: true, cellClass: "!py-2.5 !leading-5 text-secondary" },
     ];
-  }, [w.approved, w.today]);
+  }, [w.approved]);
 
   const sum = total(w.rows.filter((p) => statusOf(p, w.approved, w.today) !== "skipped"));
   const failed = w.rows.some((p) => p.status === "failed");
@@ -324,8 +330,8 @@ export function Autopilot() {
       <div className="grid w-full min-w-0 gap-3 md:grid-cols-2">
         <Tile className="md:col-span-2">
           <p className="mb-3 text-[13px] text-secondary">The plan, in AG Grid. Tap an amount or a day to change it, until you approve.</p>
-          <Grid<Planned>
-            rowData={w.rows}
+          <Grid<Row>
+            rowData={rows}
             columnDefs={columns}
             getRowId={({ data }) => data.id}
             onCellValueChanged={({ data, colDef }) => w.edit(data.id, colDef.field === "amount" ? { amount: Number(data.amount) } : { day: data.day })}
@@ -339,7 +345,7 @@ export function Autopilot() {
           <p className="mt-2 text-[15px] leading-[1.45]">
             One PayPal approval covers the whole week. Autopilot never pays more than you approved, and anything over your cap waits for you.
           </p>
-          {w.live && !w.approved && (
+          {w.live && !w.approved && sum > 0 && (
             <p className="mt-2 text-[12px] leading-4 text-secondary">Opens PayPal&apos;s sandbox: sign in with your sandbox personal account to approve.</p>
           )}
           {!w.live && live.mode === "live" && (
@@ -352,7 +358,7 @@ export function Autopilot() {
               <p className="rise flex h-10 items-center justify-center gap-1.5 rounded-full bg-paid/15 text-[13px] text-paid">
                 <Check size={15} /> Approved · {usd(sum)}
               </p>
-            ) : (
+            ) : sum > 0 ? (
               <Primary onClick={w.approve} disabled={w.busy}>
                 {w.busy ? (
                   <>
@@ -362,6 +368,8 @@ export function Autopilot() {
                   <>Approve with PayPal · {usd(sum)}</>
                 )}
               </Primary>
+            ) : (
+              <p className="flex h-10 items-center justify-center rounded-full bg-fill text-[13px] text-secondary">Nothing to approve this week</p>
             )}
           </div>
         </Tile>
