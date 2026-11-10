@@ -83,6 +83,7 @@ backend/src/lens.ts             Lens: reads a photo with the AI model, pays what
 backend/src/autopilot.ts        Autopilot: one approval for the week, a payout on each day
 backend/src/split.ts            Splitter: a PayPal invoice for each friend's share
 backend/src/nudge.ts            Nudge: drafts reminders and sends them through PayPal
+backend/src/scout.ts            Scout: your usuals, priced everywhere, bought through PayPal; scout-rules.ts is its tested rules
 backend/src/checkout.ts         The PayPal approval round trip all payments share
 backend/src/store.ts            The JSON store; seed.ts is the demo's starting point
 backend/src/ai.ts               The AI connection; ai-proxy.ts serves the dashboard's assistant
@@ -139,6 +140,11 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `POST /api/nudge/draft` `{ debtId, tone }` | A reminder in a `Friendly`, `Funny` or `Straight` tone |
 | `POST /api/nudge/send` `{ debtId, text }` | Sends it through PayPal |
 | `POST /api/debts/refresh` | Marks requests that have been paid |
+| `GET /api/scout` | Scout: every product priced at every store this week, with its 12-week trend; your usuals; the next shop quoted everywhere |
+| `POST /api/scout/quote` `{ items: [{ productId, qty }] }` | A basket priced at every store, delivery included |
+| `POST /api/scout/read` `{ image }` | Every product in a photo of a shelf, fridge, cart or list (AI), priced |
+| `POST /api/scout/online` `{ productId }` or `{ query }` | Live prices at online stores, from Channel3 |
+| `POST /api/scout/buy` `{ storeId, items }` | One checkout for a basket at a store; returns `approveUrl` |
 | `GET /api/paypal/return`, `/cancel` | Where PayPal sends people back after a checkout |
 | `GET /api/dashboard` | Money Studio's tables |
 | `GET /api/ai/models`, `POST /api/ai/responses` | Money Studio's assistant |
@@ -162,6 +168,7 @@ The one-pager is a **mock demo** of what Flick can do: its sections always play 
 - **`/ask`** (Ask Flick): one conversation that reaches every agent. The AI model reads your real data through tools (the week, scans with receipt items, friends, who owes what, usual amounts per payee), plans, and proposes actions: pay a scan, approve or change the week, split a bill, remind a friend, add a friend. Reads run on their own; **every action waits for your approval** before it runs, and checkouts are approved again on PayPal's page ([`agent.ts`](backend/src/agent.ts)).
 - **`/lens`**: tapping a sample draws it into a photo and sends it to the vision model; *Snap your own* takes a photo (or a file). Paying opens PayPal's sandbox checkout (sign in with a sandbox personal account) and comes back to the page; a receipt goes to `/split`.
 - **`/autopilot`**: the backend's week. Edit it in the grid, approve it through PayPal, and each *Next day* pays out.
+- **`/scout`** (Scout): what you buy again and again, priced at every store this week, and bought with one PayPal approval. See [Scout](#scout) below.
 - **`/split`**: sends real sandbox invoices and links to them. *Tick it for me* takes a sentence ("Maya and I shared the salmon, we all had tea") and the AI model ticks the grid.
 - **`/nudge`**: the real requests, a reminder drafted by the AI model, sent as PayPal's own reminder; *Check who's paid* asks PayPal.
 - **`/friends`**: the people you split with, each linked by their PayPal email (PayPal has no public API to confirm whose account an email is, so the email is the link). Add, change or remove them; Split's columns follow.
@@ -169,6 +176,19 @@ The one-pager is a **mock demo** of what Flick can do: its sections always play 
 - **`/dashboard`**: Money Studio.
 
 If the backend can't be reached, the working pages say so and play the demo instead.
+
+### Scout
+
+Scout ([`scout.ts`](backend/src/scout.ts), rules in [`scout-rules.ts`](backend/src/scout-rules.ts), tested):
+
+- **Learns your usuals** from what you've bought: Scout's history, plus every receipt Lens reads (each line matched to a product). Bought at least 3 times in 8 weeks at a steady pace makes a usual: "cornflakes every Sunday", "milk twice a week", "coffee every other Sunday". Chocolate twice isn't one.
+- **Prices them everywhere** each week: three stores nearby (with distance) and two online (with delivery, free over a threshold), against what you pay now. The next shop (every usual due in the next two days) is quoted at every store; Corner Grocery's $45.13 is $37.33 at ValueBasket.
+- **Sees prices coming**: a line through the log of each product's last 12 weeks of prices, carried 4 weeks on. Rising 3% or more on a good fit is "rising"; if it keeps (not perishable), Scout buys two. A trend, not a promise.
+- **Reads a photo** of a shelf, a fridge, a cart or a shopping list: the AI model lists every product, how many, and any shelf price ("Here $9.49: $2.20 less at BulkBox"); Scout matches them to its catalog and prices the lot.
+- **Buys it** through PayPal: one checkout for the basket, priced by the backend (never the browser), captured into Flick's account, then a payout to the store. What you bought becomes history.
+- **Real online prices** from [Channel3](https://channel3.ai)'s product search (`CHANNEL3_API_KEY`): live offers at online stores, cheapest first, with links. Those you buy on the store's own site.
+
+The stores are **sandbox stores**, like PayPal's sandbox accounts: their shelf prices are generated each week from each product's real-world trend (eggs and coffee climbing, olive oil easing), how each store prices, noise and the odd promotion, so the demo has history to learn from. Channel3's prices are real.
 
 ### On a phone, and as an app
 

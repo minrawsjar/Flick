@@ -2,13 +2,14 @@
 
 import { ChevronRight, Download, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { Activity } from "@backend/model";
 import { Bot, type BotColor, type BotShape } from "@/components/bot";
 import type { Face } from "@/components/ui";
 import { usd } from "@/lib/format";
 import { daysSince, useLive, type LiveState } from "@/lib/live";
 import { agents, DAYS, owed as demoOwed, week as demoWeek } from "@/app/_landing/data";
+import type { ScoutView } from "@/app/_landing/scout";
 
 // Today: where the installed app opens (app/manifest.ts). Where the week stands, who owes you,
 // a way into each agent, and what they've done. Live state when the backend answers; the demo's
@@ -76,6 +77,7 @@ export function Today() {
         <WeekCard view={view} />
         <OwedCard owed={view.owed} />
         <Actions />
+        <ScoutCard />
         <ActivityCard activity={view.activity} live={Boolean(state)} />
       </div>
 
@@ -211,9 +213,62 @@ function Actions() {
           <Sparkles size={17} aria-hidden />
         </span>
         <p className="mt-3 text-[15px]">Ask Flick</p>
-        <p className="text-[12px] leading-snug opacity-70">All four agents, in one chat</p>
+        <p className="text-[12px] leading-snug opacity-70">Your agents, in one chat</p>
       </Link>
     </div>
+  );
+}
+
+/** Scout's next shop: where it's cheapest, what that saves, and what's getting dearer. */
+function ScoutCard() {
+  const [scout, setScout] = useState<ScoutView | null>(null);
+  useEffect(() => {
+    fetch("/api/scout", { cache: "no-store" })
+      .then((res) => (res.ok ? (res.json() as Promise<ScoutView>) : null))
+      .then(setScout)
+      .catch(() => {});
+  }, []);
+
+  const best = scout?.basket.quotes.find((q) => !q.missing.length);
+  const usual = scout?.basket.quotes.find((q) => q.storeId === scout.basket.usualStore);
+  const store = (id: string) => scout?.stores.find((s) => s.id === id)?.name ?? id;
+  const saving = best && usual && !usual.missing.length ? usual.total - best.total : 0;
+  const rising = scout?.products.filter((p) => p.usual && p.forecast.verdict === "rising") ?? [];
+
+  return (
+    <Card href="/scout">
+      <Heading face={agents.scout} right={scout?.basket.items.length ? `${scout.basket.items.length} due` : undefined}>
+        Next shop
+      </Heading>
+      {best ? (
+        <>
+          <p className="mt-4 text-[34px] leading-none tracking-tight tabular-nums">
+            {usd(best.total)}
+            <span className="text-[17px] text-secondary"> at {store(best.storeId)}</span>
+          </p>
+          <p className="mt-3 text-[13px] text-secondary">
+            {saving > 0.005 ? (
+              <>
+                <span className="text-paid">{usd(saving)} less</span> than at {store(scout!.basket.usualStore)}, for {best.lines.length} usuals.
+              </>
+            ) : (
+              <>Your {best.lines.length} usuals, at the best price this week.</>
+            )}
+          </p>
+          {rising.length > 0 && (
+            <p className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
+              {rising.map((p) => (
+                <span key={p.id} className="rounded-full bg-wait/15 px-2 py-0.5 text-wait">
+                  {p.name} ▲ {Math.round(p.forecast.change * 100)}%
+                </span>
+              ))}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 text-[13px] text-secondary">{scout ? "Nothing's due. Scout lists your usuals the day they are." : "Scout prices your usuals at every store, once Flick's backend answers."}</p>
+      )}
+    </Card>
   );
 }
 
@@ -227,7 +282,7 @@ const ago = (iso: string) => {
 
 function ActivityCard({ activity, live }: { activity: Activity[]; live: boolean }) {
   return (
-    <div className="rounded-[24px] bg-card p-5 lg:col-span-2">
+    <div className="rounded-[24px] bg-card p-5">
       <p className="text-[15px]">What your agents did</p>
       {activity.length ? (
         <ul className="mt-2 divide-y divide-separator/50">

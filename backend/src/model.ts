@@ -2,7 +2,7 @@
 
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 export type Day = (typeof DAYS)[number];
-export type Agent = 'lens' | 'autopilot' | 'splitter' | 'nudge';
+export type Agent = 'lens' | 'autopilot' | 'splitter' | 'nudge' | 'scout';
 
 /** Someone Flick pays: a biller, a shop, or a friend. Emails should be PayPal sandbox accounts. */
 export type Payee = { id: string; name: string; email: string; icon: 'power' | 'phone' | 'friend' | 'coffee' | 'cart' | 'ball' | 'bag' | 'bill' };
@@ -76,9 +76,13 @@ export type Debt = {
 /** A PayPal checkout in flight: what to do once it's approved. */
 export type Checkout =
   | { kind: 'week'; orderId: string; amount: number; paymentIds: string[]; status: 'awaiting' | 'captured' | 'cancelled' }
-  | { kind: 'scan'; orderId: string; amount: number; scanId: string; payeeId: string; repeat: boolean; status: 'awaiting' | 'captured' | 'cancelled' };
+  | { kind: 'scan'; orderId: string; amount: number; scanId: string; payeeId: string; repeat: boolean; status: 'awaiting' | 'captured' | 'cancelled' }
+  | { kind: 'basket'; orderId: string; amount: number; storeId: string; items: { productId: string; qty: number; price: number }[]; status: 'awaiting' | 'captured' | 'cancelled' };
 
 export type Activity = { id: string; at: string; agent: Agent; text: string; amount?: number };
+
+/** Something you bought, item by item, for Scout to learn from: its own history, a receipt Lens read, or a basket Scout bought. */
+export type Purchase = { productId: string; storeId: string | null; store: string; price: number; qty: number; date: string; from: 'history' | 'receipt' | 'scout' };
 
 export type State = {
   payees: Payee[];
@@ -90,6 +94,8 @@ export type State = {
   debts: Debt[];
   checkouts: Record<string, Checkout>;
   activity: Activity[];
+  /** Scout's purchases; started on first use (scout.ts), so older state files work as they are. */
+  scout?: { purchases: Purchase[] };
 };
 
 // --- Helpers ------------------------------------------------------------------------

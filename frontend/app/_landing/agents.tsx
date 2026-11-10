@@ -5,9 +5,9 @@ import { Doc } from "./lens";
 
 // "Meet your agents": one card each, with a small looping demo of what it does.
 
-function Stage({ title, detail, tint, children }: { title: string; detail: string; tint: string; children: ReactNode }) {
+function Stage({ title, detail, tint, className = "", children }: { title: string; detail: string; tint: string; className?: string; children: ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-[28px] bg-[var(--tile)]">
+    <div className={`overflow-hidden rounded-[28px] bg-[var(--tile)] ${className}`}>
       <div
         className="flex h-52 items-center justify-center gap-5"
         style={{ backgroundImage: `radial-gradient(circle at 50% 45%, color-mix(in srgb, ${tint} 28%, transparent), transparent 70%)` }}
@@ -24,8 +24,8 @@ function Stage({ title, detail, tint, children }: { title: string; detail: strin
 
 export function Agents() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Stage tint={botColors.cyan} title="Lens reads it" detail="Bills, receipts, price tags and tip jars. It pulls out who to pay, how much and by when.">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      <Stage tint={botColors.cyan} className="lg:col-span-3" title="Lens reads it" detail="Bills, receipts, price tags and tip jars. It pulls out who to pay, how much and by when.">
         <Bot {...agents.lens} size={64} mood="awake" />
         <div className="relative -rotate-3 rounded-md bg-[#2a2520] p-2">
           <Doc kind="bill" width={64} />
@@ -33,7 +33,7 @@ export function Agents() {
         </div>
       </Stage>
 
-      <Stage tint={botColors.green} title="Autopilot runs your week" detail="It learns what you pay and when, plans the week ahead, and asks you once, on Sunday.">
+      <Stage tint={botColors.green} className="lg:col-span-3" title="Autopilot runs your week" detail="It learns what you pay and when, plans the week ahead, and asks you once, on Sunday.">
         <Bot {...agents.autopilot} size={64} mood="awake" />
         <div className="flex w-[136px] flex-wrap justify-center gap-1.5" aria-hidden>
           {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
@@ -44,7 +44,7 @@ export function Agents() {
         </div>
       </Stage>
 
-      <Stage tint={botColors.yellow} title="Splitter splits it" detail="Tick who had what. Everyone gets a PayPal request for their fair share, tax and tip included.">
+      <Stage tint={botColors.yellow} className="lg:col-span-2" title="Splitter splits it" detail="Tick who had what. Everyone gets a PayPal request for their fair share, tax and tip included.">
         <Bot {...agents.splitter} size={64} mood="awake" />
         <div className="flex" aria-hidden>
           {friends.map((f, i) => (
@@ -61,11 +61,25 @@ export function Agents() {
         </div>
       </Stage>
 
-      <Stage tint={botColors.pink} title="Nudge follows up" detail="Friendly reminders, written for each friend and what it was for, so you never have to chase.">
+      <Stage tint={botColors.pink} className="lg:col-span-2" title="Nudge follows up" detail="Friendly reminders, written for each friend and what it was for, so you never have to chase.">
         <Bot {...agents.nudge} size={64} mood="speaking" />
         <div className="flex h-12 items-center gap-1" aria-hidden>
           {[0, 0.15, 0.3, 0.1, 0.25].map((d, i) => (
             <span key={i} className="loop-wave h-full w-1 rounded-full bg-ink" style={{ animationDelay: `${d}s` }} />
+          ))}
+        </div>
+      </Stage>
+
+      <Stage tint={botColors.orange} className="sm:col-span-2 lg:col-span-2" title="Scout shops smarter" detail="It learns what you buy every week, finds it cheapest nearby or online, and buys before prices rise.">
+        <Bot {...agents.scout} size={64} mood="awake" />
+        <div className="flex flex-col gap-1.5 text-[12px] tabular-nums" aria-hidden>
+          {[["$4.89", false], ["$4.19", false], ["$3.89", true]].map(([price, best], i) => (
+            <span
+              key={i}
+              className={`rounded-full px-3 py-1 ${best ? "loop-bob bg-ink text-on-ink" : "bg-fill/70 text-secondary line-through"}`}
+            >
+              {price as string}
+            </span>
           ))}
         </div>
       </Stage>

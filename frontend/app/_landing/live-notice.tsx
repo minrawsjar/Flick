@@ -39,6 +39,7 @@ export function OfflineNotice() {
 const messages: Record<string, [ok: boolean, text: string]> = {
   week: [true, "Week approved with PayPal. Autopilot takes it from here."],
   scan: [true, "Paid with PayPal. Flick has paid them."],
+  basket: [true, "Groceries paid with PayPal. Scout has paid the store."],
   cancelled: [false, "PayPal checkout cancelled. Nothing was paid."],
   failed: [false, "That payment didn't go through. Nothing was taken; the backend's log says why."],
 };

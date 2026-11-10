@@ -7,6 +7,7 @@ import {
   NumberEditorModule,
   PinnedRowModule,
   RowAutoHeightModule,
+  RowStyleModule,
   SelectEditorModule,
   themeQuartz,
 } from "ag-grid-community";
@@ -17,13 +18,14 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // Only the features Flick's grids use: editing amounts and days, totals pinned to the bottom,
-// rows that grow to fit wrapped text.
+// rows that grow to fit wrapped text, and styling the selected row.
 const modules = [
   ClientSideRowModelModule,
   NumberEditorModule,
   SelectEditorModule,
   PinnedRowModule,
   RowAutoHeightModule,
+  RowStyleModule,
   CellStyleModule,
 ];
 

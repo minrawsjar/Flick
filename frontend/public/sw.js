@@ -8,7 +8,7 @@
 // Bump to drop every cached page and file. ponytail: old /_next/static chunks pile up until then.
 const VERSION = "flick-v1";
 const SHARED = "flick-share";
-const PAGES = ["/home", "/lens", "/autopilot", "/ask", "/split", "/nudge", "/friends", "/install"];
+const PAGES = ["/home", "/lens", "/autopilot", "/scout", "/ask", "/split", "/nudge", "/friends", "/install"];
 
 self.addEventListener("install", (event) => {
   // Best effort: a page that fails to fetch is cached on its first visit instead.

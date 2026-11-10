@@ -17,12 +17,14 @@ const links = [
   ["/ask", "Ask Flick"],
   ["/lens", "Lens"],
   ["/autopilot", "Autopilot"],
+  ["/scout", "Scout"],
   ["/split", "Split"],
   ["/nudge", "Nudge"],
   ["/friends", "Friends"],
 ] as const;
 
 const people = ["/split", "/nudge", "/friends"];
+const week = ["/autopilot", "/scout"];
 
 function Links({ className = "" }: { className?: string }) {
   const path = usePathname();
@@ -64,7 +66,8 @@ export function Nav({ app = false }: { app?: boolean }) {
       </nav>
       {/* On phones the one-pager's links get their own row, which scrolls sideways if it must. */}
       {!app && <Links className="flex overflow-x-auto px-3 pb-2 lg:hidden" />}
-      {app && <PeopleTabs />}
+      {app && <Switch paths={people} labels={["Split", "Nudge", "Friends"]} />}
+      {app && <Switch paths={week} labels={["Payments", "Groceries"]} />}
     </header>
   );
 }
@@ -94,7 +97,7 @@ export function TabBar() {
       className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+10px)] z-30 mx-auto flex h-[60px] max-w-md items-center justify-around rounded-full bg-card/85 px-1.5 shadow-[0_8px_30px_-6px_rgba(0,0,0,0.25),0_0_0_0.5px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150 lg:hidden"
     >
       {tabs.map(([href, label, Icon]) => {
-        const on = href === "/split" ? people.includes(path) : path === href;
+        const on = href === "/split" ? people.includes(path) : href === "/autopilot" ? week.includes(path) : path === href;
         return (
           <Link
             key={href}
@@ -123,19 +126,22 @@ function useWaiting() {
   return (unapproved ? 1 : 0) + payments.filter((p) => p.status === "failed").length;
 }
 
-/** Split, Nudge and Friends share the People tab: a switch between them, under the bar. */
-function PeopleTabs() {
+/**
+ * Pages that share a tab, switched under the bar: Split, Nudge and Friends (People); Autopilot's
+ * payments and Scout's groceries (Week).
+ */
+function Switch({ paths, labels }: { paths: string[]; labels: string[] }) {
   const path = usePathname();
-  if (!people.includes(path)) return null;
+  if (!paths.includes(path)) return null;
   return (
     <div className="flex justify-center px-4 pb-2 lg:hidden">
-      <div className="grid w-full max-w-sm grid-cols-3 rounded-full bg-fill p-0.5 text-[13px]">
-        {(["Split", "Nudge", "Friends"] as const).map((label, i) => (
+      <div className="grid w-full max-w-sm rounded-full bg-fill p-0.5 text-[13px]" style={{ gridTemplateColumns: `repeat(${paths.length}, 1fr)` }}>
+        {labels.map((label, i) => (
           <Link
             key={label}
-            href={people[i]}
-            aria-current={path === people[i] ? "page" : undefined}
-            className={`rounded-full py-1 text-center transition-colors ${path === people[i] ? "bg-raised shadow-sm" : "text-ink/70"}`}
+            href={paths[i]}
+            aria-current={path === paths[i] ? "page" : undefined}
+            className={`rounded-full py-1 text-center transition-colors ${path === paths[i] ? "bg-raised shadow-sm" : "text-ink/70"}`}
           >
             {label}
           </Link>

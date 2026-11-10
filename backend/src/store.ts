@@ -28,6 +28,8 @@ export function save() {
 
 /** Back to the demo's starting point. */
 export function reset(now = new Date()) {
+  // Clear first: anything the seed doesn't have (e.g. Scout's purchases) starts over too.
+  for (const key of Object.keys(state)) delete state[key as keyof State];
   Object.assign(state, seed(now));
   save();
 }

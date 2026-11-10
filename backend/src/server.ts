@@ -9,6 +9,7 @@ import { getDashboardData } from './dashboard-data.ts';
 import { HttpError, readBody, send } from './http.ts';
 import * as lens from './lens.ts';
 import * as nudge from './nudge.ts';
+import * as scout from './scout.ts';
 import { PayPalApiError } from './paypal.ts';
 import { assign, split } from './split.ts';
 import { reset, save, state } from './store.ts';
@@ -22,8 +23,9 @@ type Ctx = { req: IncomingMessage; res: ServerResponse; url: URL; body: () => Pr
 type Handler = (ctx: Ctx) => unknown;
 
 const redirect = (res: ServerResponse, to: string) => res.writeHead(303, { Location: to }).end();
-/** The frontend page a checkout started from: Autopilot's week, or a Lens payment. */
-const pageFor = (orderId: string) => `${frontendUrl()}/${state.checkouts[orderId]?.kind === 'week' ? 'autopilot' : 'lens'}`;
+/** The frontend page a checkout started from: Autopilot's week, Scout's basket, or a Lens payment. */
+const pages = { week: 'autopilot', basket: 'scout', scan: 'lens' } as const;
+const pageFor = (orderId: string) => `${frontendUrl()}/${pages[state.checkouts[orderId]?.kind ?? 'scan']}`;
 
 const routes: Record<string, Handler> = {
   'GET /api/health': () => ({ ok: true }),
@@ -56,6 +58,13 @@ const routes: Record<string, Handler> = {
   'POST /api/nudge/send': async ({ body }) => nudge.send(await body()),
   'POST /api/debts/refresh': () => nudge.refresh(),
 
+  // Scout: what you buy again and again, priced at every store; buying it through PayPal
+  'GET /api/scout': () => scout.view(),
+  'POST /api/scout/quote': async ({ body }) => scout.priceBasket(await body()),
+  'POST /api/scout/read': async ({ body }) => scout.read(await body()),
+  'POST /api/scout/online': async ({ body }) => scout.online(await body()),
+  'POST /api/scout/buy': async ({ body }) => scout.buy(await body()),
+
   // Ask Flick: the agent proposes, the person decides (agent.ts)
   'POST /api/agent': async ({ body }) => agent.ask(await body()),
   'POST /api/agent/decide': async ({ body }) => agent.decide(await body()),
@@ -67,6 +76,7 @@ const routes: Record<string, Handler> = {
       const { checkout, captureId } = await captureCheckout(orderId);
       if (captureId && checkout.kind === 'week') await autopilot.approved(checkout, captureId);
       if (captureId && checkout.kind === 'scan') await lens.paid(checkout);
+      if (captureId && checkout.kind === 'basket') await scout.paid(checkout);
       redirect(res, `${pageFor(orderId)}?paid=${checkout.kind}`);
     } catch (err) {
       console.error('PayPal return:', err);

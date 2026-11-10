@@ -12,6 +12,7 @@ import { Autopilot, WeekScreen } from "./_landing/autopilot";
 import { agents, friends, owed, week } from "./_landing/data";
 import { HeroLens, Snap } from "./_landing/lens";
 import { Nudge, NudgeScreen } from "./_landing/nudge";
+import { ScoutDemo } from "./_landing/scout";
 import { Split } from "./_landing/split";
 import { Studio } from "./_landing/studio";
 
@@ -151,7 +152,7 @@ function Closing() {
           Point. Snap. <span className="text-gradient">Paid.</span>
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-[19px] leading-[1.45] text-white/65 text-pretty">
-          Four agents, one PayPal approval a week, and a money HQ that builds itself.
+          Five agents, one PayPal approval a week, and a money HQ that builds itself.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/lens" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-white px-6 text-[17px] text-black">
@@ -181,8 +182,8 @@ export default function Home() {
           id="agents"
           tone="grey"
           label="Meet your agents"
-          title="Four agents. One for every way money moves."
-          intro="Each one does a single job well, and they hand work to each other: Lens reads, Autopilot pays, Splitter shares, Nudge follows up."
+          title="Five agents. One for every way money moves."
+          intro="Each one does a single job well, and they hand work to each other: Lens reads, Autopilot pays, Splitter shares, Nudge follows up, Scout shops."
         >
           <Agents />
         </Section>
@@ -235,9 +236,21 @@ export default function Home() {
           <Nudge />
         </Section>
         <Section
-          id="ask"
+          id="scout"
           compact
           tone="white"
+          agent={agents.scout}
+          glow="left"
+          label="Scout"
+          title="Never overpay for the usual."
+          intro="Scout knows you buy cornflakes every Sunday. It finds them cheapest this week, nearby or online, sees prices coming before they rise, and buys your usuals with one PayPal approval."
+        >
+          <ScoutDemo />
+        </Section>
+        <Section
+          id="ask"
+          compact
+          tone="grey"
           label="Ask Flick"
           title="One sentence. Every agent."
           intro="Tell Flick what you need in plain words. It reads your real data, plans across Lens, Autopilot, Splitter and Nudge, and asks before it does anything."
@@ -247,7 +260,7 @@ export default function Home() {
         <Section
           id="studio"
           compact
-          tone="grey"
+          tone="white"
           label="Money Studio"
           title="Your money HQ, built by an agent."
           intro="Every payment, request and reminder lands in Money Studio, an AG Studio workspace over your PayPal data."
