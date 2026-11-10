@@ -150,16 +150,24 @@ async function snap(lines) {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   })()`);
 }
-/** A front camera for "Flick to pay": a dark room, and after a second, a hand sweeping across it. */
+/**
+ * A front camera for "Flick to pay": a face in a dim room; at 1 s a hand goes past sideways (not a
+ * flick); at 2.5 s one finger flicks up, from the bottom of the frame to the top, in 300 ms.
+ */
 const fakeCamera = () =>
   js(`(() => {
     navigator.mediaDevices.getUserMedia = async () => {
       const c = document.createElement('canvas'); c.width = 320; c.height = 240;
       const g = c.getContext('2d'); const start = performance.now();
       const draw = () => {
-        const p = (performance.now() - start - 1200) / 400;
-        g.fillStyle = '#202020'; g.fillRect(0, 0, 320, 240);
-        if (p >= 0 && p <= 1) { g.fillStyle = '#e8c4a0'; g.fillRect(-80 + p * 400, 60, 80, 120); }
+        const t = performance.now() - start;
+        g.fillStyle = '#2a2622'; g.fillRect(0, 0, 320, 240);
+        g.fillStyle = '#8a6a50'; g.beginPath(); g.ellipse(160, 110, 50, 62, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#e8c4a0';
+        const past = (t - 1000) / 400;
+        if (past >= 0 && past <= 1) g.fillRect(-90 + past * 410, 70, 90, 100);
+        const up = (t - 2500) / 300;
+        if (up >= 0 && up <= 1) g.fillRect(200, 240 - up * 350, 36, 110);
         requestAnimationFrame(draw);
       };
       draw();
@@ -312,11 +320,14 @@ await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through Pa
   await waitFor("!document.querySelector('[role=dialog]') && document.body.innerText.includes('Split it with friends')", 15_000, "the sheet closed, the bill back");
   const back = await state();
   check(back.scans[0].status === "read" && Object.values(back.checkouts).some((c) => c.kind === "scan" && c.status === "cancelled"), `after Not now: scan ${back.scans[0].status}`);
-  // Then a flick at the camera (a fake front camera, a hand sweeping across it) opens PayPal.
+  // Then the fake front camera: a hand going past sideways doesn't pay; one finger flicked up does.
   await fakeCamera();
   await click(`Pay $${scan.amount.toFixed(2)} with PayPal`);
-  await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('Flick your hand across the camera')", 15_000, "the camera, waiting for a flick");
-  await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page, after the flick");
+  await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('Flick one finger up, in front of the camera')", 15_000, "the camera, waiting for a flick");
+  check(!(await js("document.querySelector('[role=dialog] video')?.offsetWidth > 1")), "the camera is on screen");
+  await sleep(1800);
+  check((await js("location.origin")) === SITE && (await js("Boolean(document.querySelector('[role=dialog]'))")), "a hand going past sideways paid");
+  await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page, after the flick up");
   problems.length = 0; // PayPal's own page logs errors of its own
   check((await state()).scans[0].status === "awaiting", "not awaiting PayPal");
   return `${scan.title}: ₹756.00 → $${scan.amount.toFixed(2)}, flicked to PayPal`;

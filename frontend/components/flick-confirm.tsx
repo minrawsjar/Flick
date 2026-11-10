@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, CameraOff, ChevronRight, LoaderCircle } from "lucide-react";
+import { Camera, CameraOff, ChevronUp, LoaderCircle, Pointer } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Logo, Primary, Secondary } from "@/components/ui";
 import { isFlick, gray, motion, type Motion } from "@/lib/flick";
@@ -29,7 +29,6 @@ function Sheet({ confirming }: { confirming: Confirming }) {
   const [phase, setPhase] = useState<Phase>("waiting");
   const video = useRef<HTMLVideoElement>(null);
   const glow = useRef<HTMLDivElement>(null);
-  const dot = useRef<HTMLSpanElement>(null);
   const stream = useRef<MediaStream | null>(null);
   // The camera loop calls the latest `go` (set after each render) when it sees a flick.
   const onFlick = useRef<() => void>(() => {});
@@ -62,7 +61,7 @@ function Sheet({ confirming }: { confirming: Confirming }) {
     done(false);
   };
 
-  // The front camera, read about 20 times a second at 64×48: enough to see a hand go by.
+  // The front camera, unseen, read about 30 times a second at 64×48: enough to catch a quick flick.
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -95,16 +94,12 @@ function Sheet({ confirming }: { confirming: Confirming }) {
           const m = motion(prev, next, 64, now);
           recent.push(m);
           while (recent.length && now - recent[0].t > 1000) recent.shift();
-          // Straight to the DOM: this runs 20 times a second, React needn't re-render for it.
+          // Straight to the DOM: this runs 30 times a second, React needn't re-render for it.
           if (glow.current) glow.current.style.opacity = String(Math.min(1, m.amount * 8));
-          if (dot.current) {
-            dot.current.style.opacity = m.amount >= 0.03 ? "1" : "0";
-            if (m.amount >= 0.03) dot.current.style.transform = `translate(${(1 - m.x) * 100}cqw, ${m.y * 100}cqh)`;
-          }
           if (isFlick(recent, now)) return onFlick.current();
         }
         prev = next;
-        timer = setTimeout(look, 50);
+        timer = setTimeout(look, 33);
       };
       look();
     })();
@@ -147,21 +142,24 @@ function Sheet({ confirming }: { confirming: Confirming }) {
         </h2>
         <p className="mt-1.5 text-[14px] text-secondary">{to ? `To ${to}, with PayPal` : "With PayPal"}</p>
 
-        <div className="relative mt-4 aspect-[4/3] overflow-hidden rounded-3xl bg-[#111] [container-type:size]">
-          {/* Mirrored, like a selfie, so a flick to the right looks like one. */}
-          <video ref={video} muted playsInline className={`size-full -scale-x-100 object-cover transition-opacity duration-300 ${camera === "on" && !flicked ? "opacity-100" : "opacity-0"}`} />
+        <div className="relative mt-4 aspect-[4/3] overflow-hidden rounded-3xl bg-[radial-gradient(circle_at_50%_70%,#12305a,#0b0b0c_75%)]">
+          {/* The camera is read, never shown: the video stays a pixel, out of sight. */}
+          <video ref={video} muted playsInline aria-hidden className="pointer-events-none absolute left-0 top-0 size-px opacity-0" />
           <div ref={glow} className="pointer-events-none absolute inset-0 rounded-3xl opacity-0 shadow-[inset_0_0_0_4px_#0070e0,inset_0_0_60px_rgba(0,112,224,0.6)] transition-opacity duration-150" />
-          <span ref={dot} className={`pointer-events-none absolute -left-2 -top-2 size-4 rounded-full bg-white/90 opacity-0 shadow-[0_0_16px_4px_rgba(0,112,224,0.8)] transition-[transform,opacity] duration-100 ${camera === "on" ? "" : "hidden"}`} />
 
           {camera === "on" && !flicked && (
-            <div className="absolute inset-x-0 bottom-3 flex flex-col items-center gap-1 text-white">
-              <span className="flex">
+            <>
+              {/* One finger, flicking up, again and again: what to do. */}
+              <div className="absolute inset-x-0 top-5 flex flex-col items-center text-white/80" aria-hidden>
                 {[0, 1, 2].map((i) => (
-                  <ChevronRight key={i} size={22} strokeWidth={2.5} className="loop-flick-hint -mx-1" style={{ animationDelay: `${i * 160}ms` }} aria-hidden />
+                  <ChevronUp key={i} size={22} strokeWidth={2.5} className="loop-flick-hint -my-1.5" style={{ animationDelay: `${(2 - i) * 140}ms` }} />
                 ))}
-              </span>
-              <p className="rounded-full bg-black/45 px-3 py-1 text-[13px] backdrop-blur">Flick your hand across the camera</p>
-            </div>
+              </div>
+              <Pointer size={76} strokeWidth={1.5} className="loop-finger-flick absolute left-1/2 top-[38%] -ml-[38px] text-white" aria-hidden />
+              <p className="absolute inset-x-0 bottom-3 mx-auto w-fit rounded-full bg-black/45 px-3 py-1 text-[13px] text-white backdrop-blur">
+                Flick one finger up, in front of the camera
+              </p>
+            </>
           )}
           {camera === "starting" && (
             <p className="absolute inset-0 flex items-center justify-center gap-1.5 text-[13px] text-white/80">
