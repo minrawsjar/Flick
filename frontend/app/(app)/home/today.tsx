@@ -335,7 +335,9 @@ function ScoutCard() {
       .catch(() => {});
   }, []);
 
-  const best = scout?.basket.quotes.find((q) => !q.missing.length);
+  // An empty basket prices at $0.00 everywhere: that's nothing due, not a best price.
+  const best = scout?.basket.items.length ? scout.basket.quotes.find((q) => !q.missing.length) : undefined;
+  const learning = scout && !scout.products.some((p) => p.usual);
   const usual = scout?.basket.quotes.find((q) => q.storeId === scout.basket.usualStore);
   const store = (id: string) => scout?.stores.find((s) => s.id === id)?.name ?? id;
   const saving = best && usual && !usual.missing.length ? usual.total - best.total : 0;
@@ -372,7 +374,13 @@ function ScoutCard() {
           )}
         </>
       ) : (
-        <p className="mt-3 text-[13px] text-secondary">{scout ? "Nothing's due. Scout lists your usuals the day they are." : "Scout prices your usuals at every store, once Flick's backend answers."}</p>
+        <p className="mt-3 text-[13px] text-secondary">
+          {learning
+            ? "Scout learns what you buy from your grocery receipts and lists, then finds it cheapest every week."
+            : scout
+              ? "Nothing's due. Scout lists your usuals the day they are."
+              : "Scout prices your usuals at every store, once Flick's backend answers."}
+        </p>
       )}
     </Card>
   );

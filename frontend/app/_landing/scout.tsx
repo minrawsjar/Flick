@@ -320,12 +320,18 @@ export function Scout() {
               buying={buying}
               onBuy={live.mode === "live" ? () => void buy(storeId, data!.basket.items) : undefined}
             />
-          ) : data ? (
+          ) : data?.products.some((p) => p.usual) ? (
             <p className="px-6 pt-24 text-center text-[13px] text-secondary">Nothing&apos;s due. Scout lists your usuals here the day they are.</p>
           ) : (
+            // No usuals of your own yet: last Sunday's example, as a walkthrough.
             <ScoutScreen screen={demoScreen} />
           )}
         </Phone>
+        {data && !screen && !data.products.some((p) => p.usual) && (
+          <p className="max-w-[262px] text-center text-[12px] leading-4 text-secondary">
+            A sample shop: nothing is bought. Snap a shopping list, or a grocery receipt with Lens, and Scout learns your usuals.
+          </p>
+        )}
         {error && <p className="max-w-[262px] text-center text-[12px] leading-4 text-wait">{error}</p>}
       </div>
 
@@ -556,11 +562,16 @@ function Snap({ data, live, onBuy, buying }: { data: ScoutView; live: boolean; o
   const [read, setRead] = useState<Read>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  // "Try a list" reads a sample list for real, but buying it is a walkthrough: nothing is bought.
+  const [sample, setSample] = useState(false);
+  const [mockBought, setMockBought] = useState(false);
   const ready = live && data.config.ai;
 
-  const send = async (image: string) => {
+  const send = async (image: string, isSample = false) => {
     setBusy(true);
     setError(undefined);
+    setSample(isSample);
+    setMockBought(false);
     try {
       setRead(await post<Read>("read", { image }));
     } catch (err) {
@@ -581,9 +592,9 @@ function Snap({ data, live, onBuy, buying }: { data: ScoutView; live: boolean; o
       <div className="mt-3 grid grid-cols-2 gap-2">
         <label className={`pressable flex h-10 items-center justify-center gap-1.5 rounded-full bg-ink text-[13px] text-on-ink ${ready && !busy ? "cursor-pointer" : "pointer-events-none opacity-40"}`}>
           <Camera size={15} /> Snap
-          <input type="file" accept="image/*" className="sr-only" disabled={!ready || busy} onChange={(e) => e.target.files?.[0] && void shrink(e.target.files[0]).then(send)} />
+          <input type="file" accept="image/*" className="sr-only" disabled={!ready || busy} onChange={(e) => e.target.files?.[0] && void shrink(e.target.files[0]).then((image) => send(image))} />
         </label>
-        <button type="button" disabled={!ready || busy} onClick={() => void sampleList().then(send)} className="pressable h-10 cursor-pointer rounded-full bg-raised text-[13px] disabled:cursor-default disabled:opacity-40">
+        <button type="button" disabled={!ready || busy} onClick={() => void sampleList().then((image) => send(image, true))} className="pressable h-10 cursor-pointer rounded-full bg-raised text-[13px] disabled:cursor-default disabled:opacity-40">
           Try a list
         </button>
       </div>
@@ -629,9 +640,16 @@ function Snap({ data, live, onBuy, buying }: { data: ScoutView; live: boolean; o
             })}
           </ul>
           {best && (
-            <Primary className="mt-3" disabled={buying} onClick={() => onBuy(best.storeId, best.lines.map((l) => ({ productId: l.productId, qty: l.qty })))}>
+            <Primary
+              className="mt-3"
+              disabled={buying || mockBought}
+              onClick={() => (sample ? setMockBought(true) : onBuy(best.storeId, best.lines.map((l) => ({ productId: l.productId, qty: l.qty }))))}
+            >
               <ShoppingBasket size={14} /> Buy {best.lines.length} at {store(best.storeId).name} · {usd(best.total)}
             </Primary>
+          )}
+          {mockBought && (
+            <p className="rise mt-1.5 text-center text-[12px] leading-4 text-paid">A sample list, so nothing is bought. Snap your own list, and Scout buys it through PayPal.</p>
           )}
           {best && read.items.some((i) => !i.productId) && (
             <p className="mt-1.5 text-center text-[11px] text-secondary">

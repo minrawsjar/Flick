@@ -166,10 +166,25 @@ const agents: AgPageState = {
       sort: [{ field: { id: 'flickActivity.date' }, direction: 'desc' }],
       format: title('Activity'),
     },
+    payments: {
+      type: 'grid',
+      dataMapping: {
+        cols: [
+          { id: 'flickCheckouts.date' },
+          { id: 'flickCheckouts.agent' },
+          { id: 'flickCheckouts.what' },
+          { id: 'flickCheckouts.stage' },
+          sum('flickCheckouts.amount'),
+        ],
+      },
+      sort: [{ field: { id: 'flickCheckouts.date' }, direction: 'desc' }],
+      format: title('Payments, start to finish'),
+    },
   },
   widgetLayout: {
     'by-agent': at(0, 0, 8, 20),
     log: at(8, 0, 16, 20),
+    payments: at(0, 20, 24, 18),
   },
 };
 

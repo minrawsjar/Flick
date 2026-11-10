@@ -127,7 +127,30 @@ async function fill(selector, value) {
   await js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.scrollIntoView({ block: 'center' }); el.focus(); el.select?.(); })()`);
   await cdp("Input.insertText", { text: value });
 }
-const state = () => fetch(`http://localhost:${BACK}/api/state`).then((r) => r.json());
+/** This browser's own workspace (the cookie the frontend's proxy.ts gave it), straight from the backend. */
+async function state() {
+  const { cookies } = (await cdp("Network.getCookies", { urls: [SITE] })).result;
+  const workspace = cookies.find((c) => c.name === "flick")?.value;
+  if (!workspace) throw new Error("this browser has no workspace cookie");
+  return fetch(`http://localhost:${BACK}/api/state`, { headers: { cookie: `flick=${workspace}` } }).then((r) => r.json());
+}
+/** This browser's API, from the page: what the person's own taps would do. */
+const asMe = (path, body) => js(`fetch('/api/${path}', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: ${JSON.stringify(JSON.stringify(body))} }).then((r) => r.json())`);
+/** A photo drawn from `lines` ([text, px]), snapped with Lens's "Snap your own". */
+async function snap(lines) {
+  await js(`(async () => {
+    const lines = ${JSON.stringify(lines)};
+    const c = document.createElement('canvas'); c.width = 640; c.height = 140 + lines.length * 58;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#000';
+    lines.forEach(([text, px], i) => { g.font = (px >= 30 ? 'bold ' : '') + px + 'px Helvetica'; g.fillText(text, 30, 80 + i * 58); });
+    const input = document.querySelector('input[type=file]');
+    const dt = new DataTransfer();
+    dt.items.add(new File([await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9))], 'photo.jpg', { type: 'image/jpeg' }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+}
+const daysAfter = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 // --- The checklist --------------------------------------------------------------------------
 
@@ -218,47 +241,35 @@ await step("the theme toggle, remembered after a reload", async () => {
   check((await js("document.documentElement.dataset.theme")) === "light", "not light again");
 });
 
-await step("Today: the inbox reminds Leo in two taps (AI draft, PayPal sends)", async () => {
+await step("a new browser has its own Flick: an empty workspace, and Today says so", async () => {
   await open("/home");
-  await waitFor("document.body.innerText.includes('Leo owes you')");
-  await js(`[...document.querySelectorAll('li')].find((li) => li.innerText.includes('Leo owes you')).setAttribute('data-test', 'leo')`);
-  await click("Remind", "document.querySelector('[data-test=leo]')");
-  check((await js("document.querySelector('[data-test=leo]').innerText")).includes("Yes, remind"), "no confirm step");
-  await click("Yes, remind", "document.querySelector('[data-test=leo]')");
-  await waitFor("document.querySelector('[data-test=leo]')?.innerText.includes('Reminded Leo') || !document.body.innerText.includes('Leo owes you')", 60_000, "Reminded Leo");
-  const leo = (await state()).debts.find((d) => d.id === "debt_leo");
-  check(leo.reminders === 1, `reminders ${leo.reminders}`);
+  const s = await state();
+  check(!s.friends.length && !s.scans.length && !s.debts.length && !s.week.payments.length && !Object.keys(s.checkouts).length, "the new workspace isn't empty");
+  await waitFor("document.body.innerText.includes('Nothing planned this week') && document.body.innerText.includes('Scout learns what you buy')", 10_000, "Today, empty");
 });
 
-await step("Lens reads the sample bill with AI, then opens PayPal's checkout", async () => {
+await step("Lens: a sample is a walkthrough, and nothing is read or charged", async () => {
   await open("/lens");
   await click("Electricity bill");
-  await waitFor("document.body.innerText.includes('Pay $64.20') || document.body.innerText.includes('City Power')", 60_000, "what Lens read");
-  await waitFor("[...document.querySelectorAll('button')].some((b) => /^Pay \\$/.test(b.innerText.trim()) && !b.disabled)", 30_000, "a Pay button");
-  const read = (await state()).scans[0];
-  check(read.kind === "bill" && Math.abs(read.amount - 64.2) < 0.01, `read ${read.kind} ${read.amount}`);
-  await js("[...document.querySelectorAll('button')].find((b) => /^Pay \\$/.test(b.innerText.trim())).click()");
-  await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page");
-  problems.length = 0; // PayPal's own page logs errors of its own
-  return `${read.title}, $${read.amount.toFixed(2)}`;
+  await waitFor("[...document.querySelectorAll('button')].some((b) => b.innerText.trim() === 'Pay $64.20 with PayPal')", 15_000, "the sample's Pay button");
+  await click("Pay $64.20 with PayPal");
+  await waitFor("document.body.innerText.includes('Autopilot pays it every month now')", 15_000, "the sample, paid");
+  check((await js("location.origin")) === SITE, "the sample left Flick");
+  const s = await state();
+  check(!s.scans.length && !Object.keys(s.checkouts).length, "the sample made a scan or a checkout");
 });
 
 await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through PayPal, or splits", async () => {
   await open("/lens");
-  // A photo of an Indian restaurant's bill, snapped with "Snap your own".
-  await js(`(async () => {
-    const c = document.createElement('canvas'); c.width = 600; c.height = 820;
-    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 600, 820); g.fillStyle = '#000';
-    g.font = 'bold 38px Helvetica'; g.fillText('SPICE ROUTE RESTAURANT', 30, 80);
-    g.font = '24px Helvetica'; g.fillText('Indiranagar, Bengaluru · Table 4', 30, 125);
-    [['Paneer Tikka', '320.00'], ['Dal Makhani', '280.00'], ['Butter Naan x2', '120.00'], ['GST 5%', '36.00']].forEach(([n, p], i) => { g.fillText(n, 30, 210 + i * 55); g.fillText('₹' + p, 430, 210 + i * 55); });
-    g.font = 'bold 30px Helvetica'; g.fillText('TOTAL', 30, 470); g.fillText('₹756.00', 410, 470);
-    const input = document.querySelector('input[type=file]');
-    const dt = new DataTransfer();
-    dt.items.add(new File([await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9))], 'bill.jpg', { type: 'image/jpeg' }));
-    input.files = dt.files;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  })()`);
+  await snap([
+    ["SPICE ROUTE RESTAURANT", 36],
+    ["Indiranagar, Bengaluru · Table 4", 22],
+    ["Paneer Tikka                         ₹320.00", 24],
+    ["Dal Makhani                          ₹280.00", 24],
+    ["Butter Naan x2                       ₹120.00", 24],
+    ["GST 5%                                 ₹36.00", 24],
+    ["TOTAL                    ₹756.00", 30],
+  ]);
   await waitFor("document.body.innerText.includes('Split it with friends')", 60_000, "what Lens read");
   const scan = (await state()).scans[0];
   check(scan.original?.currency === "INR" && Math.abs(scan.original.amount - 756) < 0.01, `read ${JSON.stringify(scan.original ?? { amount: scan.amount, currency: scan.currency })}`);
@@ -269,6 +280,7 @@ await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through Pa
   // Split goes to Splitter with the items, in USD, saying so.
   await click("Split it with friends");
   await waitFor("location.pathname === '/split' && document.body.innerText.includes('₹756.00 on the receipt')", 15_000, "Splitter, with the receipt converted");
+  check((await textOf()).includes("These are sample friends"), "no friends of your own, but Splitter doesn't say they're samples");
   // Back on Lens, the newest scan is the receipt, ready to pay.
   await open("/lens");
   await click(`Pay $${scan.amount.toFixed(2)} with PayPal`);
@@ -278,28 +290,61 @@ await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through Pa
   return `${scan.title}: ₹756.00 → $${scan.amount.toFixed(2)}`;
 });
 
-await step("Autopilot: Next day moves the week on; the save-PayPal offer is there", async () => {
+await step("Autopilot: the sample week is a walkthrough; nothing is approved or charged", async () => {
   await open("/autopilot");
-  check((await textOf()).includes("Approve and save PayPal"), "no save-PayPal offer");
+  check((await textOf()).includes("This is a sample week"), "doesn't say it's a sample");
+  check(!(await textOf()).includes("Approve and save PayPal"), "the save-PayPal offer is on the sample");
+  await click("Approve with PayPal");
+  await waitFor("document.body.innerText.includes('Approved ·')", 10_000, "the sample, approved");
   await click("Next day");
-  await waitFor(`fetch('/api/state').then((r) => r.json()).then((s) => s.week.today === 0)`, 15_000, "Monday");
+  const s = await state();
+  check((await js("location.origin")) === SITE && !s.week.payments.length && !s.week.approval && !Object.values(s.checkouts).some((c) => c.kind === "week"), "the sample touched the workspace or PayPal");
 });
 
-await step("Scout reads a shopping list with AI, prices it, and offers to buy it", async () => {
+await step("Autopilot: a bill you snap that's due this week makes your own week, approved on PayPal", async () => {
+  const due = daysAfter((await state()).week.starts, 6);
+  await open("/lens");
+  await snap([["NORTHWIND WATER", 36], ["Water bill, November", 24], ["Account 7731-22", 22], ["Amount due: $41.75", 28], [`Due date: ${due}`, 24]]);
+  await waitFor("document.body.innerText.includes('Pay $41.75 with PayPal')", 60_000, "what Lens read");
+  const planned = (await state()).week.payments;
+  check(planned.length === 1 && /northwind/i.test(planned[0].payee) && Math.abs(planned[0].amount - 41.75) < 0.01, `the week: ${JSON.stringify(planned.map((p) => [p.payee, p.amount, p.day]))}`);
+  await open("/autopilot");
+  const t = await textOf();
+  check(t.includes("Northwind") && !t.includes("This is a sample week") && t.includes("Approve and save PayPal"), "the page still shows the sample week");
+  await click("Approve with PayPal");
+  await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page");
+  problems.length = 0; // PayPal's own page logs errors of its own
+  check((await state()).week.approval?.status === "awaiting", "not awaiting PayPal");
+  return `${planned[0].payee} $${planned[0].amount.toFixed(2)} on ${planned[0].day}`;
+});
+
+await step("Scout: a sample shop for a new workspace; a sample list is read with AI, and buying it is a walkthrough", async () => {
   await open("/scout", 3500);
+  check((await textOf()).includes("A sample shop: nothing is bought"), "doesn't say the shop is a sample");
   await click("Try a list");
   await waitFor("[...document.querySelectorAll('button')].some((b) => /^Buy \\d+ at /.test(b.innerText.trim()))", 90_000, "a Buy button");
   // Avocados are only in the photo, and not in Scout's catalog: proof the list was read.
   const t = await textOf();
   check(/avocados/i.test(t) && t.includes("Not tracked") && /cornflakes ×2|cornflakes x2/i.test(t), "the list wasn't read item by item");
-  await click("QuickCart");
-  check((await textOf()).includes("Buy at QuickCart"), "store chip didn't switch the basket");
+  await js("[...document.querySelectorAll('button')].find((b) => /^Buy \\d+ at /.test(b.innerText.trim())).click()");
+  await waitFor("document.body.innerText.includes('A sample list, so nothing is bought')", 5_000, "the sample list, bought as a walkthrough");
+  check((await js("location.origin")) === SITE && !Object.values((await state()).checkouts).some((c) => c.kind === "basket"), "the sample list was bought");
   await js(`document.querySelector('.ag-row[row-id=eggs]')?.click()`);
   await waitFor("[...document.querySelectorAll('p')].some((p) => p.innerText.startsWith('Eggs'))", 5_000, "Eggs in the detail");
 });
 
-await step("Splitter: a sentence ticks the grid (AI), then real PayPal requests go out", async () => {
+await step("Splitter: with sample friends it's a walkthrough, and nothing is sent", async () => {
   await open("/split", 3000);
+  check((await textOf()).includes("These are sample friends"), "doesn't say the friends are samples");
+  await click("Send 3 PayPal requests");
+  await sleep(4000);
+  check(!(await state()).debts.length, "the sample sent requests");
+});
+
+await step("Splitter: with your own friends, a sentence ticks the grid (AI), then real PayPal requests go out", async () => {
+  for (const name of ["Maya", "Leo", "Priya"]) await asMe("friends/add", { name, email: `${name.toLowerCase()}@flick.example.com` });
+  await open("/split", 3000);
+  check(!(await textOf()).includes("These are sample friends"), "still the sample friends");
   await fill("textarea, input[placeholder^='Or just say it']", "Maya and I shared everything, Leo had the tea");
   check((await textOf()).includes("Send 3 PayPal requests"), "the demo receipt isn't split three ways to start");
   await click("Tick it for me");
@@ -311,9 +356,9 @@ await step("Splitter: a sentence ticks the grid (AI), then real PayPal requests 
   await waitFor("document.body.innerText.includes('Requests sent')", 60_000, "Requests sent");
   const s = await state();
   const fresh = s.debts.filter((d) => !before.has(d.id));
-  const owes = Object.fromEntries(fresh.map((d) => [d.friendId, d.amount]));
+  const owes = Object.fromEntries(fresh.map((d) => [s.friends.find((f) => f.id === d.friendId)?.name, d.amount]));
   check(fresh.length === 2 && fresh.every((d) => d.invoiceId && d.payerUrl), `${fresh.length} new requests, ${fresh.filter((d) => !d.invoiceId).length} without an invoice`);
-  check(!owes.priya && owes.leo < owes.maya, `owes ${JSON.stringify(owes)}`);
+  check(!owes.Priya && owes.Leo < owes.Maya, `owes ${JSON.stringify(owes)}`);
   return fresh.map((d) => `${s.friends.find((f) => f.id === d.friendId)?.name} $${d.amount.toFixed(2)}`).join(", ");
 });
 
@@ -355,11 +400,18 @@ await step("Install: the steps for this browser", async () => {
   check(/Install Flick|Add to Home Screen|browser's menu|installed/.test(t), "no steps");
 });
 
-await step("Money Studio renders AG Studio with Flick's data", async () => {
+await step("Money Studio: your own payments, each at its stage, not the sample", async () => {
   await device(devices[2][1]);
   await open("/dashboard", 8000);
   check(await js("document.querySelectorAll('[class*=ag-]').length > 20"), "no AG Studio");
+  check(!(await textOf()).includes("This is sample data"), "still the sample, after paying and splitting");
+  const data = await js("fetch('/api/dashboard').then((r) => r.json())");
+  const stages = data.flickCheckouts.map((c) => `${c.agent}: ${c.stage}`);
+  check(data.flickCheckouts.length === 2 && stages.every((s) => s.endsWith("Waiting for your approval")), `payments: ${JSON.stringify(stages)}`);
+  // The sandbox account has everyone's invoices; this browser sees only its own two (fewer while PayPal's list catches up).
+  check(data.flickRequests.length === 2 && data.invoices.length <= 2, `${data.flickRequests.length} requests, ${data.invoices.length} PayPal invoices shown`);
   await device(devices[0][1]);
+  return stages.join("; ");
 });
 
 // --- 3. The installed app ---------------------------------------------------------------------
@@ -449,7 +501,7 @@ if (!email || !password) {
   await step("Lens: Pay → PayPal login → approve → back to Flick, paid", async () => {
     await device(devices[2][1]);
     await open("/lens");
-    await click("Electricity bill");
+    await snap([["CITY POWER", 36], ["Electricity, November", 24], ["Account •••• 4821", 22], ["Amount due: $64.20", 28], ["Due date: 2026-12-02", 24]]);
     await waitFor("[...document.querySelectorAll('button')].some((b) => /^Pay \\$/.test(b.innerText.trim()) && !b.disabled)", 60_000, "a Pay button");
     await js("[...document.querySelectorAll('button')].find((b) => /^Pay \\$/.test(b.innerText.trim())).click()");
     await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal");

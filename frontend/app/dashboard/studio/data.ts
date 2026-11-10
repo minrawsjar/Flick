@@ -287,6 +287,23 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['amount', 'Amount', 'currencyFormat'],
         ]),
       },
+      {
+        id: 'flickCheckouts',
+        name: 'Payments',
+        description:
+          'Every PayPal payment the agents started, start to finish. Stage: waiting for your approval, cancelled on PayPal, received by Flick, or paid out to whoever it was for.',
+        data: data.flickCheckouts,
+        fields: fields([
+          ['id', 'PayPal Order ID', 'textFormat'],
+          ['date', 'Started On', 'dateFormat'],
+          ['agent', 'Agent', 'textFormat'],
+          ['what', 'For', 'textFormat'],
+          ['amount', 'Amount', 'currencyFormat'],
+          ['currency', 'Currency', 'textFormat', true],
+          ['stage', 'Stage', 'textFormat'],
+          ['paid', 'Paid', 'currencyFormat'],
+        ]),
+      },
     ],
     relationships: [
       manyToOne('invoice-customer', 'invoices.customerId', 'customers.id'),
@@ -301,6 +318,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
       onCalendar('flickHistory', 'date'),
       onCalendar('flickRequests', 'requested'),
       onCalendar('flickActivity', 'date'),
+      onCalendar('flickCheckouts', 'date'),
     ],
     calendars: [
       {

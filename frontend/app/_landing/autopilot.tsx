@@ -280,7 +280,8 @@ function useLiveWeek(state: LiveState | null): WeekDriver | null {
 export function Autopilot() {
   const live = useLive();
   const demo = useDemoWeek();
-  const real = useLiveWeek(live.mode === "live" ? live.state : null);
+  // Your own week once Autopilot has planned one; until then the sample week, as a walkthrough.
+  const real = useLiveWeek(live.mode === "live" && live.state?.week.payments.length ? live.state : null);
   const w = real ?? demo;
 
   // Editable until approved: the approval covers exactly what's in the grid.
@@ -337,6 +338,11 @@ export function Autopilot() {
           {w.live && !w.approved && (
             <p className="mt-2 text-[12px] leading-4 text-secondary">Opens PayPal&apos;s sandbox: sign in with your sandbox personal account to approve.</p>
           )}
+          {!w.live && live.mode === "live" && (
+            <p className="mt-2 text-[12px] leading-4 text-secondary">
+              This is a sample week: nothing is charged. For your own, snap a bill with Lens: one due this week shows up here, ready to approve.
+            </p>
+          )}
           <div className="mt-auto pt-4">
             {w.approved ? (
               <p className="rise flex h-10 items-center justify-center gap-1.5 rounded-full bg-paid/15 text-[13px] text-paid">
@@ -380,9 +386,12 @@ export function Autopilot() {
                 Next day →
               </Secondary>
             )}
-            <Secondary onClick={w.reset} disabled={w.busy} className="w-10 px-0" label={w.live ? "Start the whole demo over" : "Start over"}>
-              <RotateCcw size={15} />
-            </Secondary>
+            {/* Your own week has no reset: that would empty your whole workspace. */}
+            {!w.live && (
+              <Secondary onClick={w.reset} disabled={w.busy} className="w-10 px-0" label="Start the sample over">
+                <RotateCcw size={15} />
+              </Secondary>
+            )}
           </div>
         </Tile>
       </div>

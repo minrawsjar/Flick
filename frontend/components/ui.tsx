@@ -256,13 +256,15 @@ export function Tile({ children, className = "" }: { children: ReactNode; classN
   return <div className={`rounded-[28px] bg-[var(--tile)] p-5 ${className}`}>{children}</div>;
 }
 
-/** The numbered PayPal calls behind a demo; steps up to `at` light up. */
+/** A payment's lifecycle, step by step; steps up to `at` light up. */
 export function Wire({ steps, at }: { steps: readonly (readonly [string, string])[]; at: number }) {
   return (
     <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-      {steps.map(([code, what], i) => (
-        <li key={code} className={`rounded-2xl p-3 transition-colors duration-300 ${at >= i ? "bg-ink text-on-ink" : "bg-raised text-secondary"}`}>
-          <p className="font-mono text-[11px] leading-4">{code.replaceAll("/", "/\u200b")}</p>
+      {steps.map(([stage, what], i) => (
+        <li key={stage} className={`rounded-2xl p-3 transition-colors duration-300 ${at >= i ? "bg-ink text-on-ink" : "bg-raised text-secondary"}`}>
+          <p className="text-[13px] font-medium leading-4">
+            <span className="tabular-nums opacity-60">{i + 1}.</span> {stage}
+          </p>
           <p className={`mt-1 text-[12px] leading-4 ${at >= i ? "text-on-ink/70" : ""}`}>{what}</p>
         </li>
       ))}

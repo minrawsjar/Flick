@@ -25,7 +25,7 @@ export async function startCheckout(checkout: NewCheckout, reference: string, de
     cancelUrl: `${frontendUrl()}/api/paypal/cancel`,
     save: savePayPal,
   });
-  state.checkouts[order.id] = { ...checkout, orderId: order.id, amount: order.total, status: 'awaiting' } as Checkout;
+  state.checkouts[order.id] = { ...checkout, orderId: order.id, amount: order.total, status: 'awaiting', at: new Date().toISOString(), what: description } as Checkout;
   save();
   return { orderId: order.id, approveUrl: order.approveUrl, amount: order.total };
 }
@@ -41,6 +41,7 @@ export async function captureCheckout(orderId: string) {
   if (checkout.status !== 'awaiting') return { checkout, captureId: undefined, saved: undefined };
   const { captureId, saved } = await captureOrder(orderId);
   checkout.status = 'captured';
+  checkout.captureId = captureId;
   save();
   return { checkout, captureId, saved };
 }

@@ -71,7 +71,15 @@ Lens (reading photos), Nudge's drafts and the Money Studio assistant use one Ope
 
 The key never reaches the browser. Studio's adapter ([`openai-adapter.ts`](frontend/app/dashboard/studio/openai-adapter.ts), copied from the AG Studio docs) runs client-side and posts to `/api/ai/responses`, which the frontend rewrites to the backend's [proxy](backend/src/ai-proxy.ts). That adds the key, only allows the configured models, caps output tokens, and streams the reply back.
 
-In production, set the variables in your host's environment (e.g. Render's environment settings) instead of the env files, and set `FRONTEND_URL` to the frontend's public URL so PayPal sends people back to it. The API has no auth or rate limiting: it's a single-person demo on the sandbox, so don't point it at live PayPal credentials.
+In production, set the variables in your host's environment (e.g. Render's environment settings) instead of the env files, and set `FRONTEND_URL` to the frontend's public URL so PayPal sends people back to it. The API has no auth or rate limiting: it's a demo on the sandbox, so don't point it at live PayPal credentials.
+
+### Everyone gets their own Flick
+
+Every browser gets its own workspace, with no sign-up: [`proxy.ts`](frontend/proxy.ts) gives it a random id in a cookie on its first visit, the `/api/*` rewrite and Money Studio pass it on, and the backend keeps each workspace in its own file ([`store.ts`](backend/src/store.ts)). A workspace starts empty, and what you snap, add, plan and pay is yours alone, as is your Money Studio.
+
+Until you have something of your own, each page shows a sample as a walkthrough: the sample photos in Lens, the sample week in Autopilot, sample friends in Splitter, sample requests in Nudge, a sample shop and list in Scout, and sample data in Money Studio. Their buttons play the flow out and never reach PayPal. Your own things go through the agents and PayPal's sandbox: snap a bill (one due this week also lands in Autopilot's plan), add friends by their PayPal email and split with them, snap a shopping list for Scout.
+
+Without the cookie (the test scripts, curl) requests use the `local` workspace, the old single state file, which starts from the demo seed.
 
 ## How it works
 
@@ -85,7 +93,7 @@ backend/src/split.ts            Splitter: a PayPal invoice for each friend's sha
 backend/src/nudge.ts            Nudge: drafts reminders and sends them through PayPal
 backend/src/scout.ts            Scout: your usuals, priced everywhere, bought through PayPal; scout-rules.ts is its tested rules
 backend/src/checkout.ts         The PayPal approval round trip all payments share
-backend/src/store.ts            The JSON store; seed.ts is the demo's starting point
+backend/src/store.ts            A JSON workspace per browser; seed.ts has the empty start and the demo seed
 backend/src/ai.ts               The AI connection; ai-proxy.ts serves the dashboard's assistant
 backend/src/dashboard-data.ts   PayPal and Flick data as the dashboard's related tables
 backend/src/inbox.ts            What needs the person next, across the agents; push.ts sends it as notifications
@@ -124,7 +132,7 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | Route | Does |
 |---|---|
 | `GET /api/state` | Everything Flick knows (the week, scans, requests, activity), and whether PayPal and AI are configured |
-| `POST /api/reset` | Back to the demo's starting point |
+| `POST /api/reset` | Your workspace back to empty (the demo seed for `local`) |
 | `POST /api/lens/read` `{ image }` | Reads a photo (a data URL) and returns what's on it |
 | `POST /api/lens/pay` `{ scanId, amount?, repeat? }` | Starts paying a bill, product or tip (`amount` for tips); returns `approveUrl` |
 | `POST /api/week/edit` `{ id, amount?, day?, skip? }` | Changes a payment before approval, or skips one (refunded if approved) |

@@ -301,36 +301,11 @@ export function HeroLens({ width }: { width: number }) {
   );
 }
 
-// --- Snap: pick a sample, watch Lens read it and Flick pay it -----------------------------
+// --- Snap: watch a sample, or snap your own and pay it ---------------------------------------
 //
-// With the backend live and AI on, every tap is real: a sample is drawn into a photo and read by the
-// vision model, your own photo too, and paying goes through PayPal's sandbox checkout. Otherwise
-// it plays the demo.
-
-/** A sample's drawing as a photo of paper on a table, for the real Lens to read. */
-async function photoOf(button: HTMLElement): Promise<string> {
-  const svg = button.querySelector("svg")!.cloneNode(true) as SVGSVGElement;
-  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  svg.setAttribute("width", "480");
-  svg.setAttribute("height", "600");
-  svg.setAttribute("style", "font-family: Helvetica, Arial, sans-serif");
-  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
-  try {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 760;
-    const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "#2a241d";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 80, 80, 480, 600);
-    return canvas.toDataURL("image/jpeg", 0.9);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+// The samples are a walkthrough: Lens "reads" one and its payment plays out, and nothing is
+// charged. Your own photo is real: the vision model reads it, and paying goes through PayPal's
+// sandbox checkout, into your own workspace and Money Studio.
 
 /** A phone photo, scaled down to upload quickly; Lens reads it just as well. */
 export async function shrink(file: Blob): Promise<string> {
@@ -395,10 +370,7 @@ export function Snap() {
     }
   };
 
-  const tapSample = async (s: Sample, button: HTMLElement) => {
-    if (!canRead) return start({ sample: s });
-    await readLive(await photoOf(button), { sample: s });
-  };
+  const tapSample = (s: Sample) => start({ sample: s });
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
@@ -478,31 +450,38 @@ export function Snap() {
 
       <div className="grid w-full min-w-0 gap-3 md:grid-cols-2">
         <Tile>
-          <p className="text-[13px] text-secondary">{canRead ? "Tap a photo, or snap your own: the real Lens reads it." : "Snap something. Tap a photo."}</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {samples.map((s) => (
-              <button
-                key={s.kind}
-                type="button"
-                aria-pressed={current.sample.kind === s.kind && !current.photo}
-                onClick={(e) => void tapSample(s, e.currentTarget)}
-                disabled={currentStage === "scanning" && Boolean(view?.live)}
-                className={`pressable flex cursor-pointer flex-col items-center gap-2 rounded-2xl p-3 transition-colors disabled:cursor-wait ${current.sample.kind === s.kind && !current.photo ? "bg-ink text-on-ink" : "bg-raised"}`}
-              >
-                <span className="flex h-[70px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_50%_40%,#4a4033,#1f1b16_80%)]">
-                  <Doc kind={s.kind} width={46} />
-                </span>
-                <span className="text-[13px]">{s.label}</span>
-              </button>
-            ))}
+          <label
+            aria-disabled={!canRead || (currentStage === "scanning" && Boolean(view?.live))}
+            className="pressable flex h-14 cursor-pointer items-center justify-center gap-2 rounded-full bg-ink text-[17px] font-medium text-on-ink aria-disabled:pointer-events-none aria-disabled:opacity-40"
+          >
+            <Camera size={20} /> Snap your own
+            <input type="file" accept="image/*" capture="environment" className="sr-only" disabled={!canRead} onChange={(e) => void upload(e.target.files?.[0])} />
+          </label>
+          <p className="mt-2 text-center text-[12px] leading-4 text-secondary">
+            {canRead ? "A bill, a receipt, a price tag or a tip jar. Lens reads it, and you pay it with PayPal." : live.mode === "loading" ? "Getting Lens ready…" : "Lens can't read photos right now: Flick's AI is off."}
+          </p>
+          {error && <p className="mt-2 text-center text-[12px] leading-4 text-wait">{error}</p>}
+
+          <p className="mt-4 text-[13px] text-secondary">Or watch a sample. Nothing is charged.</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {samples.map((s) => {
+              const on = current.sample.kind === s.kind && !current.scan && !current.photo;
+              return (
+                <button
+                  key={s.kind}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => tapSample(s)}
+                  className={`pressable flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl p-2.5 transition-colors ${on ? "bg-ink text-on-ink" : "bg-raised"}`}
+                >
+                  <span className="flex h-[52px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_50%_40%,#4a4033,#1f1b16_80%)]">
+                    <Doc kind={s.kind} width={34} />
+                  </span>
+                  <span className="text-[12px]">{s.label}</span>
+                </button>
+              );
+            })}
           </div>
-          {canRead && (
-            <label className="pressable mt-2 flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-ink text-[13px] text-on-ink">
-              <Camera size={15} /> Snap your own
-              <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => void upload(e.target.files?.[0])} />
-            </label>
-          )}
-          {error && <p className="mt-2 text-[12px] leading-4 text-wait">{error}</p>}
         </Tile>
 
         <Tile>
@@ -533,7 +512,7 @@ export function Snap() {
         <Tile className="md:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[13px] text-secondary">
-              {live.mode === "live" ? "How Flick pays it: real calls to the PayPal sandbox" : "How Flick pays it, on the PayPal sandbox"}
+              {current.scan ? "How it gets paid, through PayPal's sandbox. Each step shows in Money Studio." : "How it gets paid. This is a sample: nothing is charged."}
             </p>
             {currentStage === "read" && sample.action && (
               <button type="button" onClick={() => void pay()} className="pressable cursor-pointer rounded-full bg-ink px-3 py-1 text-[12px] text-on-ink">

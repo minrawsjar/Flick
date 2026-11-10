@@ -15,7 +15,8 @@ export function Autopay() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [cap, setCap] = useState<string>();
-  if (mode !== "live" || !state) return null;
+  // Only for your own week: the sample week above is a walkthrough.
+  if (mode !== "live" || !state || (!state.week.payments.length && !state.autopay)) return null;
 
   const run = async (work: () => Promise<unknown>) => {
     setBusy(true);

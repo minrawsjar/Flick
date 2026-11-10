@@ -14,7 +14,7 @@ import * as scout from './scout.ts';
 import { PayPalApiError } from './paypal.ts';
 import * as push from './push.ts';
 import { assign, split } from './split.ts';
-import { reset, save, state } from './store.ts';
+import { inWorkspace, isWorkspaceId, reset, save, state } from './store.ts';
 
 // Flick's API. The browser never calls it directly: the frontend rewrites /api/* to here
 // (frontend/next.config.ts), so everything is same-origin and no CORS is needed. The frontend's
@@ -34,7 +34,7 @@ const routes: Record<string, Handler> = {
 
   /** Everything Flick knows, plus which services are configured. */
   'GET /api/state': () => ({ ...state, config: { paypal: Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_SECRET), ai: Boolean(aiKey()) } }),
-  /** Back to the demo's starting point. */
+  /** Back to the start: an empty workspace (the demo seed without a workspace cookie). */
   'POST /api/reset': () => (reset(), state),
 
   // Lens
@@ -117,13 +117,20 @@ const routes: Record<string, Handler> = {
   'POST /api/ai/responses': ({ req, res }) => aiResponses(req, res),
 };
 
-// Changes run one at a time, so two quick taps can never pay the same thing twice.
-// ponytail: one global lock for every write; fine for one person, per-account locks if it serves many.
-let writes: Promise<unknown> = Promise.resolve();
-function serially<T>(work: () => T | Promise<T>): Promise<T> {
-  const run = writes.then(work, work);
-  writes = run.catch(() => {});
+// A workspace's changes run one at a time, so two quick taps can never pay the same thing twice.
+const writes = new Map<string, Promise<unknown>>();
+function serially<T>(workspace: string, work: () => T | Promise<T>): Promise<T> {
+  const run = (writes.get(workspace) ?? Promise.resolve()).then(work, work);
+  const settled = run.catch(() => {});
+  writes.set(workspace, settled);
+  void settled.then(() => writes.get(workspace) === settled && writes.delete(workspace));
   return run;
+}
+
+/** The visitor's workspace, from the cookie the frontend gives each browser (frontend/proxy.ts). */
+function workspaceOf(req: IncomingMessage) {
+  const cookie = /(?:^|;\s*)flick=([^;]+)/.exec(req.headers.cookie ?? '')?.[1] ?? '';
+  return isWorkspaceId(cookie) ? cookie : 'local';
 }
 const isWrite = (method: string, path: string) => method !== 'GET' || path === '/api/paypal/return' || path === '/api/paypal/cancel';
 
@@ -142,9 +149,11 @@ createServer(async (req, res) => {
   if (!handler) return send(res, 404, { error: { message: `No route for ${method} ${url.pathname}` } });
 
   const ctx: Ctx = { req, res, url, body: () => readBody(req) };
+  const workspace = workspaceOf(req);
+  const run = () => inWorkspace(workspace, () => handler(ctx));
   try {
     // The AI proxy streams for as long as a chat lasts, so it doesn't hold the write lock.
-    const data = await (isWrite(method, url.pathname) && url.pathname !== '/api/ai/responses' ? serially(() => handler(ctx)) : handler(ctx));
+    const data = await (isWrite(method, url.pathname) && url.pathname !== '/api/ai/responses' ? serially(workspace, run) : run());
     if (!res.headersSent) send(res, 200, data);
   } catch (err) {
     const status = errorStatus(err);

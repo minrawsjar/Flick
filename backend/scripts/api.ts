@@ -16,6 +16,10 @@ await step('health', async () => check((await api('health')).ok === true, 'not o
 await step('an unknown route is a 404 in JSON', () => refuses('nope', undefined, 404, 'No route'));
 await step('a body that isn\'t JSON is refused', () => refuses('week/edit', '{not json', 400, 'must be JSON'));
 await step('a JSON array is refused', () => refuses('week/edit', '[1,2]', 400, 'JSON object'));
+await step('a POST with no body, as the browser sends it (Content-Length: 0), counts as {}', async () => {
+  const res = await call('week/edit', undefined, { method: 'POST', headers: { 'Content-Length': '0' } });
+  check(!/must be JSON/.test(res.json?.error?.message ?? ''), `answered ${res.status}: ${res.json?.error?.message}`);
+});
 await step('a body over 8 MB is refused', () => refuses('lens/read', JSON.stringify({ image: 'x'.repeat(9_000_000) }), 413, 'too large'));
 await step('state: PayPal and AI configured, the seeded week of six payments, $142.30', async () => {
   const s = await state();
@@ -23,6 +27,21 @@ await step('state: PayPal and AI configured, the seeded week of six payments, $1
   check(s.week.payments.length === 6, `${s.week.payments.length} payments`);
   check(near(s.week.payments.reduce((sum: number, p: Json) => sum + p.amount, 0), 142.3), 'not $142.30');
   check(s.week.today === -1, `today ${s.week.today}`);
+});
+
+await step('each browser has its own workspace: empty to start, and private to it', async () => {
+  const as = (workspace: string) => (path: string, body?: unknown) =>
+    fetch(`${base}/api/${path}`, { method: body ? 'POST' : 'GET', headers: { cookie: `flick=${workspace}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json() as Promise<Json>);
+  const [mine, theirs] = [as(`test-${crypto.randomUUID()}`), as(`test-${crypto.randomUUID()}`)];
+  const fresh = await mine('state');
+  check(!fresh.friends.length && !fresh.scans.length && !fresh.debts.length && !fresh.week.payments.length, 'a new workspace isn\'t empty');
+  await mine('friends/add', { name: 'Robin', email: 'robin@flick.example.com' });
+  check((await mine('state')).friends.some((f: Json) => f.name === 'Robin'), 'my friend is missing');
+  check(!(await theirs('state')).friends.length, 'another browser sees my friend');
+  check(!(await state()).friends.some((f: Json) => f.name === 'Robin'), 'the local workspace sees my friend');
+  const sample = await theirs('dashboard');
+  check(sample.warnings[0]?.startsWith('This is sample data') && sample.flickPayments.length === 6, 'a new workspace\'s Money Studio isn\'t the sample');
+  check(!(await mine('inbox')).items.length, 'a new workspace has inbox items');
 });
 
 section('Lens');

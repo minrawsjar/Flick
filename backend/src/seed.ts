@@ -10,6 +10,11 @@ import { planWeek } from './rules.ts';
 // (developer.paypal.com → Testing tools → Sandbox accounts). Payouts to an address with no
 // account still succeed in the sandbox, as "unclaimed".
 
+/** A new visitor's workspace: nothing yet. The pages show their samples until there's something of theirs. */
+export function blank(now = new Date()): State {
+  return { payees: [], friends: [], history: [], monthly: [], scans: [], week: { starts: mondayOf(now), today: -1, payments: [] }, debts: [], checkouts: {}, activity: [], scout: { purchases: [] } };
+}
+
 export function seed(now = new Date()): State {
   const starts = mondayOf(now);
   const day = (offset: number) => addDays(starts, offset);

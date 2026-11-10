@@ -165,7 +165,8 @@ function SplitScreen({ merchant, people, each, total, nobody, status, onSend, bu
   );
 }
 
-function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: Friend[] }) {
+/** `sample`: a live page with no friends of your own yet, so this is a walkthrough with sample friends. */
+function SplitBill({ bill, live, people, sample = false }: { bill: Bill; live: boolean; people: Friend[]; sample?: boolean }) {
   const [items, setItems] = useState(bill.items);
   const [status, setStatus] = useState<Sending>({});
   const [links, setLinks] = useState<{ name: string; url?: string; amount: number }[]>([]);
@@ -252,12 +253,17 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
             <p className="text-[13px] text-secondary">
               {bill.scanned ? `${bill.merchant}, as Lens read it${bill.converted ? ` (${bill.converted})` : ""}. Tick who had what; the shares update as you go.` : "Who had what. Tap to tick; the shares update as you go."}
             </p>
-            {live && (
+            {(live || sample) && (
               <Link href="/friends" className="pressable flex items-center gap-1 rounded-full bg-raised px-3 py-1 text-[12px]">
                 <UserPlus size={13} /> Add friends
               </Link>
             )}
           </div>
+          {sample && (
+            <p className="mb-3 text-[12px] leading-4 text-secondary">
+              These are sample friends, so nothing is sent. Add your own by their PayPal email, and they get real PayPal requests for their share.
+            </p>
+          )}
           {live && (
             <form
               onSubmit={(e) => {
@@ -321,12 +327,15 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
 
 export function Split() {
   const live = useLive();
-  const state = live.mode === "live" ? live.state : null;
+  // Your own friends once you've added some; until then sample friends, and nothing is sent.
+  const state = live.mode === "live" && live.state?.friends.length ? live.state : null;
   const people = useMemo<Friend[]>(
     () => [you, ...(state ? state.friends.map((f) => ({ id: f.id, name: f.name, color: f.color as BotColor, shape: f.shape as BotShape })) : demoFriends)],
     [state],
   );
   const bill = live.receipt ? billFrom(live.receipt, people) : demoBill;
   // A new receipt from Lens, or a change of friends, starts a fresh split.
-  return <SplitBill key={`${live.receipt?.id ?? "demo"}|${people.map((p) => p.id).join(",")}`} bill={bill} live={live.mode === "live"} people={people} />;
+  return (
+    <SplitBill key={`${live.receipt?.id ?? "demo"}|${people.map((p) => p.id).join(",")}`} bill={bill} live={Boolean(state)} sample={live.mode === "live" && !state} people={people} />
+  );
 }

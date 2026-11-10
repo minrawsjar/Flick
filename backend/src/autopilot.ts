@@ -75,7 +75,7 @@ export async function approve(body: Record<string, unknown> = {}) {
   if (state.autopay && total <= state.autopay.cap) {
     try {
       const { orderId, captureId } = await chargeSaved({ reference, description, items, savedId: state.autopay.savedId });
-      const checkout = { kind: 'week' as const, orderId, amount: total, paymentIds: waiting.map((p) => p.id), status: 'captured' as const };
+      const checkout = { kind: 'week' as const, orderId, amount: total, paymentIds: waiting.map((p) => p.id), status: 'captured' as const, at: new Date().toISOString(), what: description, captureId };
       state.checkouts[orderId] = checkout;
       await approved(checkout, captureId, undefined, true);
       return { orderId, approveUrl: null, amount: total };
@@ -185,6 +185,18 @@ export async function retry() {
   }
   await payDue();
   return state.week;
+}
+
+/**
+ * Until the week is approved, what's new joins its plan: a bill Lens just read that's due this
+ * week, a monthly bill just learned. What's planned already, edited or not, stays as it is.
+ */
+export function replan() {
+  if (state.week.approval || state.week.today >= 0) return;
+  const planned = new Set(state.week.payments.map((p) => p.id));
+  // Paid this week already (say, with Lens): not again.
+  const paid = new Set(state.history.filter((h) => h.date >= state.week.starts).map((h) => h.payeeId));
+  state.week.payments.push(...planWeek(state.week.starts, state).filter((p) => !planned.has(p.id) && !paid.has(p.payeeId)));
 }
 
 /** Closes the week: what was paid becomes history to learn from, and the next week is planned (and paid, if Autopilot pays by itself). */

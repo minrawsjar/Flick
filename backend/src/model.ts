@@ -81,10 +81,13 @@ export type Debt = {
 };
 
 /** A PayPal checkout in flight: what to do once it's approved. */
-export type Checkout =
+type Paying =
   | { kind: 'week'; orderId: string; amount: number; paymentIds: string[]; status: 'awaiting' | 'captured' | 'cancelled'; save?: boolean }
   | { kind: 'scan'; orderId: string; amount: number; scanId: string; payeeId: string; repeat: boolean; status: 'awaiting' | 'captured' | 'cancelled' }
   | { kind: 'basket'; orderId: string; amount: number; storeId: string; items: { productId: string; qty: number; price: number }[]; status: 'awaiting' | 'captured' | 'cancelled' };
+// Its lifecycle, for Money Studio: started (`at`), approved and captured (`captureId`), paid out to
+// whoever it's for (`paidOut`, when). Checkouts from before these were kept have none of them.
+export type Checkout = Paying & { at?: string; what?: string; captureId?: string; paidOut?: string };
 
 export type Activity = { id: string; at: string; agent: Agent; text: string; amount?: number };
 

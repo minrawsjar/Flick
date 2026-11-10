@@ -15,8 +15,8 @@ import {
   type Product,
   type Transaction,
 } from './paypal.ts';
-import { addDays, DAYS } from './model.ts';
-import { friend, payee, state } from './store.ts';
+import { addDays, DAYS, type Checkout } from './model.ts';
+import { friend, inSample, payee, state, workspaceId } from './store.ts';
 
 // Flat rows for the Dashboard's AG Studio data sources. Relationships between them:
 //   invoices.customerId        -> customers.id
@@ -308,14 +308,60 @@ function flickRows() {
       reminders: d.reminders,
     })),
     flickActivity: state.activity.map((a) => ({ id: a.id, date: a.at.slice(0, 10), agent: a.agent, text: a.text, amount: a.amount ?? null })),
+    flickCheckouts: Object.values(state.checkouts)
+      .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
+      .map((c) => ({
+        id: c.orderId,
+        date: c.at?.slice(0, 10) ?? null,
+        agent: AGENT_OF[c.kind],
+        what: c.what ?? '',
+        amount: c.amount,
+        currency: 'USD',
+        stage: stageOf(c),
+        paid: c.status === 'captured' ? c.amount : 0,
+      })),
   };
 }
+
+const AGENT_OF = { week: 'Autopilot', scan: 'Lens', basket: 'Scout' } as const;
+
+/** Where a payment is in its lifecycle: approved on PayPal, received by Flick, paid out to whoever it's for. */
+function stageOf(c: Checkout) {
+  if (c.status === 'awaiting') return 'Waiting for your approval';
+  if (c.status === 'cancelled') return 'Cancelled on PayPal';
+  if (c.kind === 'week') {
+    const left = state.week.payments.filter((p) => c.paymentIds.includes(p.id) && p.status !== 'paid').length;
+    return left ? `Received by Flick, ${left} to pay out on their days` : 'Paid out';
+  }
+  return c.paidOut ? 'Paid out' : 'Received by Flick';
+}
+
+/** A visitor sees only their own PayPal invoices and payments; "local" (no workspace) sees the whole account. */
+function ownOnly(invoices: Invoice[], transactions: Transaction[]) {
+  if (workspaceId() === 'local') return { invoices, transactions };
+  const invoiceIds = new Set(state.debts.map((d) => d.invoiceId));
+  const captureIds = new Set(Object.values(state.checkouts).map((c) => c.captureId));
+  return {
+    invoices: invoices.filter((i) => invoiceIds.has(i.id)),
+    transactions: transactions.filter((t) => captureIds.has(t.transaction_info.transaction_id) || invoiceIds.has(t.transaction_info.paypal_reference_id)),
+  };
+}
+
+/** Nothing paid or requested yet: Money Studio shows the demo instead, and says so. */
+const nothingYet = () => workspaceId() !== 'local' && !Object.keys(state.checkouts).length && !state.debts.length && !state.history.length;
 
 // --- Snapshot -----------------------------------------------------------------------
 
 const TRANSACTION_WINDOW_MS = TRANSACTION_SEARCH_MAX_DAYS * DAY_MS;
 
 export async function getDashboardData(asOf = new Date()) {
+  if (!nothingYet()) return dashboard(asOf);
+  const sample = await inSample(() => dashboard(asOf, false));
+  return { ...sample, warnings: ['This is sample data. Pay something with Lens, Scout or Autopilot, or split a bill, and your own payments show here.', ...sample.warnings] };
+}
+
+/** `own`: only the workspace's own PayPal invoices and payments. */
+async function dashboard(asOf: Date, own = true) {
   // Transaction search is a separate app feature, off by default and slow to activate. Without it
   // the dashboard still works: those two tables are empty, and it says why.
   const warnings: string[] = [];
@@ -324,7 +370,7 @@ export async function getDashboardData(asOf = new Date()) {
     if (!warnings.length) warnings.push('Transactions and balances are empty: turn on Transaction search for your PayPal sandbox app (it can take a few hours to start working).');
     return fallback;
   };
-  const [products, plans, invoices, transactions, balances] = await Promise.all([
+  const [products, plans, allInvoices, allTransactions, balances] = await Promise.all([
     listProducts(),
     listPlans(),
     listInvoices(),
@@ -332,6 +378,7 @@ export async function getDashboardData(asOf = new Date()) {
     getBalances().catch(unlessForbidden<Balances>({})),
   ]);
   const today = asOf.toISOString().slice(0, 10);
+  const { invoices, transactions } = own ? ownOnly(allInvoices, allTransactions) : { invoices: allInvoices, transactions: allTransactions };
 
   return {
     asOf: asOf.toISOString(),
@@ -349,4 +396,4 @@ export async function getDashboardData(asOf = new Date()) {
   };
 }
 
-export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
+export type DashboardData = Awaited<ReturnType<typeof dashboard>>;

@@ -231,6 +231,7 @@ export async function paid(checkout: Extract<Checkout, { kind: 'basket' }>) {
     await createPayout(`basket-${checkout.orderId}`, `Flick paid you for groceries`, [
       { id: checkout.orderId, email: store.email, amount: checkout.amount, note: `Groceries: ${names.join(', ')}. Paid by Flick.` },
     ]);
+    checkout.paidOut = new Date().toISOString();
     log('scout', `Bought ${names.length} item${names.length === 1 ? '' : 's'} at ${store.name}${saved > 0 ? `, ${usd(saved)} less than at ${STORES.find((s) => s.id === usualStore)?.name}` : ''}`, checkout.amount);
   } catch (err) {
     log('scout', `Took ${usd(checkout.amount)} for ${store.name}, but couldn't pay them out: ${err instanceof Error ? err.message : err}`);

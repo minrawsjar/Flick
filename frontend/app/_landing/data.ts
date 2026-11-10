@@ -48,20 +48,20 @@ export type Sample = {
   wire: readonly Step[];
 };
 
-// How Flick pays something, as the backend does it: a checkout you approve, captured into Flick's
-// account, then a payout to whoever it's for.
+// A payment's lifecycle, as the backend runs it: a checkout you approve, received into Flick's
+// PayPal account, then paid out to whoever it's for. Each step shows in Money Studio as it happens.
 const order = (amount: string, to: string): Step[] => [
-  ["POST /v2/checkout/orders", `A checkout for ${amount}`],
-  ["Approve in PayPal", "One tap. No card details shared"],
-  ["POST /v2/checkout/orders/{id}/capture", "Flick receives it"],
-  ["POST /v1/payments/payouts", `Flick pays ${to}`],
+  ["Checkout", `A PayPal checkout for ${amount}`],
+  ["Approved", "One tap in PayPal. No card details shared"],
+  ["Received", "Flick receives the payment"],
+  ["Paid out", `Flick pays ${to}`],
 ];
 
 const splitWire: Step[] = [
-  ["POST /v2/invoicing/invoices", "One request per friend, for their share"],
-  ["POST /v2/invoicing/invoices/{id}/send", "Each friend gets a PayPal email"],
-  ["Friend pays", "With PayPal or a card"],
-  ["PAID", "Nudge stops following up"],
+  ["Requested", "A PayPal request to each friend, for their share"],
+  ["Sent", "Each friend gets it by email"],
+  ["Paid back", "They pay with PayPal or a card"],
+  ["Settled", "Nudge stops following up"],
 ];
 
 export const samples: Sample[] = [

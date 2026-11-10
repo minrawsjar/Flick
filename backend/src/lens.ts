@@ -1,4 +1,5 @@
 import { askJson } from './ai.ts';
+import { replan } from './autopilot.ts';
 import { startCheckout } from './checkout.ts';
 import { HttpError, need } from './http.ts';
 import { cents, id, usd, ymd, type Checkout, type Payee, type Scan } from './model.ts';
@@ -121,6 +122,8 @@ export async function read(body: Record<string, unknown>) {
   // A receipt can be paid (a restaurant's bill) or split, so it gets a payee too.
   const scan: Scan = checked.kind === 'unknown' ? checked : { ...checked, payeeId: payeeFor(checked).id };
   state.scans.unshift(scan);
+  // A bill due this week goes into Autopilot's plan too, ready to approve with the rest.
+  if (scan.kind === 'bill') replan();
   log('lens', checked.kind === 'unknown' ? `Couldn't find anything to pay in that photo` : `Read a ${scan.kind}: ${scan.title}${scan.amount ? `, ${shown(scan)}` : ''}`, scan.amount || undefined);
   save();
   return scan;
@@ -159,11 +162,14 @@ export async function paid(checkout: Extract<Checkout, { kind: 'scan' }>) {
   if (!scan || !to) return;
   scan.status = 'paid';
   state.history.push({ payeeId: to.id, what: scan.summary || scan.title, amount: checkout.amount, date: ymd(new Date()) });
+  // Paid here, so Autopilot's week doesn't pay it too (before approval, the plan can still change).
+  if (!state.week.approval) state.week.payments = state.week.payments.filter((p) => !(p.payeeId === to.id && p.status === 'planned'));
 
   try {
     await createPayout(`scan-${scan.id}-${id('b')}`, `Flick paid you for ${scan.title}`, [
       { id: scan.id, email: to.email, amount: checkout.amount, note: `${scan.summary || scan.title}, paid by Flick` },
     ]);
+    checkout.paidOut = new Date().toISOString();
     log('lens', `Paid ${to.name}${scan.summary ? `: ${scan.summary}` : ''}`, checkout.amount);
   } catch (err) {
     log('lens', `Took ${usd(checkout.amount)} for ${to.name}, but couldn't pay them out: ${err instanceof Error ? err.message : err}`);

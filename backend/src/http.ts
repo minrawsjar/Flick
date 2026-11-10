@@ -24,7 +24,8 @@ const MAX_BODY = 8 * 1024 * 1024;
 /** The request's JSON body, or {} when there is none. */
 export async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   need(Number(req.headers['content-length'] ?? 0) <= MAX_BODY, 'Request body is too large (8 MB at most).', 413);
-  if (!req.headers['content-length'] && !req.headers['transfer-encoding']) return {};
+  // A browser's fetch with no body still says "Content-Length: 0".
+  if (!Number(req.headers['content-length'] ?? 0) && !req.headers['transfer-encoding']) return {};
   let body: unknown;
   try {
     body = await json(req);

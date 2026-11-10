@@ -85,7 +85,8 @@ function liveDebtors(state: LiveState): Debtor[] {
 
 export function Nudge() {
   const live = useLive();
-  const isLive = live.mode === "live" && Boolean(live.state);
+  // What your friends owe you once you've split something; until then sample requests, and nothing is sent.
+  const isLive = live.mode === "live" && Boolean(live.state?.debts.length);
   const debtors = isLive ? liveDebtors(live.state!) : demoDebtors;
 
   const [index, setIndex] = useState(0);
@@ -237,7 +238,9 @@ export function Nudge() {
               ? drafts[key]?.by === "template"
                 ? "AI is off, so this one is from a template. Nothing is sent until you tap."
                 : "Written by the AI model for this friend and what it was for. Nothing is sent until you tap."
-              : "Nudge writes each reminder for the person and what it was for. Nothing is sent until you tap."}
+              : live.mode === "live"
+                ? "A sample: nothing is sent. Split a bill with your friends, and Nudge follows up here on what they owe you."
+                : "Nudge writes each reminder for the person and what it was for. Nothing is sent until you tap."}
           </p>
           {error && <p className="mt-2 text-[12px] leading-4 text-wait">{error}</p>}
           <div className="mt-auto flex gap-2 pt-4">
