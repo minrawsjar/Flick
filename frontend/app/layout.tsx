@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { ServiceWorker } from "@/components/pwa";
 import "./globals.css";
 
 // SF on Apple devices; Inter everywhere else (see --font-sans in globals.css).
@@ -16,6 +17,17 @@ export const metadata: Metadata = {
   },
   description:
     "Snap a bill, a receipt or anything you want. Flick's agents pay it with PayPal, learn it, and run your week's payments on autopilot.",
+  // Installed from Safari's "Add to Home Screen": opens full screen, named Flick.
+  appleWebApp: { capable: true, title: "Flick", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  // Under the notch and home indicator; the bars pad themselves with env(safe-area-inset-*).
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -25,7 +37,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }

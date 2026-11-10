@@ -325,7 +325,7 @@ async function photoOf(button: HTMLElement): Promise<string> {
 }
 
 /** A phone photo, scaled down to upload quickly; Lens reads it just as well. */
-async function shrink(file: File): Promise<string> {
+export async function shrink(file: Blob): Promise<string> {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
