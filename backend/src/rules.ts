@@ -1,4 +1,4 @@
-import { addDays, cents, DAYS, usd, weekday, type Monthly, type Past, type Payee, type Planned, type Scan, type Unusual, type Week } from './model.ts';
+import { addDays, cents, DAYS, daysApart, monthsBack, usd, weekday, type Monthly, type Past, type Payee, type Planned, type Scan, type Unusual, type Week } from './model.ts';
 
 // Flick's rules: pure functions, no I/O. Planning the week, deciding what's due, splitting a bill,
 // and checking what Lens read. Everything that moves money builds on these (tests: rules.test.ts).
@@ -11,7 +11,8 @@ const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ([
  * Autopilot's plan for the week starting `starts` (a Monday). It only plans what it has seen, from
  * three sources, each giving its reason:
  * - bills Lens read that fall due this week and aren't paid yet;
- * - monthly payments whose day falls this week;
+ * - monthly payments whose day falls this week: ones you set up, and ones learned from history
+ *   (see `learnMonthly`);
  * - weekly habits: the same payee on the same weekday in at least 3 of the 4 weeks before.
  * It never invents a payee or an amount. One payment per payee per day, bills first. Anything
  * out of the ordinary is flagged (see `unusual`).
@@ -40,6 +41,12 @@ export function planWeek(
     if (day >= 0) add(rule.payeeId, day, rule.what, rule.amount, `Same amount on the ${ordinal(rule.dayOfMonth)}, every month.`);
   }
 
+  for (const { payeeId, day, paid } of learnMonthly(days, history, monthly, scans)) {
+    const name = payees.find((p) => p.id === payeeId)?.name ?? 'them';
+    const when = paid.length === 3 ? 'for the last 3 months' : 'in 2 of the last 3 months';
+    add(payeeId, day, paid[0].what, paid[0].amount, `You've paid ${name} around the ${ordinal(Number(days[day].slice(8)))} ${when}.`);
+  }
+
   // Habits: group the last four weeks by payee and weekday.
   const since = addDays(starts, -28);
   const groups = new Map<string, Past[]>();
@@ -62,6 +69,42 @@ export function planWeek(
   }
 
   return [...plan.values()].sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || a.payee.localeCompare(b.payee));
+}
+
+/**
+ * Monthly bills nobody set up, learned from history: a payee paid within 2 days of the same day of
+ * the month in at least 2 of the 3 months before. For each, the day this week it's due (the closest
+ * match) and those payments, newest first. A payee with a monthly rule, or a bill Lens read that
+ * month, is already covered; one paid since last month's bill isn't due.
+ */
+function learnMonthly(days: string[], history: Past[], monthly: Monthly[], scans: Scan[]) {
+  const found: { payeeId: string; day: number; paid: Past[] }[] = [];
+  for (const payeeId of new Set(history.map((p) => p.payeeId))) {
+    if (monthly.some((rule) => rule.payeeId === payeeId)) continue;
+    const mine = history.filter((p) => p.payeeId === payeeId);
+    // The payment closest to a date, if it's within 2 days of it.
+    const near = (date: string) => mine.filter((p) => daysApart(p.date, date) <= 2).sort((a, b) => daysApart(a.date, date) - daysApart(b.date, date))[0];
+
+    let best: { day: number; paid: Past[]; off: number } | undefined;
+    for (const [day, date] of days.entries()) {
+      // Paid since last month's bill: early, or more often than monthly (a weekly habit, say).
+      if (mine.some((p) => p.date > addDays(monthsBack(date, 1), 2))) continue;
+      const matches = [1, 2, 3].flatMap((n) => {
+        const then = monthsBack(date, n);
+        const p = near(then);
+        return p ? [{ p, off: daysApart(p.date, then) }] : [];
+      });
+      const off = matches.reduce((sum, m) => sum + m.off, 0);
+      if (matches.length < 2 || (best && (matches.length < best.paid.length || (matches.length === best.paid.length && off >= best.off)))) continue;
+      best = { day, paid: matches.map((m) => m.p), off };
+    }
+
+    if (!best) continue;
+    const month = days[best.day].slice(0, 7);
+    if (scans.some((s) => s.kind === 'bill' && s.payeeId === payeeId && (s.due ?? s.at).startsWith(month))) continue;
+    found.push({ payeeId, day: best.day, paid: best.paid });
+  }
+  return found;
 }
 
 /** How far above a payee's average a payment has to be for Autopilot to flag it. */

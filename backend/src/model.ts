@@ -122,3 +122,10 @@ export const addDays = (date: string, n: number) => ymd(new Date(Date.parse(`${d
 /** 0 = Monday. */
 export const weekday = (date: string) => (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
 export const mondayOf = (d: Date) => addDays(ymd(d), -weekday(ymd(d)));
+/** The same day of the month, `n` months earlier: the month's last day if it's shorter. */
+export function monthsBack(date: string, n: number) {
+  const [y, m, d] = date.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m - n, 0)).getUTCDate();
+  return ymd(new Date(Date.UTC(y, m - 1 - n, Math.min(d, last))));
+}
+export const daysApart = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;

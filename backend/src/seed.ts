@@ -1,10 +1,11 @@
-import { addDays, mondayOf, ymd, type Past, type State } from './model.ts';
+import { addDays, mondayOf, monthsBack, type Past, type State } from './model.ts';
 import { planWeek } from './rules.ts';
 
 // The demo's starting point, built around the current week so it always looks fresh. Four weeks of
 // history give Autopilot its habits; with a monthly phone plan and a bill Lens read, this week's plan
 // comes out the same as the one-pager's: six payments, $142.30. Three months of bills set what's
-// usual, so this month's electricity, 27% above it, is the one payment Autopilot flags.
+// usual, so this month's electricity, 27% above it, is the one payment Autopilot flags. Both look
+// monthly from history too, but the phone plan's monthly rule and the bill Lens read come first.
 //
 // The emails are placeholders. To see money arrive, swap in your PayPal sandbox accounts' emails
 // (developer.paypal.com → Testing tools → Sandbox accounts). Payouts to an address with no
@@ -93,11 +94,4 @@ export function seed(now = new Date()): State {
   };
   state.week.payments = planWeek(starts, state);
   return state;
-}
-
-/** The same day of the month, `n` months earlier: the month's last day if it's shorter. */
-function monthsBack(date: string, n: number) {
-  const [y, m, d] = date.split('-').map(Number);
-  const last = new Date(Date.UTC(y, m - n, 0)).getUTCDate();
-  return ymd(new Date(Date.UTC(y, m - 1 - n, Math.min(d, last))));
 }
