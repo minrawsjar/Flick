@@ -478,8 +478,26 @@ await step("the service worker takes over, with every page cached", async () => 
   await waitFor("navigator.serviceWorker.ready.then((r) => r.active?.state === 'activated')", 20_000, "an active worker");
   await open("/home", 1500);
   check(await js("Boolean(navigator.serviceWorker.controller)"), "not controlling the page");
-  const cached = await waitFor(`caches.open('flick-v1').then((c) => c.keys()).then((k) => { const p = k.map((r) => new URL(r.url).pathname); return ['/home', '/lens', '/autopilot', '/scout', '/api/state'].every((x) => p.includes(x)) && p; })`, 20_000, "the pages in the cache");
-  return `${cached.filter((p) => !p.startsWith("/_next")).length} pages and data`;
+  // The cache is this build's: flick-<build>, the ?v= the worker was registered with.
+  const cache = `flick-${await js("new URL(navigator.serviceWorker.controller.scriptURL).searchParams.get('v')")}`;
+  const cached = await waitFor(`caches.open('${cache}').then((c) => c.keys()).then((k) => { const p = k.map((r) => new URL(r.url).pathname); return ['/home', '/lens', '/autopilot', '/scout', '/api/state'].every((x) => p.includes(x)) && p; })`, 20_000, "the pages in the cache");
+  return `${cached.filter((p) => !p.startsWith("/_next")).length} pages and data, in ${cache}`;
+});
+
+await step("a new deploy replaces an installed app's old pages, and the open app reloads onto it", async () => {
+  // An app installed from an older deploy: that deploy's worker in charge, with its own cache.
+  const build = await js("new URL(navigator.serviceWorker.controller.scriptURL).searchParams.get('v')");
+  await js("navigator.serviceWorker.register('/sw.js?v=older', { scope: '/', updateViaCache: 'none' }).then(() => true)");
+  await waitFor("navigator.serviceWorker.controller?.scriptURL.endsWith('v=older') && caches.keys().then((k) => k.includes('flick-older'))", 20_000, "the older deploy in charge");
+  // Count page loads: the reload below, then the app's own reload when this deploy's worker takes over.
+  const { result } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: "sessionStorage.loads = String(Number(sessionStorage.loads || 0) + 1)" });
+  await js("sessionStorage.loads = '0'");
+  await cdp("Page.reload");
+  await waitFor(`document.readyState === 'complete' && navigator.serviceWorker.controller?.scriptURL.endsWith('v=${build}')`, 30_000, "this deploy's worker in charge");
+  await waitFor("sessionStorage.loads === '2'", 15_000, "the app reloading itself onto this deploy");
+  await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: result.identifier });
+  const caches = await js("caches.keys()");
+  check(!caches.includes("flick-older") && caches.includes(`flick-${build}`), `caches: ${caches.join(", ")}`);
 });
 
 await step("offline, Today and Autopilot still open, and say so", async () => {

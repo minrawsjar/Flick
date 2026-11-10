@@ -8,12 +8,19 @@ import { encode } from "uqr";
 // Chrome, Edge and Android offer an install prompt we can trigger; Safari installs from its own
 // menus, so /install shows the steps instead.
 
-/** Registers the service worker. Production only: in dev it would cache files mid-edit. */
+/**
+ * Registers the service worker. Production only: in dev it would cache files mid-edit. Each build
+ * registers its own (?v=), whose caches start fresh, so an installed app never keeps showing the
+ * last deploy's pages; when it takes over from an older one, the page reloads once onto this build.
+ */
 export function ServiceWorker() {
   useEffect(() => {
-    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
-    }
+    if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
+    const updating = Boolean(navigator.serviceWorker.controller);
+    const reload = () => updating && window.location.reload();
+    navigator.serviceWorker.addEventListener("controllerchange", reload, { once: true });
+    navigator.serviceWorker.register(`/sw.js?v=${process.env.NEXT_PUBLIC_BUILD}`, { scope: "/", updateViaCache: "none" }).catch(() => {});
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", reload);
   }, []);
   return null;
 }

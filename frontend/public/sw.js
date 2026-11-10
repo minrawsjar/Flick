@@ -8,8 +8,9 @@
 // - Notifications (backend/src/push.ts): each push is a JSON { title, body, url, tag }; tapping one
 //   opens that page in the app.
 
-// Bump to drop every cached page and file. ponytail: old /_next/static chunks pile up until then.
-const VERSION = "flick-v1";
+// One cache per build: each deploy registers its own worker (/sw.js?v=<build>, components/pwa.tsx),
+// and activating it drops the caches of the builds before, pages and files alike.
+const VERSION = `flick-${new URL(self.location.href).searchParams.get("v") || "dev"}`;
 const SHARED = "flick-share";
 const PAGES = ["/home", "/lens", "/autopilot", "/scout", "/ask", "/split", "/nudge", "/friends", "/install"];
 
