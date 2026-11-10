@@ -44,8 +44,9 @@ if (build.status !== 0) {
 const backend = spawn(process.execPath, ["--env-file-if-exists=.env", "scripts/harness.ts", String(BACK), SITE], { cwd: new URL("../../backend", import.meta.url).pathname, stdio: ["ignore", "pipe", "inherit"] });
 children.push(backend);
 await new Promise((resolve) => backend.stdout.on("data", (d) => String(d).includes("ready") && resolve()));
-// Next itself, not npx: killing a wrapper would leave the server running.
-const frontend = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(FRONT)], { cwd: here, env: { ...process.env, NEXT_DIST_DIR: ".next-e2e" }, stdio: "ignore" });
+// Next itself, not npx: killing a wrapper would leave the server running. BACKEND_URL again: server
+// components (Money Studio) read it per request, not from the build.
+const frontend = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(FRONT)], { cwd: here, env: { ...process.env, NEXT_DIST_DIR: ".next-e2e", BACKEND_URL: `http://localhost:${BACK}` }, stdio: "ignore" });
 children.push(frontend);
 for (let i = 0; !(await fetch(SITE).then((r) => r.ok, () => false)); i++) {
   if (i > 100) throw new Error("The frontend didn't start.");
@@ -240,6 +241,41 @@ await step("Lens reads the sample bill with AI, then opens PayPal's checkout", a
   await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page");
   problems.length = 0; // PayPal's own page logs errors of its own
   return `${read.title}, $${read.amount.toFixed(2)}`;
+});
+
+await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through PayPal, or splits", async () => {
+  await open("/lens");
+  // A photo of an Indian restaurant's bill, snapped with "Snap your own".
+  await js(`(async () => {
+    const c = document.createElement('canvas'); c.width = 600; c.height = 820;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 600, 820); g.fillStyle = '#000';
+    g.font = 'bold 38px Helvetica'; g.fillText('SPICE ROUTE RESTAURANT', 30, 80);
+    g.font = '24px Helvetica'; g.fillText('Indiranagar, Bengaluru · Table 4', 30, 125);
+    [['Paneer Tikka', '320.00'], ['Dal Makhani', '280.00'], ['Butter Naan x2', '120.00'], ['GST 5%', '36.00']].forEach(([n, p], i) => { g.fillText(n, 30, 210 + i * 55); g.fillText('₹' + p, 430, 210 + i * 55); });
+    g.font = 'bold 30px Helvetica'; g.fillText('TOTAL', 30, 470); g.fillText('₹756.00', 410, 470);
+    const input = document.querySelector('input[type=file]');
+    const dt = new DataTransfer();
+    dt.items.add(new File([await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9))], 'bill.jpg', { type: 'image/jpeg' }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await waitFor("document.body.innerText.includes('Split it with friends')", 60_000, "what Lens read");
+  const scan = (await state()).scans[0];
+  check(scan.original?.currency === "INR" && Math.abs(scan.original.amount - 756) < 0.01, `read ${JSON.stringify(scan.original ?? { amount: scan.amount, currency: scan.currency })}`);
+  check(scan.currency === "USD" && scan.amount > 5 && scan.amount < 15, `$${scan.amount} for ₹756`);
+  const text = await textOf();
+  check(text.includes("₹756.00"), "the card doesn't show ₹756.00");
+  check(text.includes(`Pay $${scan.amount.toFixed(2)} with PayPal`), "no Pay button in USD");
+  // Split goes to Splitter with the items, in USD, saying so.
+  await click("Split it with friends");
+  await waitFor("location.pathname === '/split' && document.body.innerText.includes('₹756.00 on the receipt')", 15_000, "Splitter, with the receipt converted");
+  // Back on Lens, the newest scan is the receipt, ready to pay.
+  await open("/lens");
+  await click(`Pay $${scan.amount.toFixed(2)} with PayPal`);
+  await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page");
+  problems.length = 0; // PayPal's own page logs errors of its own
+  check((await state()).scans[0].status === "awaiting", "not awaiting PayPal");
+  return `${scan.title}: ₹756.00 → $${scan.amount.toFixed(2)}`;
 });
 
 await step("Autopilot: Next day moves the week on; the save-PayPal offer is there", async () => {

@@ -60,6 +60,7 @@ function overview() {
       kind: s.kind,
       title: s.title,
       amount: s.amount,
+      ...(s.original && { on_the_bill: `${s.original.amount} ${s.original.currency}`, amount_is: 'USD, converted at today\'s rate' }),
       due: s.due,
       status: s.status,
       ...(s.kind === 'receipt' && { items: s.items, tax: s.tax, tip: s.tip }),

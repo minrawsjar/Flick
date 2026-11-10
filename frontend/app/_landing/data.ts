@@ -1,5 +1,6 @@
 import type { Scan } from "@backend/model";
 import type { Face } from "@/components/ui";
+import { money } from "@/lib/format";
 
 // The one-pager's cast and demo content. With the backend live (lib/live.ts), the sections use
 // real state instead, in these same shapes.
@@ -35,9 +36,13 @@ export type Sample = {
   title: string;
   sub: string;
   amount: number;
+  /** The amount as the photo shows it, when that isn't USD (e.g. "₹801.00"). */
+  shown?: string;
   /** The structured read, as Lens's model returns it. */
   fields: readonly (readonly [string, string])[];
   action: string;
+  /** A second action: a receipt can be paid, or split with friends instead. */
+  alt?: string;
   done: string;
   /** The PayPal REST calls the action makes. */
   wire: readonly Step[];
@@ -143,15 +148,21 @@ export function sampleFromScan(scan: Scan): Sample {
   const kind: SampleKind = scan.kind === "product" ? "tag" : scan.kind === "unknown" ? "bill" : scan.kind;
   // A tip jar has no amount on it: Flick suggests $5.
   const amount = scan.kind === "tip" ? 5 : scan.amount;
-  const money = `$${amount.toFixed(2)}`;
+  // A bill in another currency shows what the photo says; PayPal charges the USD Lens converted it
+  // to. One read before Lens converted shows its own currency, and is converted when it's paid.
+  const inUsd = scan.currency === "USD";
+  const usd = inUsd ? `$${amount.toFixed(2)}` : "";
+  const native = scan.original ?? (inUsd ? undefined : { amount: scan.amount, currency: scan.currency });
+  const pay = usd ? `Pay ${usd} with PayPal` : "Pay with PayPal";
   const due = scan.due
     ? `due ${new Date(`${scan.due}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}`
     : "";
   const actions: Record<Scan["kind"], [action: string, done: string]> = {
-    bill: [`Pay ${money} with PayPal`, `Paid. Flick paid ${scan.title}`],
-    product: [`Buy with PayPal · ${money}`, `Paid. Flick paid ${scan.title}`],
-    tip: [`Tip ${money}`, `Tipped ${scan.title}`],
-    receipt: ["Split with 3 friends", "Handed to Splitter"],
+    bill: [pay, `Paid. Flick paid ${scan.title}`],
+    product: [usd ? `Buy with PayPal · ${usd}` : "Buy with PayPal", `Paid. Flick paid ${scan.title}`],
+    tip: [`Tip $${amount.toFixed(2)}`, `Tipped ${scan.title}`],
+    // A restaurant's bill gets paid; a receipt for something already paid gets split.
+    receipt: [pay, `Paid. Flick paid ${scan.title}`],
     unknown: ["", ""],
   };
   const [action, done] = actions[scan.kind];
@@ -162,10 +173,13 @@ export function sampleFromScan(scan: Scan): Sample {
     title: scan.kind === "unknown" ? "Nothing to pay here" : scan.title,
     sub: [scan.summary, due].filter(Boolean).join(" · ") || "Read by Lens",
     amount,
+    ...(native && scan.kind !== "tip" && { shown: money(native.amount, native.currency) }),
     fields: scan.fields,
     action,
+    // Not yet in USD (read before Lens converted): splitting would request the wrong amounts.
+    ...(scan.kind === "receipt" && inUsd && { alt: "Split it with friends" }),
     done,
-    wire: scan.kind === "receipt" ? splitWire : order(money, scan.title),
+    wire: order(usd || "the bill, in USD", scan.title),
   };
 }
 

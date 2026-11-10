@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Bot } from "@/components/bot";
 import { Phone } from "@/components/phone";
-import { Primary, Tile, useOnScreen, Wire } from "@/components/ui";
+import { Primary, Secondary, Tile, useOnScreen, Wire } from "@/components/ui";
 import { usd } from "@/lib/format";
 import { act, approveOnPayPal, handReceipt, returned, useLive } from "@/lib/live";
 import { agents, sampleFromScan, samples, type Sample, type SampleKind } from "./data";
@@ -139,6 +139,7 @@ export function LensScreen({
   stage,
   run = 0,
   onAct,
+  onAlt,
   recurring = true,
   onRecurring,
   photo,
@@ -153,6 +154,8 @@ export function LensScreen({
   /** Changes on each new scan, to replay the animations. */
   run?: number;
   onAct?: () => void;
+  /** The second action: splitting a receipt instead of paying it. */
+  onAlt?: () => void;
   recurring?: boolean;
   onRecurring?: (on: boolean) => void;
 }) {
@@ -216,7 +219,7 @@ export function LensScreen({
             </p>
             <div className="mt-1 flex items-baseline justify-between gap-2">
               <p className="truncate text-[15px]">{sample.title}</p>
-              <p className="text-[18px] tabular-nums">{usd(sample.amount)}</p>
+              <p className="text-[18px] tabular-nums">{sample.shown ?? usd(sample.amount)}</p>
             </div>
             <p className="text-[12px] text-secondary">{sample.sub}</p>
 
@@ -225,6 +228,11 @@ export function LensScreen({
                 <Primary onClick={onAct} className="mt-2.5">
                   {sample.action}
                 </Primary>
+                {sample.alt && (
+                  <Secondary onClick={onAlt} className="mt-1.5 w-full">
+                    {sample.alt}
+                  </Secondary>
+                )}
                 {sample.kind === "bill" && (
                   <button
                     type="button"
@@ -245,7 +253,7 @@ export function LensScreen({
             {stage === "paying" && (
               <p className="mt-2.5 flex items-center gap-1.5 text-[12px] text-secondary">
                 <LoaderCircle size={13} className="spinner" />
-                {sample.kind === "receipt" ? "Sending PayPal requests…" : "Paying with PayPal…"}
+                {sample.action.startsWith("Split") ? "Sending PayPal requests…" : "Paying with PayPal…"}
               </p>
             )}
             {stage === "paid" && (
@@ -424,12 +432,6 @@ export function Snap() {
       setStage("paying");
       return;
     }
-    // A real receipt goes to Splitter, with its items.
-    if (scan.kind === "receipt") {
-      handReceipt(scan);
-      router.push("/split");
-      return;
-    }
     setView({ ...current, live: true });
     setStage("paying");
     setAt(0);
@@ -448,6 +450,13 @@ export function Snap() {
     }
   };
 
+  // A real receipt can go to Splitter instead, with its items.
+  const split = () => {
+    if (!current.scan) return;
+    handReceipt(current.scan);
+    router.push("/split");
+  };
+
   const { sample } = current;
   const done = sample.kind === "bill" && !recurring && !current.scan ? "Paid with PayPal" : sample.done;
 
@@ -459,6 +468,7 @@ export function Snap() {
           stage={currentStage}
           run={run}
           onAct={pay}
+          onAlt={split}
           recurring={recurring}
           onRecurring={setRecurring}
           photo={current.photo}

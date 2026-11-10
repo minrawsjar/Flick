@@ -57,6 +57,8 @@ export type Scan = {
   fields: [string, string][];
   status: 'read' | 'awaiting' | 'paid';
   payeeId?: string;
+  /** What the photo said, when it wasn't in USD. The amounts above are then in USD (lens.ts). */
+  original?: { currency: string; amount: number; rate: number };
 };
 
 /** Money a friend owes you, requested with a PayPal invoice. */

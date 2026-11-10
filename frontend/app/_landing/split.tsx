@@ -10,7 +10,7 @@ import { Bot, type BotColor, type BotShape } from "@/components/bot";
 import { Grid } from "@/components/grid";
 import { Phone } from "@/components/phone";
 import { Activity, Bubble, Primary, Speaking, Tile } from "@/components/ui";
-import { usd } from "@/lib/format";
+import { money, usd } from "@/lib/format";
 import { act, useLive } from "@/lib/live";
 import { agents, friends as demoFriends, receipt, TAX, TIP, you, type Friend, type Item } from "./data";
 
@@ -23,7 +23,8 @@ const cents = (n: number) => Math.round(n * 100) / 100;
 const names = (list: { name: string }[]) =>
   list.length <= 1 ? (list[0]?.name ?? "nobody") : `${list.slice(0, -1).map((p) => p.name).join(", ")} and ${list.at(-1)!.name}`;
 
-type Bill = { merchant: string; items: Item[]; tax: number; tip: number; scanned: boolean };
+/** `converted`: the receipt wasn't in USD; Lens converted it, as PayPal requests are in USD here. */
+type Bill = { merchant: string; items: Item[]; tax: number; tip: number; scanned: boolean; converted?: string };
 
 const demoSubtotal = receipt.reduce((sum, i) => sum + i.price, 0);
 const demoBill: Bill = { merchant: "Nori Sushi", items: receipt, tax: cents(demoSubtotal * TAX), tip: cents(demoSubtotal * TIP), scanned: false };
@@ -35,6 +36,7 @@ const billFrom = (scan: Scan, people: Friend[]): Bill => ({
   tax: scan.tax,
   tip: scan.tip,
   scanned: true,
+  ...(scan.original && { converted: `${money(scan.original.amount, scan.original.currency)} on the receipt, in USD at today's rate` }),
 });
 
 const had = (item: Item, person: string) => item[person] === true;
@@ -248,7 +250,7 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
         <Tile>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[13px] text-secondary">
-              {bill.scanned ? `${bill.merchant}, as Lens read it. Tick who had what; the shares update as you go.` : "Who had what. Tap to tick; the shares update as you go."}
+              {bill.scanned ? `${bill.merchant}, as Lens read it${bill.converted ? ` (${bill.converted})` : ""}. Tick who had what; the shares update as you go.` : "Who had what. Tap to tick; the shares update as you go."}
             </p>
             {live && (
               <Link href="/friends" className="pressable flex items-center gap-1 rounded-full bg-raised px-3 py-1 text-[12px]">

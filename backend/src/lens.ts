@@ -18,7 +18,10 @@ or QR code to tip someone. Report only what you can read in the photo; never gue
 - summary: a few words, e.g. "Electricity, November" or "6 items, with tax and tip".
 - amount: the total to pay as a number (a bill's amount due, a receipt's total, a product's price); 0 if
   none is visible, and 0 for tip jars.
-- currency: ISO 4217 code, "USD" if no other is shown.
+- currency: the ISO 4217 code of the amounts as printed (amounts stay in it; never convert). Read the
+  symbol or word (₹, Rs, Rs., INR → "INR"; € → "EUR"; £ → "GBP"; ¥ → "JPY" or "CNY"), and when there's
+  no symbol, or a "$" shared by several countries, go by where the shop is: its address, phone code
+  (+91), tax (GST, VAT) and language. "USD" only when nothing points elsewhere.
 - due: the due date as YYYY-MM-DD, or "" if none.
 - repeats: "monthly" or "weekly" if it's clearly a recurring bill or subscription, else "".
 - handle: a PayPal email or @handle shown (tip jars often have one), else "".
@@ -52,6 +55,40 @@ const SCHEMA = {
   },
 };
 
+// PayPal charges in USD here (a US sandbox account; PayPal takes INR only on Indian accounts), so a
+// bill in another currency is converted when Lens reads it, at the day's ECB rate from Frankfurter,
+// and the scan keeps what the photo said to show it.
+const rates = new Map<string, { rate: number; at: number }>();
+async function usdRate(currency: string) {
+  const hit = rates.get(currency);
+  if (hit && Date.now() - hit.at < 6 * 3_600_000) return hit.rate;
+  const res = await fetch(`https://api.frankfurter.dev/v1/latest?base=${currency}&symbols=USD`, { signal: AbortSignal.timeout(8000) });
+  const rate = res.ok ? Number(((await res.json()) as { rates?: { USD?: number } }).rates?.USD) : NaN;
+  if (!(rate > 0)) throw new Error(`no USD rate for ${currency}`);
+  rates.set(currency, { rate, at: Date.now() });
+  return rate;
+}
+
+/** The scan with its amounts in USD. Left as it is if there's no rate (paying it is then refused). */
+async function inUsd<T extends Omit<Scan, 'payeeId'>>(scan: T): Promise<T> {
+  if (scan.currency === 'USD') return scan;
+  try {
+    const rate = await usdRate(scan.currency);
+    const convert = (n: number) => cents(n * rate);
+    const original = { currency: scan.currency, amount: scan.amount, rate };
+    return { ...scan, currency: 'USD', amount: convert(scan.amount), items: scan.items.map((i) => ({ ...i, price: convert(i.price) })), tax: convert(scan.tax), tip: convert(scan.tip), original };
+  } catch (err) {
+    console.error('Lens currency:', err instanceof Error ? err.message : err);
+    return scan;
+  }
+}
+
+/** "₹801.00 ($8.53)" for a converted scan, "$64.20" otherwise. */
+const shown = (scan: Scan) => {
+  if (!scan.original) return scan.currency === 'USD' ? usd(scan.amount) : `${scan.amount} ${scan.currency}`;
+  return `${new Intl.NumberFormat('en-US', { style: 'currency', currency: scan.original.currency }).format(scan.original.amount)} (${usd(scan.amount)})`;
+};
+
 const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'payee';
 
 /** The payee a scan pays: one Flick already knows by name, or a new one. */
@@ -80,10 +117,11 @@ export async function read(body: Record<string, unknown>) {
     },
   ]);
 
-  const checked = checkLens(answer, id('scan'), new Date().toISOString());
-  const scan: Scan = checked.kind === 'unknown' || checked.kind === 'receipt' ? checked : { ...checked, payeeId: payeeFor(checked).id };
+  const checked = await inUsd(checkLens(answer, id('scan'), new Date().toISOString()));
+  // A receipt can be paid (a restaurant's bill) or split, so it gets a payee too.
+  const scan: Scan = checked.kind === 'unknown' ? checked : { ...checked, payeeId: payeeFor(checked).id };
   state.scans.unshift(scan);
-  log('lens', checked.kind === 'unknown' ? `Couldn't find anything to pay in that photo` : `Read a ${scan.kind}: ${scan.title}${scan.amount ? `, ${usd(scan.amount)}` : ''}`, scan.amount || undefined);
+  log('lens', checked.kind === 'unknown' ? `Couldn't find anything to pay in that photo` : `Read a ${scan.kind}: ${scan.title}${scan.amount ? `, ${shown(scan)}` : ''}`, scan.amount || undefined);
   save();
   return scan;
 }
@@ -92,9 +130,12 @@ export async function read(body: Record<string, unknown>) {
 export async function pay(body: Record<string, unknown>) {
   const scan = state.scans.find((s) => s.id === body.scanId);
   if (!scan) throw new HttpError(404, `No scan ${String(body.scanId)}`);
-  need(scan.kind === 'bill' || scan.kind === 'product' || scan.kind === 'tip', scan.kind === 'receipt' ? 'Receipts are split, not paid: POST /api/split.' : "There's nothing to pay in this scan.", 409);
+  need(scan.kind !== 'unknown', "There's nothing to pay in this scan.", 409);
   need(scan.status !== 'paid', `${scan.title} is already paid.`, 409);
-  need(scan.currency === 'USD', `Flick pays in USD on the sandbox; this is in ${scan.currency}.`, 409);
+  // Scans read before Lens converted currencies, or paid receipts, didn't get these when read.
+  if (scan.currency !== 'USD') Object.assign(scan, await inUsd(scan));
+  scan.payeeId ??= payeeFor(scan).id;
+  need(scan.currency === 'USD', `Flick pays in USD on the sandbox, and couldn't get today's rate for ${scan.currency}. Try again in a minute.`, 409);
 
   // A tip's amount is the person's choice; everything else is what Lens read.
   const amount = scan.kind === 'tip' ? Number(body.amount) : scan.amount;

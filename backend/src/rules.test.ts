@@ -99,6 +99,7 @@ test('Lens output is checked before it can become a payment', () => {
   );
   assert.equal(scan.title, 'City Power');
   assert.equal(checkLens({ kind: 'bill', title: 'CITY POWER' }, 's', 't').title, 'City Power', 'all caps is calmed');
+  assert.equal(checkLens({ kind: 'bill', title: "JOE'S COFFEE & SPICE-ROUTE" }, 's', 't').title, "Joe's Coffee & Spice-Route", 'no capital after an apostrophe');
   assert.equal(checkLens({ kind: 'bill', title: 'IKEA Family' }, 's', 't').title, 'IKEA Family', 'mixed case is kept');
   assert.equal(scan.currency, 'USD');
   assert.equal(scan.due, null, 'Feb 30 is not a date');
