@@ -14,6 +14,9 @@ export type Past = { payeeId: string; what: string; amount: number; date: string
 /** Something to pay every month on the same day, e.g. a bill Lens read and you asked to repeat. */
 export type Monthly = { payeeId: string; what: string; amount: number; dayOfMonth: number; since: string };
 
+/** Why Autopilot flags a planned payment: a payee never paid before, or an amount well above usual. */
+export type Unusual = { kind: 'new-payee' } | { kind: 'above-usual'; percent: number; usual: number };
+
 export type PlannedStatus = 'planned' | 'scheduled' | 'paid' | 'skipped' | 'failed';
 export type Planned = {
   id: string;
@@ -25,6 +28,8 @@ export type Planned = {
   day: Day;
   /** Autopilot's reason, from what it has seen. */
   why: string;
+  /** Set when it's out of the ordinary, for Autopilot to point out before you approve. */
+  unusual?: Unusual;
   status: PlannedStatus;
   payoutBatchId?: string;
   error?: string;

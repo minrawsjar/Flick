@@ -1,4 +1,4 @@
-import { addDays, cents, DAYS, usd, weekday, type Monthly, type Past, type Payee, type Planned, type Scan, type Week } from './model.ts';
+import { addDays, cents, DAYS, usd, weekday, type Monthly, type Past, type Payee, type Planned, type Scan, type Unusual, type Week } from './model.ts';
 
 // Flick's rules: pure functions, no I/O. Planning the week, deciding what's due, splitting a bill,
 // and checking what Lens read. Everything that moves money builds on these (tests: rules.test.ts).
@@ -13,7 +13,8 @@ const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ([
  * - bills Lens read that fall due this week and aren't paid yet;
  * - monthly payments whose day falls this week;
  * - weekly habits: the same payee on the same weekday in at least 3 of the 4 weeks before.
- * It never invents a payee or an amount. One payment per payee per day, bills first.
+ * It never invents a payee or an amount. One payment per payee per day, bills first. Anything
+ * out of the ordinary is flagged (see `unusual`).
  */
 export function planWeek(
   starts: string,
@@ -25,7 +26,8 @@ export function planWeek(
     const who = payees.find((p) => p.id === payeeId);
     const key = `${payeeId}@${day}`;
     if (!who || plan.has(key) || !(amount > 0)) return;
-    plan.set(key, { id: `${starts}-${key}`, payeeId, payee: who.name, what, icon: who.icon, amount: cents(amount), day: DAYS[day], why, status: 'planned' });
+    const flag = unusual(payeeId, cents(amount), history);
+    plan.set(key, { id: `${starts}-${key}`, payeeId, payee: who.name, what, icon: who.icon, amount: cents(amount), day: DAYS[day], why, status: 'planned', ...(flag && { unusual: flag }) });
   };
 
   for (const scan of scans) {
@@ -60,6 +62,24 @@ export function planWeek(
   }
 
   return [...plan.values()].sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || a.payee.localeCompare(b.payee));
+}
+
+/** How far above a payee's average a payment has to be for Autopilot to flag it. */
+const UNUSUAL_ABOVE = 0.25;
+
+/**
+ * Whether a payment is out of the ordinary: a payee Flick has never paid, or an amount at least 25%
+ * above that payee's average. The average needs 2 or more past payments; with one, there's no
+ * "usual" yet. Null when it's ordinary.
+ */
+export function unusual(payeeId: string, amount: number, history: Past[]): Unusual | null {
+  const past = history.filter((p) => p.payeeId === payeeId).map((p) => p.amount);
+  if (!past.length) return { kind: 'new-payee' };
+  if (past.length < 2) return null;
+  const usual = past.reduce((a, b) => a + b, 0) / past.length;
+  const above = amount / usual - 1;
+  // The slack lets exactly 25% count, whatever floating point makes of it.
+  return above >= UNUSUAL_ABOVE - 1e-9 ? { kind: 'above-usual', percent: Math.round(above * 100), usual: cents(usual) } : null;
 }
 
 /** Approved payments whose day has come: Autopilot pays these now. */

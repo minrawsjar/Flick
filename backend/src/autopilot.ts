@@ -2,7 +2,7 @@ import { startCheckout } from './checkout.ts';
 import { HttpError, need } from './http.ts';
 import { addDays, cents, DAYS, id, usd, ymd, type Checkout, type Day } from './model.ts';
 import { chargeSaved, createPayout, deleteSaved, PayPalApiError, refundCapture, type Saved } from './paypal.ts';
-import { dueNow, planWeek, unapproved } from './rules.ts';
+import { dueNow, planWeek, unapproved, unusual } from './rules.ts';
 import { log, payee, save, state } from './store.ts';
 
 // Autopilot: plans the week (rules.ts), asks for one PayPal approval covering it, then pays each
@@ -45,6 +45,9 @@ export async function edit(body: Record<string, unknown>) {
     if (amount !== undefined) {
       need(typeof amount === 'number' && Number.isFinite(amount) && amount > 0 && amount <= 10_000, 'amount must be between 0 and 10,000.');
       payment.amount = cents(amount);
+      const flag = unusual(payment.payeeId, payment.amount, state.history);
+      if (flag) payment.unusual = flag;
+      else delete payment.unusual;
     }
     if (day !== undefined) {
       need(DAYS.includes(day as Day), `day must be one of ${DAYS.join(', ')}.`);
