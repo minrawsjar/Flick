@@ -89,6 +89,33 @@ const week: AgPageState = {
       sort: [{ field: { id: 'flickPayments.date' }, direction: 'asc' }],
       format: title("Autopilot's plan, and why"),
     },
+    // One basket is one payment to the store; these split it into what was in it.
+    'bought-by-product': {
+      type: 'donut-chart',
+      dataMapping: {
+        categoryKey: [{ id: 'flickPurchases.product' }],
+        valueKey: [sum('flickPurchases.total')],
+      },
+      format: {
+        ...title('What you bought, by product'),
+        style: { custom: { pieDataLabel: { enabled: true }, totalLabel: { enabled: true } } },
+      },
+    },
+    bought: {
+      type: 'grid',
+      dataMapping: {
+        cols: [
+          { id: 'flickPurchases.date' },
+          { id: 'flickPurchases.product' },
+          { id: 'flickPurchases.store' },
+          sum('flickPurchases.qty'),
+          { id: 'flickPurchases.price' },
+          sum('flickPurchases.total'),
+        ],
+      },
+      sort: [{ field: { id: 'flickPurchases.date' }, direction: 'desc' }],
+      format: title('Groceries bought, item by item'),
+    },
   },
   widgetLayout: {
     'kpi-planned': at(0, 0, 6, 7),
@@ -98,6 +125,8 @@ const week: AgPageState = {
     'by-day': at(0, 7, 15, 17),
     'where-it-goes': at(15, 7, 9, 17),
     plan: at(0, 24, 24, 22),
+    'bought-by-product': at(0, 46, 8, 18),
+    bought: at(8, 46, 16, 18),
   },
 };
 

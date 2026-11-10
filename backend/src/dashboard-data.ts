@@ -15,7 +15,8 @@ import {
   type Product,
   type Transaction,
 } from './paypal.ts';
-import { addDays, DAYS, type Checkout } from './model.ts';
+import { addDays, cents, DAYS, type Checkout } from './model.ts';
+import { PRODUCTS } from './scout-rules.ts';
 import { friend, inSample, payee, state, workspaceId } from './store.ts';
 
 // Flat rows for the Dashboard's AG Studio data sources. Relationships between them:
@@ -308,6 +309,13 @@ function flickRows() {
       reminders: d.reminders,
     })),
     flickActivity: state.activity.map((a) => ({ id: a.id, date: a.at.slice(0, 10), agent: a.agent, text: a.text, amount: a.amount ?? null })),
+    // Each item Scout bought, from the basket's checkout (one payment to the store holds them all).
+    flickPurchases: (state.scout?.purchases ?? [])
+      .filter((p) => p.from === 'scout')
+      .map((p, i) => {
+        const product = PRODUCTS.find((x) => x.id === p.productId);
+        return { id: `buy${i}`, date: p.date, product: product?.name ?? p.productId, size: product?.size ?? '', store: p.store, qty: p.qty, price: p.price, total: cents(p.price * p.qty), currency: 'USD' };
+      }),
     flickCheckouts: Object.values(state.checkouts)
       .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
       .map((c) => ({

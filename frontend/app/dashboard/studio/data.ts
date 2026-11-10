@@ -288,6 +288,23 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
         ]),
       },
       {
+        id: 'flickPurchases',
+        name: 'Groceries Bought',
+        description: 'Each item Scout bought, one row per product: the basket was one PayPal payment to the store, and these are its lines.',
+        data: data.flickPurchases,
+        fields: fields([
+          ['id', 'ID', 'textFormat', true],
+          ['date', 'Bought On', 'dateFormat'],
+          ['product', 'Product', 'textFormat'],
+          ['size', 'Size', 'textFormat'],
+          ['store', 'Store', 'textFormat'],
+          ['qty', 'Quantity', 'integerFormat'],
+          ['price', 'Unit Price', 'currencyFormat'],
+          ['total', 'Line Total', 'currencyFormat'],
+          ['currency', 'Currency', 'textFormat', true],
+        ]),
+      },
+      {
         id: 'flickCheckouts',
         name: 'Payments',
         description:
@@ -319,6 +336,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
       onCalendar('flickRequests', 'requested'),
       onCalendar('flickActivity', 'date'),
       onCalendar('flickCheckouts', 'date'),
+      onCalendar('flickPurchases', 'date'),
     ],
     calendars: [
       {
