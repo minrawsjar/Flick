@@ -298,8 +298,8 @@ export function Scout() {
     setBuying(true);
     setError(undefined);
     try {
-      const { approveUrl } = await post<{ approveUrl: string }>("buy", { storeId: store, items });
-      approveOnPayPal(approveUrl);
+      const { approveUrl, amount } = await post<{ approveUrl: string; amount: number }>("buy", { storeId: store, items });
+      if (!(await approveOnPayPal(approveUrl, { amount, to: data?.stores.find((s) => s.id === store)?.name }))) setBuying(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBuying(false);

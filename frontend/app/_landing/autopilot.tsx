@@ -269,7 +269,11 @@ function useLiveWeek(state: LiveState | null): WeekDriver | null {
     error,
     edit: (id, patch) => run(() => act("week/edit", { id, ...patch })),
     // PayPal's sandbox checkout; it sends the person back to /?paid=week#autopilot.
-    approve: () => run(async () => approveOnPayPal((await act<{ approveUrl: string }>("week/approve")).approveUrl)),
+    approve: () =>
+      run(async () => {
+        const { approveUrl, amount } = await act<{ approveUrl: string | null; amount: number }>("week/approve");
+        await approveOnPayPal(approveUrl, { amount, to: "this week's payments" });
+      }),
     tick: () => run(() => act("week/tick")),
     next: () => run(() => act("week/next")),
     retry: () => run(() => act("week/retry")),

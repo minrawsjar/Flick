@@ -71,11 +71,39 @@ export async function act<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 
+/** A payment waiting for the person's flick (components/flick-confirm.tsx) before PayPal opens. */
+export type Confirming = { url: string; amount?: number; to?: string; done: (went: boolean) => void };
+let confirming: Confirming | null = null;
+const confirmListeners = new Set<() => void>();
+const setConfirming = (next: Confirming | null) => {
+  confirming = next;
+  confirmListeners.forEach((listener) => listener());
+};
+const subscribeConfirm = (listener: () => void) => {
+  confirmListeners.add(listener);
+  return () => void confirmListeners.delete(listener);
+};
+export const useConfirming = () => useSyncExternalStore(subscribeConfirm, () => confirming, () => null);
+
 /**
- * Sends the person to PayPal to approve a checkout; PayPal brings them back to the page with ?paid=….
- * No URL: it was paid already (Autopilot's saved PayPal), so there's nothing to approve.
+ * Sends the person to PayPal to approve a checkout, once they've flicked to confirm; PayPal brings
+ * them back to the page with ?paid=…. Resolves false if they backed out (the checkout is then
+ * cancelled), so the caller can put its button back. No URL: it was paid already (Autopilot's saved
+ * PayPal), so there's nothing to approve.
  */
-export const approveOnPayPal = (approveUrl: string | null | undefined) => (approveUrl ? window.location.assign(approveUrl) : void refresh());
+export function approveOnPayPal(approveUrl: string | null | undefined, details: { amount?: number; to?: string } = {}): Promise<boolean> {
+  if (!approveUrl) return refresh().then(() => true);
+  return new Promise((resolve) =>
+    setConfirming({
+      url: approveUrl,
+      ...details,
+      done: (went) => {
+        setConfirming(null);
+        resolve(went);
+      },
+    }),
+  );
+}
 
 /** Where PayPal just brought the person back from, read once when the page loads. */
 export const returned =

@@ -185,7 +185,7 @@ export function Ask() {
           {shown}
           {pending.length > 0 && <ApprovalCard pending={pending} choices={choices} onChoose={(id, yes) => setChoices((c) => ({ ...c, [id]: yes }))} onConfirm={confirm} busy={busy} />}
           {links.map((l) => (
-            <button key={l.url} type="button" onClick={() => approveOnPayPal(l.url)} className="pressable rise mr-auto flex cursor-pointer items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[14px] text-on-ink">
+            <button key={l.url} type="button" onClick={() => void approveOnPayPal(l.url, { amount: Number(/\$([\d.]+)/.exec(l.label)?.[1]) || undefined })} className="pressable rise mr-auto flex cursor-pointer items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[14px] text-on-ink">
               <CircleCheck size={15} /> {l.label}
             </button>
           ))}

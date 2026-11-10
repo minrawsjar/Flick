@@ -85,7 +85,12 @@ export function Autopay() {
           <button
             type="button"
             disabled={busy || !canApprove}
-            onClick={() => void run(async () => approveOnPayPal((await act<{ approveUrl: string | null }>("week/approve", { save: true })).approveUrl))}
+            onClick={() =>
+              void run(async () => {
+                const { approveUrl, amount } = await act<{ approveUrl: string | null; amount: number }>("week/approve", { save: true });
+                await approveOnPayPal(approveUrl, { amount, to: "this week's payments, saving PayPal for Autopilot" });
+              })
+            }
             className="pressable flex h-10 cursor-pointer items-center gap-1.5 rounded-full bg-ink px-4 text-[13px] text-on-ink disabled:cursor-default disabled:opacity-40"
           >
             {busy && <LoaderCircle size={14} className="spinner" />}

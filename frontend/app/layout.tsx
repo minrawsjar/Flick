@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { FlickConfirm } from "@/components/flick-confirm";
 import { ServiceWorker } from "@/components/pwa";
 import "./globals.css";
 
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full">
         {children}
+        <FlickConfirm />
         <ServiceWorker />
       </body>
     </html>

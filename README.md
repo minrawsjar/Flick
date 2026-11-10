@@ -81,6 +81,10 @@ Until you have something of your own, each page shows a sample as a walkthrough:
 
 Without the cookie (the test scripts, curl) requests use the `local` workspace, the old single state file, which starts from the demo seed.
 
+### Flick to pay
+
+Before PayPal opens, every payment asks for one flick of the hand across the phone's front camera ([`flick-confirm.tsx`](frontend/components/flick-confirm.tsx)). The browser compares tiny 64×48 frames about 20 times a second and looks for a hand-sized movement that crosses the frame fast, in one direction ([`lib/flick.ts`](frontend/lib/flick.ts), tested with `npm test` in `frontend/`). Frames never leave the device. With no camera, or no permission, a tap does it instead; "Not now" cancels the PayPal checkout, as cancelling on PayPal's page would.
+
 ## How it works
 
 ```

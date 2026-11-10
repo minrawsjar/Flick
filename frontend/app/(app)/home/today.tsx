@@ -164,7 +164,7 @@ function InboxRow({ item }: { item: Item }) {
     setBusy(true);
     try {
       const out = await act<{ approveUrl?: string | null; done: string }>("inbox/act", { id: item.id });
-      if (out.approveUrl) return approveOnPayPal(out.approveUrl);
+      if (out.approveUrl) return void (await approveOnPayPal(out.approveUrl, { amount: item.amount ?? undefined }));
       setNote({ ok: true, text: out.done });
     } catch (err) {
       setNote({ ok: false, text: err instanceof Error ? err.message : String(err) });

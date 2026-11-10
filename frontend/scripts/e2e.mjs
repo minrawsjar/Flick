@@ -150,6 +150,27 @@ async function snap(lines) {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   })()`);
 }
+/** A front camera for "Flick to pay": a dark room, and after a second, a hand sweeping across it. */
+const fakeCamera = () =>
+  js(`(() => {
+    navigator.mediaDevices.getUserMedia = async () => {
+      const c = document.createElement('canvas'); c.width = 320; c.height = 240;
+      const g = c.getContext('2d'); const start = performance.now();
+      const draw = () => {
+        const p = (performance.now() - start - 1200) / 400;
+        g.fillStyle = '#202020'; g.fillRect(0, 0, 320, 240);
+        if (p >= 0 && p <= 1) { g.fillStyle = '#e8c4a0'; g.fillRect(-80 + p * 400, 60, 80, 120); }
+        requestAnimationFrame(draw);
+      };
+      draw();
+      return c.captureStream(30);
+    };
+  })()`);
+/** Past "Flick to pay" with its button: the test browser has no camera. */
+async function tapToPay() {
+  await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('Flick to pay')", 15_000, "the Flick to pay sheet");
+  await click("Pay on PayPal", "document.querySelector('[role=dialog]')");
+}
 const daysAfter = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 // --- The checklist --------------------------------------------------------------------------
@@ -283,11 +304,22 @@ await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through Pa
   check((await textOf()).includes("These are sample friends"), "no friends of your own, but Splitter doesn't say they're samples");
   // Back on Lens, the newest scan is the receipt, ready to pay.
   await open("/lens");
+  // Pay opens "Flick to pay"; Not now cancels the PayPal checkout, and the bill is ready to pay again.
   await click(`Pay $${scan.amount.toFixed(2)} with PayPal`);
-  await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page");
+  await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('Flick to pay')", 15_000, "the Flick to pay sheet");
+  check((await js("document.querySelector('[role=dialog]').innerText")).includes(`Pay $${scan.amount.toFixed(2)}`), "the sheet doesn't say the amount");
+  await click("Not now", "document.querySelector('[role=dialog]')");
+  await waitFor("!document.querySelector('[role=dialog]') && document.body.innerText.includes('Split it with friends')", 15_000, "the sheet closed, the bill back");
+  const back = await state();
+  check(back.scans[0].status === "read" && Object.values(back.checkouts).some((c) => c.kind === "scan" && c.status === "cancelled"), `after Not now: scan ${back.scans[0].status}`);
+  // Then a flick at the camera (a fake front camera, a hand sweeping across it) opens PayPal.
+  await fakeCamera();
+  await click(`Pay $${scan.amount.toFixed(2)} with PayPal`);
+  await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('Flick your hand across the camera')", 15_000, "the camera, waiting for a flick");
+  await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page, after the flick");
   problems.length = 0; // PayPal's own page logs errors of its own
   check((await state()).scans[0].status === "awaiting", "not awaiting PayPal");
-  return `${scan.title}: ₹756.00 → $${scan.amount.toFixed(2)}`;
+  return `${scan.title}: ₹756.00 → $${scan.amount.toFixed(2)}, flicked to PayPal`;
 });
 
 await step("Autopilot: the sample week is a walkthrough; nothing is approved or charged", async () => {
@@ -312,6 +344,9 @@ await step("Autopilot: a bill you snap that's due this week makes your own week,
   const t = await textOf();
   check(t.includes("Northwind") && !t.includes("This is a sample week") && t.includes("Approve and save PayPal"), "the page still shows the sample week");
   await click("Approve with PayPal");
+  // No camera here, so the sheet offers a tap instead.
+  await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('No camera to flick at')", 15_000, "the sheet saying there's no camera");
+  await tapToPay();
   await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal's page");
   problems.length = 0; // PayPal's own page logs errors of its own
   check((await state()).week.approval?.status === "awaiting", "not awaiting PayPal");
@@ -407,7 +442,9 @@ await step("Money Studio: your own payments, each at its stage, not the sample",
   check(!(await textOf()).includes("This is sample data"), "still the sample, after paying and splitting");
   const data = await js("fetch('/api/dashboard').then((r) => r.json())");
   const stages = data.flickCheckouts.map((c) => `${c.agent}: ${c.stage}`);
-  check(data.flickCheckouts.length === 2 && stages.every((s) => s.endsWith("Waiting for your approval")), `payments: ${JSON.stringify(stages)}`);
+  // The rupee bill's first checkout, backed out of at "Flick to pay"; its second; and the week's.
+  const want = ["Autopilot: Waiting for your approval", "Lens: Cancelled on PayPal", "Lens: Waiting for your approval"];
+  check(JSON.stringify([...stages].sort()) === JSON.stringify(want), `payments: ${JSON.stringify(stages)}`);
   // The sandbox account has everyone's invoices; this browser sees only its own two (fewer while PayPal's list catches up).
   check(data.flickRequests.length === 2 && data.invoices.length <= 2, `${data.flickRequests.length} requests, ${data.invoices.length} PayPal invoices shown`);
   await device(devices[0][1]);
@@ -480,7 +517,8 @@ await step("notifications: subscribed through a real push service, and the welco
     const reg = await navigator.serviceWorker.ready;
     const { publicKey } = await (await fetch('/api/push/key')).json();
     const key = Uint8Array.from(atob(publicKey.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (publicKey.length % 4)) % 4)), (c) => c.charCodeAt(0));
-    const sub = await Promise.race([reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }), new Promise((_, no) => setTimeout(() => no(new Error('no push service in this Chrome')), 20000))]);
+    // A fresh browser first registers with Google's push service: up to half a minute, at busy times.
+    const sub = await Promise.race([reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }), new Promise((_, no) => setTimeout(() => no(new Error('no push service in this Chrome')), 60000))]);
     const res = await (await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) })).json();
     await fetch('/api/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) });
     await sub.unsubscribe();
@@ -504,6 +542,7 @@ if (!email || !password) {
     await snap([["CITY POWER", 36], ["Electricity, November", 24], ["Account •••• 4821", 22], ["Amount due: $64.20", 28], ["Due date: 2026-12-02", 24]]);
     await waitFor("[...document.querySelectorAll('button')].some((b) => /^Pay \\$/.test(b.innerText.trim()) && !b.disabled)", 60_000, "a Pay button");
     await js("[...document.querySelectorAll('button')].find((b) => /^Pay \\$/.test(b.innerText.trim())).click()");
+    await tapToPay();
     await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal");
     for (let i = 0; i < 80 && !(await js("location.href")).startsWith(SITE); i++) {
       await sleep(1500);

@@ -408,13 +408,17 @@ export function Snap() {
     setStage("paying");
     setAt(0);
     try {
-      const { approveUrl } = await act<{ approveUrl: string }>("lens/pay", {
+      const { approveUrl, amount } = await act<{ approveUrl: string; amount: number }>("lens/pay", {
         scanId: scan.id,
         repeat: recurring,
         ...(scan.kind === "tip" && { amount: current.sample.amount }),
       });
       setAt(1);
-      approveOnPayPal(approveUrl);
+      // Backed out of the flick: the checkout's cancelled, and it's ready to pay again.
+      if (!(await approveOnPayPal(approveUrl, { amount, to: scan.title }))) {
+        setStage("read");
+        setAt(-1);
+      }
     } catch (err) {
       setStage("read");
       setAt(-1);
