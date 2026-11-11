@@ -18,7 +18,7 @@ import {
 import { HttpError } from './http.ts';
 import { addDays, cents, DAYS, type Checkout } from './model.ts';
 import { PRODUCTS } from './scout-rules.ts';
-import { friend, inSample, payee, state, workspaceId } from './store.ts';
+import { friend, payee, state, workspaceId } from './store.ts';
 
 // Flat rows for the Dashboard's AG Studio data sources. Relationships between them:
 //   invoices.customerId        -> customers.id
@@ -358,7 +358,7 @@ function ownOnly(invoices: Invoice[], transactions: Transaction[]) {
   };
 }
 
-/** Nothing paid or requested yet: Money Studio shows the demo instead, and says so. */
+/** Nothing paid or requested yet: Money Studio says how to start (its tables are empty, not a sample). */
 const nothingYet = () => workspaceId() !== 'local' && !Object.keys(state.checkouts).length && !state.debts.length && !state.history.length;
 
 // --- Snapshot -----------------------------------------------------------------------
@@ -366,13 +366,13 @@ const nothingYet = () => workspaceId() !== 'local' && !Object.keys(state.checkou
 const TRANSACTION_WINDOW_MS = TRANSACTION_SEARCH_MAX_DAYS * DAY_MS;
 
 export async function getDashboardData(asOf = new Date()) {
-  if (!nothingYet()) return dashboard(asOf);
-  const sample = await inSample(() => dashboard(asOf, false));
-  return { ...sample, warnings: ['This is sample data. Pay something with Lens, Scout or Autopilot, or split a bill, and your own payments show here.', ...sample.warnings] };
+  const data = await dashboard(asOf);
+  if (!nothingYet()) return data;
+  return { ...data, warnings: ['Nothing here yet. Pay something with Lens, Scout or Autopilot, or split a bill, and your payments show here.', ...data.warnings] };
 }
 
-/** `own`: only the workspace's own PayPal invoices and payments. */
-async function dashboard(asOf: Date, own = true) {
+/** The workspace's tables, with only its own PayPal invoices and payments. */
+async function dashboard(asOf: Date) {
   // Transaction search is a separate app feature, off by default and slow to activate. Without it
   // the dashboard still works: those two tables are empty, and it says why.
   const warnings: string[] = [];
@@ -398,7 +398,7 @@ async function dashboard(asOf: Date, own = true) {
     getBalances().catch(unlessForbidden<Balances>('balances', {})),
   ]);
   const today = asOf.toISOString().slice(0, 10);
-  const { invoices, transactions } = own ? ownOnly(allInvoices, allTransactions) : { invoices: allInvoices, transactions: allTransactions };
+  const { invoices, transactions } = ownOnly(allInvoices, allTransactions);
 
   return {
     asOf: asOf.toISOString(),

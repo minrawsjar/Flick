@@ -188,6 +188,7 @@ export function Reveal({ children, className = "" }: { children: ReactNode; clas
 export function useOnScreen(box: React.RefObject<HTMLElement | null>, start: () => void) {
   const onSeen = useEffectEvent(start);
   useEffect(() => {
+    if (!box.current) return;
     const seen = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting) {
@@ -197,7 +198,7 @@ export function useOnScreen(box: React.RefObject<HTMLElement | null>, start: () 
       },
       { threshold: 0.3 },
     );
-    seen.observe(box.current!);
+    seen.observe(box.current);
     return () => seen.disconnect();
   }, [box]);
 }

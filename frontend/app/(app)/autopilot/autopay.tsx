@@ -15,7 +15,7 @@ export function Autopay() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [cap, setCap] = useState<string>();
-  // Only for your own week: the sample week above is a walkthrough.
+  // Once there is a week of your own to pay, or PayPal is saved for it.
   if (mode !== "live" || !state || (!state.week.payments.length && !state.autopay)) return null;
 
   const run = async (work: () => Promise<unknown>) => {

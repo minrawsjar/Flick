@@ -4,9 +4,10 @@
 //
 // 1. Every page at phone size (light and dark) and desktop size: no console errors, uncaught
 //    exceptions or failed requests, nothing wider than the screen, and its content there.
-// 2. What a person does, on a phone: the tab bar and switches, the theme, Today's inbox, Lens
-//    reading a sample bill and opening PayPal, Autopilot's days, Scout reading a list, Splitter's
-//    sentence and requests, Nudge's tones, Friends, Ask Flick, the install page, Money Studio.
+// 2. What a person does, on a phone: the tab bar and switches, the theme, Today's inbox, a new
+//    Flick with nothing made up in it, Lens reading a bill and opening PayPal, Autopilot's days,
+//    Scout reading a list, Splitter's items, sentence and requests, Nudge's tones, Friends, Ask
+//    Flick, the install page, Money Studio.
 // 3. The installed app: installable, the service worker in charge, opening offline, a photo
 //    shared to Flick read by Lens, and a notification through a real push service.
 // 4. With SANDBOX_BUYER_EMAIL / SANDBOX_BUYER_PASSWORD in backend/.env: paying a bill on PayPal's
@@ -210,6 +211,13 @@ async function snapToPay(lines, amount) {
   await waitFor(`[...document.querySelectorAll('button')].some((b) => b.innerText.trim().startsWith(${JSON.stringify(`Pay ${amount}`)}) && !b.disabled)`, 30_000, `a Pay ${amount} button`);
   return (await state()).scans[0];
 }
+/** Adds an item to a bill on Splitter, as typed in its form. */
+async function addItem(name, price) {
+  await fill("input[aria-label='Item']", name);
+  await fill("input[aria-label='Price']", price);
+  await js("[...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Add').click()");
+  await waitFor(`document.body.innerText.includes(${JSON.stringify(name)})`, 5_000, `${name} on the bill`);
+}
 const clickPay = (amount) => js(`[...document.querySelectorAll('button')].find((b) => b.innerText.trim().startsWith(${JSON.stringify(`Pay ${amount}`)})).click()`);
 /** This browser's session cookie: its workspace. */
 const session = async () => (await cdp("Network.getCookies", { urls: [SITE] })).result.cookies.find((c) => c.name === "flick")?.value;
@@ -315,15 +323,13 @@ await step("a new browser has its own Flick: an empty workspace, and Today says 
   await waitFor("document.body.innerText.includes('Nothing planned this week') && document.body.innerText.includes('Scout learns what you buy')", 10_000, "Today, empty");
 });
 
-await step("Lens: a sample is a walkthrough, and nothing is read or charged", async () => {
+await step("Lens: a new Flick shows nothing made up: no sample bills, just how to start", async () => {
   await open("/lens");
-  await click("Electricity bill");
-  await waitFor("[...document.querySelectorAll('button')].some((b) => b.innerText.trim() === 'Pay $64.20 with PayPal')", 15_000, "the sample's Pay button");
-  await click("Pay $64.20 with PayPal");
-  await waitFor("document.body.innerText.includes('Autopilot pays it every month now')", 15_000, "the sample, paid");
-  check((await js("location.origin")) === SITE, "the sample left Flick");
+  const t = await textOf();
+  check(t.includes("Nothing read yet") && t.includes("Upload an e-bill"), "no empty state");
+  check(!t.includes("Electricity bill") && !t.includes("Or watch a sample") && !t.includes("$64.20"), "a sample bill is on the page");
   const s = await state();
-  check(!s.scans.length && !Object.keys(s.checkouts).length, "the sample made a scan or a checkout");
+  check(!s.scans.length && !Object.keys(s.checkouts).length, "the page made a scan or a checkout");
 });
 
 await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through PayPal, or splits", async () => {
@@ -347,7 +353,7 @@ await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through Pa
   // Split goes to Splitter with the items, in USD, saying so.
   await click("Split it with friends");
   await waitFor("location.pathname === '/split' && document.body.innerText.includes('₹756.00 on the receipt')", 15_000, "Splitter, with the receipt converted");
-  check((await textOf()).includes("These are sample friends"), "no friends of your own, but Splitter doesn't say they're samples");
+  check((await textOf()).includes("No friends yet") && !(await textOf()).includes("Maya"), "no friends of your own, but Splitter shows some");
   // Back on Lens, the newest scan is the receipt, ready to pay.
   await open("/lens");
   // Pay opens "Flick to pay"; Not now cancels the PayPal checkout, and the bill is ready to pay again.
@@ -371,15 +377,11 @@ await step("Lens: a restaurant bill in rupees shows ₹, pays its USD through Pa
   return `${scan.title}: ₹756.00 → $${scan.amount.toFixed(2)}, flicked to PayPal`;
 });
 
-await step("Autopilot: the sample week is a walkthrough; nothing is approved or charged", async () => {
+await step("Autopilot: a new Flick's week is empty, and says how to fill it", async () => {
   await open("/autopilot");
-  check((await textOf()).includes("This is a sample week"), "doesn't say it's a sample");
-  check(!(await textOf()).includes("Approve and save PayPal"), "the save-PayPal offer is on the sample");
-  await click("Approve with PayPal");
-  await waitFor("document.body.innerText.includes('Approved ·')", 10_000, "the sample, approved");
-  await click("Next day");
-  const s = await state();
-  check((await js("location.origin")) === SITE && !s.week.payments.length && !s.week.approval && !Object.values(s.checkouts).some((c) => c.kind === "week"), "the sample touched the workspace or PayPal");
+  const t = await textOf();
+  check(t.includes("Nothing planned this week yet") && t.includes("Nothing to approve this week"), "no empty week");
+  check(!t.includes("City Power") && !t.includes("This is a sample week") && !t.includes("Approve with PayPal"), "a sample week is on the page");
 });
 
 await step("Autopilot: a bill you snap that's due this week makes your own week, approved on PayPal", async () => {
@@ -402,35 +404,40 @@ await step("Autopilot: a bill you snap that's due this week makes your own week,
   return `${planned[0].payee} $${planned[0].amount.toFixed(2)} on ${planned[0].day}`;
 });
 
-await step("Scout: a sample shop for a new workspace; a sample list is read with AI, and buying it is a walkthrough", async () => {
+await step("Scout: no usuals yet says so; a list you snap is read with AI, priced at every store", async () => {
   await open("/scout", 3500);
-  check((await textOf()).includes("A sample shop: nothing is bought"), "doesn't say the shop is a sample");
-  await click("Try a list");
+  let t = await textOf();
+  check(t.includes("No usuals yet") && !t.includes("A sample shop") && !t.includes("Try a list"), "a sample shop or list is on the page");
+  await snap([["Shopping", 38], ["- milk", 32], ["- cornflakes x2", 32], ["- eggs", 32], ["- coffee beans", 32], ["- bananas", 32], ["- avocados", 32]]);
   await waitFor("[...document.querySelectorAll('button')].some((b) => /^Buy \\d+ at /.test(b.innerText.trim()))", 90_000, "a Buy button");
   // Avocados are only in the photo, and not in Scout's catalog: proof the list was read.
-  const t = await textOf();
+  t = await textOf();
   check(/avocados/i.test(t) && t.includes("Not tracked") && /cornflakes ×2|cornflakes x2/i.test(t), "the list wasn't read item by item");
-  await js("[...document.querySelectorAll('button')].find((b) => /^Buy \\d+ at /.test(b.innerText.trim())).click()");
-  await waitFor("document.body.innerText.includes('A sample list, so nothing is bought')", 5_000, "the sample list, bought as a walkthrough");
-  check((await js("location.origin")) === SITE && !Object.values((await state()).checkouts).some((c) => c.kind === "basket"), "the sample list was bought");
+  check(!Object.values((await state()).checkouts).some((c) => c.kind === "basket"), "reading the list bought it");
   await js(`document.querySelector('.ag-row[row-id=eggs]')?.click()`);
   await waitFor("[...document.querySelectorAll('p')].some((p) => p.innerText.startsWith('Eggs'))", 5_000, "Eggs in the detail");
 });
 
-await step("Splitter: with sample friends it's a walkthrough, and nothing is sent", async () => {
+await step("Splitter: a new Flick has no made-up bill or friends; what was on the bill goes in by hand", async () => {
   await open("/split", 3000);
-  check((await textOf()).includes("These are sample friends"), "doesn't say the friends are samples");
-  await click("Send 3 PayPal requests");
-  await sleep(4000);
-  check(!(await state()).debts.length, "the sample sent requests");
+  const t = await textOf();
+  check(t.includes("Nothing to split yet") && t.includes("No friends yet"), "no empty bill");
+  check(!t.includes("Nori Sushi") && !t.includes("Salmon roll") && !t.includes("Maya"), "a sample bill or friends are on the page");
+  await addItem("Pizza", "24");
+  check((await textOf()).includes("Pizza") && (await textOf()).includes("Add a friend first"), "the item didn't go in, or Splitter would send with no friends");
+  check(!(await state()).debts.length, "something was sent");
 });
 
 await step("Splitter: with your own friends, a sentence ticks the grid (AI), then real PayPal requests go out", async () => {
   for (const name of ["Maya", "Leo", "Priya"]) await asMe("friends/add", { name, email: `${name.toLowerCase()}@flick.example.com` });
   await open("/split", 3000);
-  check(!(await textOf()).includes("These are sample friends"), "still the sample friends");
+  check(!(await textOf()).includes("No friends yet"), "your friends aren't in the grid");
+  await fill("input[aria-label='What the bill was for']", "Dinner at Nori");
+  await addItem("Salmon roll", "14");
+  await addItem("Miso soup", "7");
+  await addItem("Green tea", "16");
   await fill("textarea, input[placeholder^='Or just say it']", "Maya and I shared everything, Leo had the tea");
-  check((await textOf()).includes("Send 3 PayPal requests"), "the demo receipt isn't split three ways to start");
+  check((await textOf()).includes("Send 3 PayPal requests"), "the bill isn't split three ways to start");
   await click("Tick it for me");
   // While the AI ticks, sending waits; then only Maya and Leo owe anything.
   check(await js("[...document.querySelectorAll('button')].find((b) => /^Send \\d PayPal request/.test(b.innerText.trim()))?.disabled"), "Send stays live while the AI is ticking");

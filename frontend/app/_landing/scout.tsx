@@ -323,15 +323,11 @@ export function Scout() {
           ) : data?.products.some((p) => p.usual) ? (
             <p className="px-6 pt-24 text-center text-[13px] text-secondary">Nothing&apos;s due. Scout lists your usuals here the day they are.</p>
           ) : (
-            // No usuals of your own yet: last Sunday's example, as a walkthrough.
-            <ScoutScreen screen={demoScreen} />
+            <p className="px-6 pt-24 text-center text-[13px] leading-[1.45] text-secondary">
+              No usuals yet. Snap a shopping list, or a grocery receipt with Lens, and Scout learns what you buy again and again.
+            </p>
           )}
         </Phone>
-        {data && !screen && !data.products.some((p) => p.usual) && (
-          <p className="max-w-[262px] text-center text-[12px] leading-4 text-secondary">
-            A sample shop: nothing is bought. Snap a shopping list, or a grocery receipt with Lens, and Scout learns your usuals.
-          </p>
-        )}
         {error && <p className="max-w-[262px] text-center text-[12px] leading-4 text-wait">{error}</p>}
       </div>
 
@@ -540,38 +536,15 @@ type Read = {
   quotes: Quote[];
 };
 
-/** A shopping list, written out, for trying Scout without a photo. */
-async function sampleList(): Promise<string> {
-  const canvas = document.createElement("canvas");
-  canvas.width = 600;
-  canvas.height = 760;
-  const g = canvas.getContext("2d")!;
-  g.fillStyle = "#e9e1cf";
-  g.fillRect(0, 0, 600, 760);
-  g.translate(300, 380);
-  g.rotate(-0.03);
-  g.fillStyle = "#fffef6";
-  g.fillRect(-220, -330, 440, 660);
-  g.fillStyle = "#1d3a8a";
-  g.font = "38px 'Marker Felt', 'Comic Sans MS', 'Segoe Print', cursive";
-  ["Shopping", "– milk", "– cornflakes x2", "– eggs", "– coffee beans", "– bananas", "– olive oil", "– avocados"].forEach((line, i) => g.fillText(line, -180, -250 + i * 72));
-  return canvas.toDataURL("image/jpeg", 0.9);
-}
-
 function Snap({ data, live, onBuy, buying }: { data: ScoutView; live: boolean; onBuy: (store: string, items: Item[]) => void; buying: boolean }) {
   const [read, setRead] = useState<Read>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  // "Try a list" reads a sample list for real, but buying it is a walkthrough: nothing is bought.
-  const [sample, setSample] = useState(false);
-  const [mockBought, setMockBought] = useState(false);
   const ready = live && data.config.ai;
 
-  const send = async (image: string, isSample = false) => {
+  const send = async (image: string) => {
     setBusy(true);
     setError(undefined);
-    setSample(isSample);
-    setMockBought(false);
     try {
       setRead(await post<Read>("read", { image }));
     } catch (err) {
@@ -589,14 +562,11 @@ function Snap({ data, live, onBuy, buying }: { data: ScoutView; live: boolean; o
       <p className="flex items-center gap-1.5 text-[13px] text-secondary">
         <Bot {...agents.scout} size={18} mood={busy ? "speaking" : "idle"} /> Snap a shelf, your fridge, a cart or a list
       </p>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-3 grid grid-cols-1 gap-2">
         <label className={`pressable flex h-10 items-center justify-center gap-1.5 rounded-full bg-ink text-[13px] text-on-ink ${ready && !busy ? "cursor-pointer" : "pointer-events-none opacity-40"}`}>
           <Camera size={15} /> Snap
           <input type="file" accept="image/*" className="sr-only" disabled={!ready || busy} onChange={(e) => e.target.files?.[0] && void shrink(e.target.files[0]).then((image) => send(image))} />
         </label>
-        <button type="button" disabled={!ready || busy} onClick={() => void sampleList().then((image) => send(image, true))} className="pressable h-10 cursor-pointer rounded-full bg-raised text-[13px] disabled:cursor-default disabled:opacity-40">
-          Try a list
-        </button>
       </div>
       {!ready && <p className="mt-2 text-[12px] text-secondary">Reading photos needs the live backend with AI on.</p>}
       {busy && (
@@ -642,14 +612,11 @@ function Snap({ data, live, onBuy, buying }: { data: ScoutView; live: boolean; o
           {best && (
             <Primary
               className="mt-3"
-              disabled={buying || mockBought}
-              onClick={() => (sample ? setMockBought(true) : onBuy(best.storeId, best.lines.map((l) => ({ productId: l.productId, qty: l.qty }))))}
+              disabled={buying}
+              onClick={() => onBuy(best.storeId, best.lines.map((l) => ({ productId: l.productId, qty: l.qty })))}
             >
               <ShoppingBasket size={14} /> Buy {best.lines.length} at {store(best.storeId).name} · {usd(best.total)}
             </Primary>
-          )}
-          {mockBought && (
-            <p className="rise mt-1.5 text-center text-[12px] leading-4 text-paid">A sample list, so nothing is bought. Snap your own list, and Scout buys it through PayPal.</p>
           )}
           {best && read.items.some((i) => !i.productId) && (
             <p className="mt-1.5 text-center text-[11px] text-secondary">

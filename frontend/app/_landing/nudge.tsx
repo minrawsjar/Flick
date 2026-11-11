@@ -2,6 +2,7 @@
 
 import type { Debt } from "@backend/model";
 import { Check, LoaderCircle, RefreshCw, Send } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Bot, type BotColor, type BotShape } from "@/components/bot";
 import { Phone } from "@/components/phone";
@@ -85,9 +86,10 @@ function liveDebtors(state: LiveState): Debtor[] {
 
 export function Nudge() {
   const live = useLive();
-  // What your friends owe you once you've split something; until then sample requests, and nothing is sent.
-  const isLive = live.mode === "live" && Boolean(live.state?.debts.length);
-  const debtors = isLive ? liveDebtors(live.state!) : demoDebtors;
+  // What your friends owe you, even nothing yet. The sample requests are the one-pager's, or the
+  // fallback when the backend is out of reach.
+  const isLive = live.mode === "live";
+  const debtors = live.mode === "demo" ? demoDebtors : live.state ? liveDebtors(live.state) : [];
 
   const [index, setIndex] = useState(0);
   const [tone, setTone] = useState<Tone>("Friendly");
@@ -163,12 +165,23 @@ export function Nudge() {
     }
   };
 
+  // Inside `box`, so Nudge starts once it's seen, and drafts as soon as someone owes you.
   if (!who)
     return (
-      <Tile className="mx-auto max-w-md text-center">
-        <p className="text-[15px]">Nobody owes you anything right now.</p>
-        <p className="mt-1 text-[13px] text-secondary">Split a bill above, and anyone who hasn&apos;t paid shows up here.</p>
-      </Tile>
+      <div ref={box}>
+        <Tile className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
+          <Bot {...agents.nudge} size={40} mood="idle" />
+          <p className="text-[15px]">{live.mode === "loading" ? "Loading…" : "Nobody owes you anything right now."}</p>
+          {live.mode !== "loading" && (
+            <>
+              <p className="text-[13px] leading-[1.45] text-secondary">Split a bill with your friends, and anyone who hasn&apos;t paid shows up here, for Nudge to remind.</p>
+              <Link href="/split" className="pressable flex h-10 items-center rounded-full bg-ink px-4 text-[14px] text-on-ink">
+                Split a bill
+              </Link>
+            </>
+          )}
+        </Tile>
+      </div>
     );
 
   return (
@@ -238,9 +251,7 @@ export function Nudge() {
               ? drafts[key]?.by === "template"
                 ? "AI is off, so this one is from a template. Nothing is sent until you tap."
                 : "Written by the AI model for this friend and what it was for. Nothing is sent until you tap."
-              : live.mode === "live"
-                ? "A sample: nothing is sent. Split a bill with your friends, and Nudge follows up here on what they owe you."
-                : "Nudge writes each reminder for the person and what it was for. Nothing is sent until you tap."}
+              : "Nudge writes each reminder for the person and what it was for. Nothing is sent until you tap."}
           </p>
           {error && <p className="mt-2 text-[12px] leading-4 text-wait">{error}</p>}
           <div className="mt-auto flex gap-2 pt-4">

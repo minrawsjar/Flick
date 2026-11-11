@@ -145,9 +145,12 @@ export function LensScreen({
   onRecurring,
   photo,
   hint,
+  blank = false,
 }: {
   sample: Sample;
   stage: LensStage;
+  /** Nothing of yours to show yet: the viewfinder alone, no drawn sample. */
+  blank?: boolean;
   /** A real photo to show instead of the drawn sample. */
   photo?: string;
   /** Replaces the camera's hint, e.g. with an error. */
@@ -182,7 +185,7 @@ export function LensScreen({
               // A data URL from the person's own camera; next/image adds nothing here.
               // eslint-disable-next-line @next/next/no-img-element
               <img src={photo} alt="" className="max-h-[78%] max-w-[78%] rounded-md object-contain shadow-[0_6px_14px_rgba(0,0,0,0.35)]" />
-            ) : (
+            ) : blank ? null : (
               <div className="-rotate-3">
                 <Doc kind={sample.kind} width={128} />
               </div>
@@ -524,6 +527,10 @@ export function Snap() {
   };
 
   const { sample } = current;
+  // The working page: only what you snap or upload. The samples are the one-pager's (and the
+  // fallback when the backend is out of reach).
+  const own = live.mode !== "demo";
+  const blank = own && !current.scan && !current.photo;
   const payee = current.scan?.payeeId ? live.state?.payees.find((p) => p.id === current.scan?.payeeId) : undefined;
   const done = sample.kind === "bill" && !recurring && !current.scan ? "Paid with PayPal" : sample.done;
   const recent = live.mode === "live" ? (live.state?.scans ?? []).filter((s) => s.kind !== "unknown").slice(0, RECENT) : [];
@@ -541,6 +548,7 @@ export function Snap() {
           onRecurring={setRecurring}
           photo={current.photo}
           hint={error ? "Lens couldn't read that. Try another photo." : undefined}
+          blank={blank}
         />
       </Phone>
 
@@ -566,26 +574,28 @@ export function Snap() {
           </p>
           {error && <p className="mt-2 text-center text-[12px] leading-4 text-wait">{error}</p>}
 
-          <p className="mt-4 text-[13px] text-secondary">Or watch a sample. Nothing is charged.</p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {samples.map((s) => {
-              const on = current.sample.kind === s.kind && !current.scan && !current.photo;
-              return (
-                <button
-                  key={s.kind}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => tapSample(s)}
-                  className={`pressable flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl p-2.5 transition-colors ${on ? "bg-ink text-on-ink" : "bg-raised"}`}
-                >
-                  <span className="flex h-[52px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_50%_40%,#4a4033,#1f1b16_80%)]">
-                    <Doc kind={s.kind} width={34} />
-                  </span>
-                  <span className="text-[12px]">{s.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          {!own && <p className="mt-4 text-[13px] text-secondary">Or watch a sample. Nothing is charged.</p>}
+          {!own && (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {samples.map((s) => {
+                const on = current.sample.kind === s.kind && !current.scan && !current.photo;
+                return (
+                  <button
+                    key={s.kind}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => tapSample(s)}
+                    className={`pressable flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl p-2.5 transition-colors ${on ? "bg-ink text-on-ink" : "bg-raised"}`}
+                  >
+                    <span className="flex h-[52px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_50%_40%,#4a4033,#1f1b16_80%)]">
+                      <Doc kind={s.kind} width={34} />
+                    </span>
+                    <span className="text-[12px]">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Tile>
 
         <Tile>
@@ -595,8 +605,11 @@ export function Snap() {
             </span>
             {currentStage === "scanning" && <LoaderCircle size={13} className="spinner" />}
           </p>
+          {blank && currentStage !== "scanning" && (
+            <p className="mt-3 text-[13px] leading-[1.45] text-secondary">Nothing read yet. Snap a bill, a receipt, a price tag or a tip jar, or upload an e-bill, and what Lens reads shows here.</p>
+          )}
           <dl className="mt-3 divide-y divide-separator/50 font-mono text-[12px]">
-            {sample.fields.map(([k, v], i) => (
+            {!blank && sample.fields.map(([k, v], i) => (
               <div
                 key={`${run}-${k}-${i}`}
                 className="flex justify-between gap-3 py-1.5 transition-[opacity,transform] duration-300"
@@ -617,7 +630,7 @@ export function Snap() {
         <Tile className="md:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[13px] text-secondary">
-              {current.scan ? "How it gets paid, through PayPal's sandbox. Each step shows in Money Studio." : "How it gets paid. This is a sample: nothing is charged."}
+              {current.scan ? "How it gets paid, through PayPal's sandbox. Each step shows in Money Studio." : own ? "How it gets paid: once Lens has read something, each PayPal step lights up here." : "How it gets paid. This is a sample: nothing is charged."}
             </p>
             {currentStage === "read" && sample.action && (
               <button type="button" onClick={() => void pay()} className="pressable cursor-pointer rounded-full bg-ink px-3 py-1 text-[12px] text-on-ink">
@@ -627,7 +640,7 @@ export function Snap() {
             {currentStage === "paying" && current.scan && <span className="text-[12px] text-secondary">Opening PayPal…</span>}
             {currentStage === "paid" && <span className="rise text-[12px] text-paid">{done}</span>}
           </div>
-          <Wire steps={sample.wire} at={wireAt} />
+          {!blank && <Wire steps={sample.wire} at={wireAt} />}
         </Tile>
 
         {recent.length > 0 && <RecentScans scans={recent} open={open} on={current.scan?.id} />}

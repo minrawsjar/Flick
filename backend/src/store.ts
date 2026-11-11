@@ -66,8 +66,6 @@ export function findWorkspace(has: (state: State) => boolean): string | undefine
 
 /** Runs `work` in a workspace: everything it does to `state` is that workspace's. */
 export const inWorkspace = <T>(workspaceId: string, work: () => T): T => current.run(open(workspaceId), work);
-/** Runs `work` on a throwaway copy of the demo seed (Money Studio's sample, before you've paid anything). */
-export const inSample = <T>(work: () => T): T => current.run({ id: 'sample', state: seed() }, work);
 
 const here = () => current.getStore() ?? open('local');
 export const workspaceId = () => here().id;
@@ -87,7 +85,6 @@ export const state = new Proxy({} as State, {
 /** Writes the workspace to disk; call after every change. Atomic, so a crash never leaves half a file. */
 export function save() {
   const { id: workspaceId, state: data } = here();
-  if (workspaceId === 'sample') return;
   const file = fileOf(workspaceId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(`${file}.tmp`, JSON.stringify(data, null, 2));

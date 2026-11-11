@@ -1,7 +1,8 @@
 "use client";
 
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Check, Coffee, LoaderCircle, Receipt, RotateCcw, ShoppingBag, ShoppingCart, Smartphone, Trophy, Users, Zap, type LucideIcon } from "lucide-react";
+import { Check, Coffee, LoaderCircle, Receipt, RotateCcw, ScanLine, ShoppingBag, ShoppingCart, Smartphone, Trophy, Users, Zap, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { Unusual } from "@backend/model";
 import { Bot } from "@/components/bot";
@@ -111,6 +112,7 @@ export function WeekScreen({ rows, approved, today, approving, onApprove }: { ro
         <Meter label="Weekly cap" used={sum} of={WEEKLY_CAP} />
       </div>
       <p className="px-6 pb-1 pt-2.5 text-[10px] uppercase tracking-wide text-secondary">Planned</p>
+      {!rows.length && <p className="mx-3 rounded-card bg-card px-3 py-2.5 text-[12px] leading-4 text-secondary">Snap a bill with Lens: one due this week lands here.</p>}
       <div className="mx-3 divide-y divide-separator/50 rounded-card bg-card">
         {rows.map((p) => (
           <div key={p.id} className="flex items-center gap-2 px-2.5 py-1">
@@ -287,8 +289,8 @@ function useLiveWeek(state: LiveState | null): WeekDriver | null {
 export function Autopilot() {
   const live = useLive();
   const demo = useDemoWeek();
-  // Your own week once Autopilot has planned one; until then the sample week, as a walkthrough.
-  const real = useLiveWeek(live.mode === "live" && live.state?.week.payments.length ? live.state : null);
+  // Your own week, even an empty one: the sample week is only the one-pager's, or when the backend is out of reach.
+  const real = useLiveWeek(live.mode === "live" ? live.state : null);
   const w = real ?? demo;
   // Each row carries the status it shows. Worked out in the grid instead, a new week could arrive
   // before the new day reached its columns, and keep the old day's statuses.
@@ -330,13 +332,26 @@ export function Autopilot() {
       <div className="grid w-full min-w-0 gap-3 md:grid-cols-2">
         <Tile className="md:col-span-2">
           <p className="mb-3 text-[13px] text-secondary">The plan, in AG Grid. Tap an amount or a day to change it, until you approve.</p>
-          <Grid<Row>
-            rowData={rows}
-            columnDefs={columns}
-            getRowId={({ data }) => data.id}
-            onCellValueChanged={({ data, colDef }) => w.edit(data.id, colDef.field === "amount" ? { amount: Number(data.amount) } : { day: data.day })}
-            stopEditingWhenCellsLoseFocus
-          />
+          {w.live && !rows.length ? (
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-raised px-6 py-10 text-center">
+              <Bot {...agents.autopilot} size={40} mood="idle" />
+              <p className="max-w-md text-[15px] leading-[1.45]">Nothing planned this week yet.</p>
+              <p className="max-w-md text-[13px] leading-[1.45] text-secondary">
+                Autopilot plans from what it sees you pay: a bill Lens reads that falls due this week, a bill you ask it to pay every month, and anything you pay week after week.
+              </p>
+              <Link href="/lens" className="pressable flex h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-[14px] text-on-ink">
+                <ScanLine size={15} /> Snap a bill
+              </Link>
+            </div>
+          ) : (
+            <Grid<Row>
+              rowData={rows}
+              columnDefs={columns}
+              getRowId={({ data }) => data.id}
+              onCellValueChanged={({ data, colDef }) => w.edit(data.id, colDef.field === "amount" ? { amount: Number(data.amount) } : { day: data.day })}
+              stopEditingWhenCellsLoseFocus
+            />
+          )}
           {w.error && <p className="mt-2 text-[12px] text-wait">{w.error}</p>}
         </Tile>
 
@@ -347,11 +362,6 @@ export function Autopilot() {
           </p>
           {w.live && !w.approved && sum > 0 && (
             <p className="mt-2 text-[12px] leading-4 text-secondary">Opens PayPal&apos;s sandbox: sign in with your sandbox personal account to approve.</p>
-          )}
-          {!w.live && live.mode === "live" && (
-            <p className="mt-2 text-[12px] leading-4 text-secondary">
-              This is a sample week: nothing is charged. For your own, snap a bill with Lens: one due this week shows up here, ready to approve.
-            </p>
           )}
           <div className="mt-auto pt-4">
             {w.approved ? (

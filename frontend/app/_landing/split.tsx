@@ -3,7 +3,7 @@
 import type { Debt, Scan } from "@backend/model";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import type { CustomHeaderProps } from "ag-grid-react";
-import { ArrowUpRight, Check, CircleCheck, Equal, LoaderCircle, MessageCircle, Sparkles, UserPlus, X } from "lucide-react";
+import { ArrowUpRight, Check, CircleCheck, Equal, LoaderCircle, MessageCircle, Plus, ScanLine, Sparkles, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { Bot, type BotColor, type BotShape } from "@/components/bot";
@@ -29,6 +29,8 @@ type Bill = { merchant: string; items: Item[]; tax: number; tip: number; scanned
 
 const demoSubtotal = receipt.reduce((sum, i) => sum + i.price, 0);
 const demoBill: Bill = { merchant: "Nori Sushi", items: receipt, tax: cents(demoSubtotal * TAX), tip: cents(demoSubtotal * TIP), scanned: false };
+/** No receipt from Lens: a bill you fill in yourself, item by item. */
+const emptyBill: Bill = { merchant: "", items: [], tax: 0, tip: 0, scanned: false };
 
 /** A receipt Lens read: everyone starts with a tick on every item. */
 const billFrom = (scan: Scan, people: Friend[]): Bill => ({
@@ -112,7 +114,7 @@ const gone = (s: Sending[string] | undefined) => s === "sent" || s === "chat" ||
 
 /** Splitter on the phone: the shares, and the requests going out. */
 /** `busy`: the shares are about to change (the AI is ticking the grid), so sending waits. */
-function SplitScreen({ merchant, people, each, total, nobody, status, onSend, busy = false }: { merchant: string; people: Friend[]; each: Record<string, number>; total: number; nobody: Item[]; status: Sending; onSend: () => void; busy?: boolean }) {
+function SplitScreen({ merchant, people, each, total, nobody, status, onSend, busy = false, empty = false }: { merchant: string; people: Friend[]; each: Record<string, number>; total: number; nobody: Item[]; empty?: boolean; status: Sending; onSend: () => void; busy?: boolean }) {
   const friends = people.filter((p) => p.id !== "you");
   const asked = friends.filter((f) => each[f.id] > 0);
   const sent = asked.filter((f) => gone(status[f.id]));
@@ -124,12 +126,15 @@ function SplitScreen({ merchant, people, each, total, nobody, status, onSend, bu
       <Speaking agent={agents.splitter} label="Splitter" />
       <div className="flex flex-1 flex-col justify-end gap-2 overflow-hidden px-3">
         <Bubble from="you">
-          Split {merchant} with {names(friends)}.
+          Split {merchant || "a bill"}
+          {friends.length ? ` with ${names(friends)}` : ""}.
         </Bubble>
         <Bubble from="agent">
           {!friends.length
             ? "Add a friend first, with their PayPal email."
-            : nobody.length
+            : empty
+              ? "Snap the receipt with Lens, or add what was on the bill."
+              : nobody.length
               ? `Nobody has the ${nobody.map((i) => i.name.toLowerCase()).join(" or ")} yet. Tick who had it.`
               : `${usd(total)} with tax and tip. Here's each share:`}
         </Bubble>
@@ -179,8 +184,20 @@ function SplitScreen({ merchant, people, each, total, nobody, status, onSend, bu
 }
 
 /** `sample`: a live page with no friends of your own yet, so this is a walkthrough with sample friends. */
-function SplitBill({ bill, live, people, sample = false }: { bill: Bill; live: boolean; people: Friend[]; sample?: boolean }) {
+function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: Friend[] }) {
   const [items, setItems] = useState(bill.items);
+  // A bill without a receipt: what it was, and the item being added.
+  const [what, setWhat] = useState("");
+  const [adding, setAdding] = useState({ name: "", price: "" });
+  const merchant = bill.merchant || what.trim() || "A shared bill";
+  const manual = live && !bill.scanned;
+  const addItem = () => {
+    const price = Number(adding.price);
+    if (!adding.name.trim() || !(price > 0)) return;
+    setItems((all) => [...all, { id: `item${Date.now()}`, name: adding.name.trim(), price: cents(price), ...Object.fromEntries(people.map((p) => [p.id, true])) }]);
+    setAdding({ name: "", price: "" });
+    fresh();
+  };
   const [status, setStatus] = useState<Sending>({});
   const [links, setLinks] = useState<{ name: string; url?: string; amount: number; chat?: string; paid?: boolean }[]>([]);
   const [error, setError] = useState<string>();
@@ -248,7 +265,7 @@ function SplitBill({ bill, live, people, sample = false }: { bill: Bill; live: b
     }
     try {
       const result = await act<{ debts: Debt[]; failed: { friendId: string; error: string }[] }>("split", {
-        merchant: bill.merchant,
+        merchant,
         items: items.map((i) => ({ name: i.name, price: i.price, people: people.filter((p) => had(i, p.id)).map((p) => p.id) })),
         tax: bill.tax,
         tip: bill.tip,
@@ -280,19 +297,19 @@ function SplitBill({ bill, live, people, sample = false }: { bill: Bill; live: b
               <button type="button" onClick={() => tickAll(false)} className="pressable cursor-pointer rounded-full bg-raised px-3 py-1 text-[12px]">
                 Clear ticks
               </button>
-              {(live || sample) && (
+              {live && (
                 <Link href="/friends" className="pressable flex items-center gap-1 rounded-full bg-raised px-3 py-1 text-[12px]">
                   <UserPlus size={13} /> Add friends
                 </Link>
               )}
             </span>
           </div>
-          {sample && (
+          {live && people.length < 2 && (
             <p className="mb-3 text-[12px] leading-4 text-secondary">
-              These are sample friends, so nothing is sent. Add your own by their PayPal email, and they get real PayPal requests for their share.
+              No friends yet. Add one by their PayPal email, and they get their share in Flick Chat, or as a PayPal invoice.
             </p>
           )}
-          {live && (
+          {live && items.length > 0 && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -313,7 +330,55 @@ function SplitBill({ bill, live, people, sample = false }: { bill: Bill; live: b
               </button>
             </form>
           )}
-          <Grid<Item> rowData={items} columnDefs={columns} getRowId={({ data }) => data.id} pinnedBottomRowData={totals} context={context} headerHeight={52} />
+          {items.length > 0 ? (
+            <Grid<Item> rowData={items} columnDefs={columns} getRowId={({ data }) => data.id} pinnedBottomRowData={totals} context={context} headerHeight={52} />
+          ) : (
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-raised px-6 py-8 text-center">
+              <p className="max-w-md text-[14px] leading-[1.45] text-secondary">Nothing to split yet. Snap the receipt with Lens and it lands here, item by item, or add what was on the bill below.</p>
+              <Link href="/lens" className="pressable flex h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-[14px] text-on-ink">
+                <ScanLine size={15} /> Snap a receipt
+              </Link>
+            </div>
+          )}
+          {manual && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                addItem();
+              }}
+              className="mt-3 flex flex-wrap gap-2"
+            >
+              {items.length === 0 && (
+                <input
+                  value={what}
+                  onChange={(e) => setWhat(e.target.value)}
+                  placeholder="What was it? Dinner at Nori"
+                  maxLength={80}
+                  aria-label="What the bill was for"
+                  className="h-10 w-full rounded-full bg-raised px-4 text-[14px] outline-none ring-1 ring-separator/60 focus:ring-2 focus:ring-ink"
+                />
+              )}
+              <input
+                value={adding.name}
+                onChange={(e) => setAdding((a) => ({ ...a, name: e.target.value }))}
+                placeholder="An item: Pizza"
+                maxLength={80}
+                aria-label="Item"
+                className="h-10 min-w-0 flex-1 rounded-full bg-raised px-4 text-[14px] outline-none ring-1 ring-separator/60 focus:ring-2 focus:ring-ink"
+              />
+              <input
+                value={adding.price}
+                onChange={(e) => setAdding((a) => ({ ...a, price: e.target.value }))}
+                placeholder="Price"
+                inputMode="decimal"
+                aria-label="Price"
+                className="h-10 w-24 rounded-full bg-raised px-4 text-[14px] tabular-nums outline-none ring-1 ring-separator/60 focus:ring-2 focus:ring-ink"
+              />
+              <button type="submit" disabled={!adding.name.trim() || !(Number(adding.price) > 0)} className="pressable flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-ink px-4 text-[13px] text-on-ink disabled:opacity-40">
+                <Plus size={14} /> Add
+              </button>
+            </form>
+          )}
           {error && <p className="mt-2 text-[12px] text-wait">{error}</p>}
           {links.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -352,7 +417,7 @@ function SplitBill({ bill, live, people, sample = false }: { bill: Bill; live: b
       </div>
       <div className="order-1 lg:order-2">
         <Phone width={262} background="var(--color-page)">
-          <SplitScreen merchant={bill.merchant} people={people} each={each} total={total} nobody={nobody} status={status} onSend={() => void send()} busy={assigning} />
+          <SplitScreen merchant={live ? (bill.merchant || what.trim()) : bill.merchant} people={people} each={each} total={total} nobody={nobody} status={status} onSend={() => void send()} busy={assigning} empty={!items.length} />
         </Phone>
       </div>
     </div>
@@ -423,15 +488,15 @@ function YourSplits() {
 
 export function Split() {
   const live = useLive();
-  // Your own friends once you've added some; until then sample friends, and nothing is sent.
-  const state = live.mode === "live" && live.state?.friends.length ? live.state : null;
+  // Your own friends and bills, even none yet. The sample bill and friends are the one-pager's, or
+  // the fallback when the backend is out of reach.
+  const demo = live.mode === "demo";
+  const friends = live.state?.friends;
   const people = useMemo<Friend[]>(
-    () => [you, ...(state ? state.friends.map((f) => ({ id: f.id, name: f.name, color: f.color as BotColor, shape: f.shape as BotShape })) : demoFriends)],
-    [state],
+    () => [you, ...(demo ? demoFriends : (friends ?? []).map((f) => ({ id: f.id, name: f.name, color: f.color as BotColor, shape: f.shape as BotShape })))],
+    [demo, friends],
   );
-  const bill = live.receipt ? billFrom(live.receipt, people) : demoBill;
+  const bill = live.receipt ? billFrom(live.receipt, people) : demo ? demoBill : emptyBill;
   // A new receipt from Lens, or a change of friends, starts a fresh split.
-  return (
-    <SplitBill key={`${live.receipt?.id ?? "demo"}|${people.map((p) => p.id).join(",")}`} bill={bill} live={Boolean(state)} sample={live.mode === "live" && !state} people={people} />
-  );
+  return <SplitBill key={`${live.receipt?.id ?? (demo ? "demo" : "own")}|${people.map((p) => p.id).join(",")}`} bill={bill} live={live.mode === "live"} people={people} />;
 }
