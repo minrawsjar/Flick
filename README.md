@@ -97,6 +97,7 @@ Every payment asks for one finger flicked up in front of the phone's front camer
 
 ```
 backend/src/server.ts           The API's routes
+backend/src/webhooks.ts         PayPal webhooks: signature verification, invoice/payout/checkout events
 backend/src/paypal.ts           Every PayPal call: OAuth, retries, orders, payouts, invoices, refunds
 backend/src/rules.ts            Pure rules: planning the week, splitting a bill, checking Lens (tested)
 backend/src/lens.ts             Lens: reads a photo with the AI model, pays what it read
@@ -186,6 +187,7 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `POST /api/chat/decline` `{ with, id }` | Turns a friend's request down |
 | `POST /api/chat/remind` `{ with, id, tone? }` | Nudge's reminder about your request, into the chat |
 | `POST /api/chat/allow` `{ with, cap }` | Lets a friend's requests up to `cap` pay by themselves (0 stops it) |
+| `POST /api/paypal/webhook` | Receives and verifies PayPal webhook events (invoice paid, payouts, checkout approved) |
 | `GET /api/dashboard` | Money Studio's tables |
 | `GET /api/ai/models`, `POST /api/ai/responses` | Money Studio's assistant |
 

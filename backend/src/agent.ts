@@ -3,7 +3,7 @@ import * as autopilot from './autopilot.ts';
 import * as friends from './friends.ts';
 import { HttpError, need } from './http.ts';
 import * as lens from './lens.ts';
-import { cents, DAYS, usd, ymd } from './model.ts';
+import { cents, DAYS, usd, ymd, type Agent } from './model.ts';
 import * as nudge from './nudge.ts';
 import * as scout from './scout.ts';
 import { shares, unapproved, type SplitItem } from './rules.ts';
@@ -100,7 +100,7 @@ const READS: Record<string, { label: string; run: () => unknown }> = {
 
 type Args = Record<string, unknown>;
 type Link = { label: string; url: string };
-type Action = { summary: (args: Args) => string; run: (args: Args) => Promise<{ result: unknown; link?: Link }> };
+type Action = { agent: Agent; summary: (args: Args) => string; run: (args: Args) => Promise<{ result: unknown; link?: Link }> };
 
 /** The agent's grocery list as Scout's items. */
 const basketOf = (items: unknown) =>
@@ -114,6 +114,7 @@ function fail(message: string): never {
 
 const ACTIONS: Record<string, Action> = {
   pay_scan: {
+    agent: 'lens',
     summary: ({ scan_id, every_month }) => {
       const s = scanOf(scan_id);
       return `Pay ${s.title} ${usd(s.amount)} with PayPal${every_month ? ', and every month from now' : ''}`;
@@ -124,6 +125,7 @@ const ACTIONS: Record<string, Action> = {
     },
   },
   approve_week: {
+    agent: 'autopilot',
     summary: () => {
       const waiting = unapproved(state.week);
       need(waiting.length, 'Nothing in this week is waiting for approval.');
@@ -136,6 +138,7 @@ const ACTIONS: Record<string, Action> = {
     },
   },
   buy_groceries: {
+    agent: 'scout',
     summary: ({ store_id, items }) => {
       const q = scout.priceBasket({ items: basketOf(items) }).find((x) => x.storeId === store_id) ?? fail(`No store ${String(store_id)}`);
       const v = scout.view();
@@ -150,6 +153,7 @@ const ACTIONS: Record<string, Action> = {
     },
   },
   change_payment: {
+    agent: 'autopilot',
     summary: ({ payment_id, amount, day }) => {
       const p = paymentOf(payment_id);
       return `Change ${p.payee} to ${usd(typeof amount === 'number' ? amount : p.amount)} on ${typeof day === 'string' ? day : p.day}`;
@@ -157,6 +161,7 @@ const ACTIONS: Record<string, Action> = {
     run: async ({ payment_id, amount, day }) => ({ result: (await autopilot.edit({ id: payment_id, amount, day })).payments.find((p) => p.id === payment_id) }),
   },
   skip_payment: {
+    agent: 'autopilot',
     summary: ({ payment_id }) => {
       const p = paymentOf(payment_id);
       return `Skip ${p.payee}, ${usd(p.amount)}, this week${p.status === 'scheduled' ? ' (refunded to you)' : ''}`;
@@ -164,6 +169,7 @@ const ACTIONS: Record<string, Action> = {
     run: async ({ payment_id }) => ({ result: (await autopilot.edit({ id: payment_id, skip: true })).payments.find((p) => p.id === payment_id) }),
   },
   next_day: {
+    agent: 'autopilot',
     summary: () => `Move the week on to ${DAYS[state.week.today + 1] ?? 'next week'} and pay what's due`,
     run: async () => {
       const week = await autopilot.tick();
@@ -171,6 +177,7 @@ const ACTIONS: Record<string, Action> = {
     },
   },
   split_bill: {
+    agent: 'splitter',
     summary: ({ merchant, items, tax, tip }) => {
       need(Array.isArray(items) && items.length, 'items must list what was on the bill.');
       const { total, each } = shares(items as SplitItem[], Number(tax) || 0, Number(tip) || 0);
@@ -185,6 +192,7 @@ const ACTIONS: Record<string, Action> = {
     },
   },
   remind_friend: {
+    agent: 'nudge',
     summary: ({ request_id, tone }) => {
       const d = debtOf(request_id);
       return `Send ${friend(d.friendId)?.name} a ${String(tone ?? 'friendly').toLowerCase()} PayPal reminder about ${d.what}, ${usd(d.amount)}`;
@@ -196,6 +204,7 @@ const ACTIONS: Record<string, Action> = {
     },
   },
   add_friend: {
+    agent: 'splitter',
     summary: ({ name, email }) => `Add ${String(name)} as a friend, PayPal ${String(email)}`,
     run: async (args) => ({ result: friends.add(args) }),
   },
@@ -245,8 +254,8 @@ const TOOLS: Tool[] = [
 
 // --- The conversation -----------------------------------------------------------------------
 
-type Pending = { id: string; summary: string };
-type Turn = { messages: ChatMessage[]; reply?: string; pending?: Pending[]; links: Link[]; steps: string[] };
+export type Pending = { id: string; agent: Agent; summary: string };
+export type Turn = { messages: ChatMessage[]; reply?: string; pending?: Pending[]; links: Link[]; steps: string[] };
 
 const plain = (text: string) =>
   text
@@ -291,7 +300,7 @@ async function run(messages: ChatMessage[], links: Link[] = [], steps: string[] 
         if (!steps.includes(read.label)) steps.push(read.label);
       } else if (action) {
         try {
-          pending.push({ id: call.id, summary: action.summary(args(call)) });
+          pending.push({ id: call.id, agent: action.agent, summary: action.summary(args(call)) });
         } catch (err) {
           // A proposal that can't work goes straight back to the model, not to the person.
           messages.push(toolMessage(call, { error: errorText(err) }));
@@ -352,7 +361,7 @@ export async function decide(body: Record<string, unknown>) {
     try {
       const { result, link } = await action.run(args(call));
       if (link) links.push(link);
-      messages.push(toolMessage(call, { done: true, result }));
+      messages.push(toolMessage(call, { done: true, result, ...(link && { link }) }));
     } catch (err) {
       messages.push(toolMessage(call, { error: errorText(err) }));
     }

@@ -18,6 +18,7 @@ import { PayPalApiError, type Saved } from './paypal.ts';
 import * as push from './push.ts';
 import { assign, split } from './split.ts';
 import { hasWorkspace, inWorkspace, isWorkspaceId, reset, save, state } from './store.ts';
+import { handleWebhookRequest } from './webhooks.ts';
 
 // Flick's API. The browser never calls it directly: the frontend rewrites /api/* to here
 // (frontend/next.config.ts), so everything is same-origin and no CORS is needed. The frontend's
@@ -37,6 +38,17 @@ async function settle(checkout: Checkout, captureId: string, saved?: Saved) {
   if (checkout.kind === 'week') await autopilot.approved(checkout, captureId, saved);
   if (checkout.kind === 'scan') await lens.paid(checkout);
   if (checkout.kind === 'basket') await scout.paid(checkout);
+}
+
+/**
+ * A checkout approved on PayPal's page: captured, then handed to its agent. The return page and the
+ * webhook (CHECKOUT.ORDER.APPROVED, for someone who closed the tab) both come here; whichever is
+ * second finds it captured and does nothing.
+ */
+async function completeCheckout(orderId: string) {
+  const { checkout, captureId, saved } = await captureCheckout(orderId);
+  if (captureId) await settle(checkout, captureId, saved);
+  return checkout;
 }
 
 /** The session cookie: which workspace this browser is in (null signs out). A guest's comes from frontend/proxy.ts. */
@@ -123,8 +135,7 @@ const routes: Record<string, Handler> = {
   'GET /api/paypal/return': async ({ res, url }) => {
     const orderId = url.searchParams.get('token') ?? '';
     try {
-      const { checkout, captureId, saved } = await captureCheckout(orderId);
-      if (captureId) await settle(checkout, captureId, saved);
+      const checkout = await completeCheckout(orderId);
       redirect(res, `${pageFor(orderId)}?paid=${checkout.kind}`);
     } catch (err) {
       // An order Flick never made (a stale or made-up link) needs no stack trace.
@@ -132,6 +143,9 @@ const routes: Record<string, Handler> = {
       redirect(res, `${pageFor(orderId)}?checkout=failed`);
     }
   },
+  // Webhooks: PayPal notifies Flick the moment a payment happens.
+  'POST /api/paypal/webhook': async ({ req, body }) =>
+    handleWebhookRequest({ headers: req.headers, body: await body(), completeCheckout }),
   'GET /api/paypal/cancel': ({ res, url }) => {
     const checkout = cancelCheckout(url.searchParams.get('token') ?? '');
     if (checkout?.kind === 'week' && state.week.approval?.orderId === checkout.orderId) delete state.week.approval;

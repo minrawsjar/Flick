@@ -521,3 +521,44 @@ export function remindInvoice(invoiceId: string, subject: string, note: string) 
 export function getInvoice(invoiceId: string): Promise<Invoice> {
   return get<Invoice>(`/v2/invoicing/invoices/${encodeURIComponent(invoiceId)}`);
 }
+
+export type WebhookHeaders = {
+  authAlgo?: string;
+  certUrl?: string;
+  transmissionId?: string;
+  transmissionSig?: string;
+  transmissionTime?: string;
+};
+
+/** Verifies a webhook notification signature with PayPal before trusting the event. */
+export async function verifyWebhookSignature({
+  webhookId,
+  headers,
+  event,
+}: {
+  webhookId: string;
+  headers: WebhookHeaders;
+  event: Record<string, unknown>;
+}): Promise<boolean> {
+  const { authAlgo, certUrl, transmissionId, transmissionSig, transmissionTime } = headers;
+  if (!webhookId || !authAlgo || !certUrl || !transmissionId || !transmissionSig || !transmissionTime) {
+    return false;
+  }
+  try {
+    const res = await call<{ verification_status: string }>('POST', '/v1/notifications/verify-webhook-signature', {
+      body: {
+        auth_algo: authAlgo,
+        cert_url: certUrl,
+        transmission_id: transmissionId,
+        transmission_sig: transmissionSig,
+        transmission_time: transmissionTime,
+        webhook_id: webhookId,
+        webhook_event: event,
+      },
+    });
+    return res.verification_status === 'SUCCESS';
+  } catch (err) {
+    console.error('Webhook signature verification error:', err instanceof Error ? err.message : err);
+    return false;
+  }
+}

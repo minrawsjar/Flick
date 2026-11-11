@@ -146,6 +146,8 @@ export type State = {
   profile?: Profile;
   /** A sign-in under way in this browser: the PayPal approval it's waiting for, and the page to go back to. */
   signingIn?: { setupTokenId: string; next: string; at: string };
+  /** The last 200 PayPal webhook event IDs processed, newest first. */
+  webhookEvents?: string[];
 };
 
 /**
