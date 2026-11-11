@@ -19,7 +19,7 @@ front camera and it's paid from your saved PayPal. Autopilot learns what you pay
 on one approval; Splitter and Flick Chat get friends to pay you back; Scout buys your usual
 groceries where they're cheapest; and Ask Flick plans across all of them, typed or spoken.**
 
-[Open Flick](https://www.flickit.site) · [Install it](https://www.flickit.site/install) · [Architecture](#architecture) · [How the money moves](#how-the-money-moves) · [Run it](#run-and-verify)
+[Open Flick](https://www.flickit.site) · [Install it](https://www.flickit.site/install) · [Architecture](#architecture) · [How the money moves](#how-the-money-moves) · [Partner evidence](partner-docs/) · [Run it](#run-and-verify)
 
 Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com), on PayPal's sandbox.
 
@@ -525,7 +525,12 @@ frontend/lib/                flick.ts (the gesture, tested), live.ts (the live b
 frontend/public/sw.js        the service worker
 diagrams/                    the diagrams in this README
 docs/team/                   each teammate's brief, and setting up a sandbox
+docs/demo-video/             the intro video: prompts for each tool, placards, the logo card
+partner-docs/                PayPal, AG Grid, Channel3: what Flick built, and why it wins
 ~~~
+
+Each folder has its own README: [backend](backend/), [frontend](frontend/), [Money Studio](frontend/app/dashboard/),
+[docs](docs/), [diagrams](diagrams/) and [partner evidence](partner-docs/).
 
 ## Run and verify
 
@@ -590,6 +595,6 @@ Each end-to-end script starts its own backend on a throwaway state folder, so yo
 
 <div align="center">
 
-Built for the PayPal AI Hackathon 2026 · [Team briefs](docs/team/) · [MIT License](LICENSE)
+Built for the PayPal AI Hackathon 2026 · [Partner evidence](partner-docs/) · [Team briefs](docs/team/) · [MIT License](LICENSE)
 
 </div>
