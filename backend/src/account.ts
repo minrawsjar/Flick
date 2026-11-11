@@ -4,7 +4,7 @@ import { need } from './http.ts';
 import { cents, type Checkout, type Profile, type State } from './model.ts';
 import { paidByYou, register, waiting } from './chat.ts';
 import { deleteSaved, finishSaving, startSaving } from './paypal.ts';
-import { save, state, workspaceId } from './store.ts';
+import { hasWorkspace, save, state, workspaceId } from './store.ts';
 
 // Signing in to Flick, with PayPal. The person approves saving their PayPal with Flick (PayPal's
 // vault, no purchase), and that one approval says both who they are and how they pay:
@@ -19,9 +19,19 @@ import { save, state, workspaceId } from './store.ts';
  * A signed-in person's workspace: from their PayPal account, keyed with the server's secret so the
  * id can't be worked out from the account. It's the session cookie's value, as a guest's random id is.
  */
-export function workspaceFor(account: string) {
-  const key = process.env.SESSION_SECRET || process.env.PAYPAL_SECRET || 'flick-local';
+export function workspaceFor(account: string, key = process.env.SESSION_SECRET || process.env.PAYPAL_SECRET || 'flick-local') {
   return `p${createHmac('sha256', key).update(account.trim().toLowerCase()).digest('hex').slice(0, 40)}`;
+}
+
+/**
+ * The workspace a sign-in opens: keyed with SESSION_SECRET. Someone who signed in before it was set
+ * has a workspace keyed with the PayPal secret instead, and keeps it, so setting SESSION_SECRET
+ * later loses nobody's Flick.
+ */
+export function signInTo(account: string) {
+  const now = workspaceFor(account);
+  const before = process.env.PAYPAL_SECRET ? workspaceFor(account, process.env.PAYPAL_SECRET) : now;
+  return before !== now && !hasWorkspace(now) && hasWorkspace(before) ? before : now;
 }
 
 /** Only a page on Flick to come back to: never another site. */
@@ -55,7 +65,7 @@ export async function finish(setupTokenId: string) {
   delete state.signingIn;
   save();
   const guest = workspaceId() === 'local' || state.profile ? undefined : (JSON.parse(JSON.stringify(state)) as State);
-  return { workspace: workspaceFor(account), from: workspaceId(), saved, guest, next: pending.next };
+  return { workspace: signInTo(account), from: workspaceId(), saved, guest, next: pending.next };
 }
 
 /**

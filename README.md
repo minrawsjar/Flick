@@ -455,9 +455,7 @@ The design language (bot faces, phone frame, colours and motion) is ported from
 **Not done yet:** this is a sandbox demo. The API has no rate limit beyond the AI's, and workspaces
 are JSON files held in memory (fine for a few thousand people; Postgres beyond that). A business's
 name is first come, so production would verify businesses with PayPal. Invoices to friends not on
-Flick are paid into Flick's account and marked paid, rather than forwarded. Sign-ins are keyed with
-`SESSION_SECRET`, or else the PayPal secret: set it before anyone signs in, since changing it later
-gives signed-in people new, empty Flicks.
+Flick are paid into Flick's account and marked paid, rather than forwarded.
 
 ---
 
@@ -552,7 +550,7 @@ npm run dev               # http://localhost:3000
 |---|---|---|
 | `PAYPAL_CLIENT_ID`, `PAYPAL_SECRET` | backend | The sandbox REST app |
 | `FRONTEND_URL` | backend | Where PayPal sends people back (the site's public URL when deployed) |
-| `SESSION_SECRET` | backend | Keys signed-in workspaces (falls back to `PAYPAL_SECRET`); set it before anyone signs in |
+| `SESSION_SECRET` | backend | Keys signed-in workspaces (else `PAYPAL_SECRET`); someone who signed in before it was set keeps their Flick |
 | `PAYPAL_WEBHOOK_ID` | backend | The webhook's id in the sandbox app, for verifying events |
 | `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` | backend | The model, on OpenRouter unless set; fallbacks after the first, comma-separated |
 | `STUDIO_MODELS`, `AGENT_MODEL` | backend | Models Money Studio's assistant and Ask Flick may use |
