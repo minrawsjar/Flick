@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="790" viewBox="0 0 1320 790" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<title id="t">Flick's architecture</title>
+<desc id="d">The installed app talks to a Next.js site on Vercel, which forwards /api/* to a dependency-free Node backend on Railway. The backend runs Flick's agents, keeps each person's workspace as JSON on a volume, and calls PayPal's REST APIs, an AI model, Channel3, Frankfurter and the browsers' push services.</desc>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8e8e93"/></marker>
+<marker id="s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8e8e93"/></marker>
+</defs>
+<rect x="0" y="0" width="1320" height="790" rx="24" fill="#0b0b0d" stroke="#0b0b0d" stroke-width="1"/>
+<text x="32" y="56" font-size="26" font-weight="750" fill="#f5f5f7" text-anchor="start">Flick</text>
+<text x="104" y="56" font-size="18" font-weight="500" fill="#8e8e93" text-anchor="start">how it fits together</text>
+<text x="32" y="84" font-size="13" font-weight="400" fill="#c7c7cc" text-anchor="start">The browser only talks to the site. Every secret, every agent and every PayPal call lives in one Node backend.</text>
+<text x="32" y="124" font-size="11" font-weight="700" fill="#8e8e93" text-anchor="start" letter-spacing="1.2">YOUR PHONE OR LAPTOP</text>
+<text x="332" y="124" font-size="11" font-weight="700" fill="#8e8e93" text-anchor="start" letter-spacing="1.2">VERCEL · NEXT.JS 16</text>
+<text x="652" y="124" font-size="11" font-weight="700" fill="#8e8e93" text-anchor="start" letter-spacing="1.2">RAILWAY · NODE 22, NO DEPENDENCIES</text>
+<text x="1072" y="124" font-size="11" font-weight="700" fill="#8e8e93" text-anchor="start" letter-spacing="1.2">SERVICES</text>
+<rect x="32" y="140" width="240" height="90" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="48" y="164" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Flick, the installed app</text>
+<text x="48" y="184" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Today · Chat · Ask Flick · Lens</text>
+<text x="48" y="202" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Autopilot · Scout · Split · Nudge</text>
+<text x="48" y="220" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Friends · Profile · Money Studio</text>
+<rect x="32" y="244" width="240" height="90" rx="14" fill="#1c1c1e" stroke="#36D1DC66" stroke-width="1"/>
+<circle cx="51" cy="264" r="5" fill="#36D1DC"/>
+<text x="62" y="268" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Flick to pay</text>
+<text x="48" y="288" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Front camera, 64×48 grey frames</text>
+<text x="48" y="306" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">~30 a second, read on the phone</text>
+<text x="48" y="324" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Frames never leave the device</text>
+<rect x="32" y="348" width="240" height="90" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="48" y="372" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Service worker</text>
+<text x="48" y="392" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Opens offline (last /api/state)</text>
+<text x="48" y="410" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Bills shared to Flick → Lens</text>
+<text x="48" y="428" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Notifications, icon badge</text>
+<rect x="32" y="452" width="240" height="72" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="48" y="476" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Session</text>
+<text x="48" y="496" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Cookie flick=&lt;workspace id&gt;</text>
+<text x="48" y="514" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">HttpOnly · SameSite=Lax · Secure</text>
+<rect x="332" y="140" width="260" height="72" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="348" y="164" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">proxy.ts</text>
+<text x="348" y="184" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">A new browser gets a random</text>
+<text x="348" y="202" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">workspace id in the flick cookie</text>
+<rect x="332" y="226" width="260" height="72" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="348" y="250" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">/api/* rewrite</text>
+<text x="348" y="270" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">The browser talks to one origin;</text>
+<text x="348" y="288" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Next forwards to BACKEND_URL</text>
+<rect x="332" y="312" width="260" height="72" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="348" y="336" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Server components</text>
+<text x="348" y="356" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Fetch the backend with the cookie</text>
+<text x="348" y="374" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">React 19 · Tailwind v4</text>
+<rect x="332" y="398" width="260" height="72" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="348" y="422" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">AG Grid 36 · AG Studio 3</text>
+<text x="348" y="442" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Autopilot's week, Splitter's grid</text>
+<text x="348" y="460" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Money Studio: reports, widgets, AI</text>
+<text x="334" y="496" font-size="12" font-weight="400" fill="#8e8e93" text-anchor="start">Holds no secrets. The backend's types</text>
+<text x="334" y="514" font-size="12" font-weight="400" fill="#8e8e93" text-anchor="start">come in as type-only imports (@backend/*).</text>
+<rect x="652" y="140" width="360" height="90" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="668" y="164" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">server.ts</text>
+<text x="668" y="184" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">One route table, JSON in and out, typed errors</text>
+<text x="668" y="202" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">AsyncLocalStorage runs each request in its workspace</text>
+<text x="668" y="220" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">A workspace's writes run one at a time</text>
+<text x="652" y="256" font-size="11" font-weight="700" fill="#8e8e93" text-anchor="start" letter-spacing="1.2">AGENTS</text>
+<rect x="652" y="268" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#36D1DC55" stroke-width="1"/>
+<circle cx="669" cy="290" r="6" fill="#36D1DC"/>
+<text x="683" y="287" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Lens</text>
+<text x="683" y="303" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">reads photos, pays them</text>
+<rect x="838" y="268" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#4ADE8055" stroke-width="1"/>
+<circle cx="855" cy="290" r="6" fill="#4ADE80"/>
+<text x="869" y="287" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Autopilot</text>
+<text x="869" y="303" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">plans a week, pays daily</text>
+<rect x="652" y="320" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#FACC1555" stroke-width="1"/>
+<circle cx="669" cy="342" r="6" fill="#FACC15"/>
+<text x="683" y="339" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Splitter</text>
+<text x="683" y="355" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">who had what, asks each</text>
+<rect x="838" y="320" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#F472B655" stroke-width="1"/>
+<circle cx="855" cy="342" r="6" fill="#F472B6"/>
+<text x="869" y="339" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Nudge</text>
+<text x="869" y="355" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">reminders in your tone</text>
+<rect x="652" y="372" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#FF8A5B55" stroke-width="1"/>
+<circle cx="669" cy="394" r="6" fill="#FF8A5B"/>
+<text x="683" y="391" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Scout</text>
+<text x="683" y="407" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">usuals priced everywhere</text>
+<rect x="838" y="372" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#60A5FA55" stroke-width="1"/>
+<circle cx="855" cy="394" r="6" fill="#60A5FA"/>
+<text x="869" y="391" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Flick Chat</text>
+<text x="869" y="407" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">talk, ask, pay friends</text>
+<rect x="652" y="424" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#A78BFA55" stroke-width="1"/>
+<circle cx="669" cy="446" r="6" fill="#A78BFA"/>
+<text x="683" y="443" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Ask Flick</text>
+<text x="683" y="459" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">an agent over them all</text>
+<rect x="838" y="424" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#F8717155" stroke-width="1"/>
+<circle cx="855" cy="446" r="6" fill="#F87171"/>
+<text x="869" y="443" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Inbox + Push</text>
+<text x="869" y="459" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">what needs you next</text>
+<rect x="652" y="482" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="664" y="505" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">rules.ts</text>
+<text x="664" y="523" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">pure, tested</text>
+<rect x="776" y="482" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="788" y="505" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">paypal.ts</text>
+<text x="788" y="523" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">fetch, no SDK</text>
+<rect x="900" y="482" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="912" y="505" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">store.ts</text>
+<text x="912" y="523" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">JSON per person</text>
+<rect x="652" y="580" width="360" height="90" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="668" y="604" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Railway volume</text>
+<text x="668" y="624" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">state.json · workspaces/&lt;id&gt;.json · push.json</text>
+<text x="668" y="642" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">people.json · businesses.json · chats/&lt;pair&gt;.json</text>
+<text x="668" y="660" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">JSON, written atomically: a .tmp, then rename</text>
+<line x1="956" y1="540" x2="956" y2="576" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#s)"/>
+<rect x="1072" y="140" width="216" height="162" rx="14" fill="#1c1c1e" stroke="#0A84FF66" stroke-width="1"/>
+<circle cx="1091" cy="160" r="5" fill="#0A84FF"/>
+<text x="1102" y="164" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">PayPal REST, sandbox</text>
+<text x="1088" y="184" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Orders v2: checkout, capture</text>
+<text x="1088" y="202" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Vault v3: saved PayPal</text>
+<text x="1088" y="220" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Payouts v1: billers, friends</text>
+<text x="1088" y="238" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Invoicing v2: asks, reminders</text>
+<text x="1088" y="256" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Refunds: skipped payments</text>
+<text x="1088" y="274" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Webhooks, signature-checked</text>
+<text x="1088" y="292" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Reporting, Catalog, Plans</text>
+<rect x="1072" y="316" width="216" height="90" rx="14" fill="#1c1c1e" stroke="#A78BFA66" stroke-width="1"/>
+<circle cx="1091" cy="336" r="5" fill="#A78BFA"/>
+<text x="1102" y="340" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">AI model, OpenRouter</text>
+<text x="1088" y="360" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Vision + JSON: Lens, Scout</text>
+<text x="1088" y="378" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Tool calls: Ask Flick</text>
+<text x="1088" y="396" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Responses API: Studio</text>
+<rect x="1072" y="420" width="216" height="54" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="1088" y="444" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Channel3</text>
+<text x="1088" y="464" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Live online prices for Scout</text>
+<rect x="1072" y="488" width="216" height="54" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="1088" y="512" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Frankfurter</text>
+<text x="1088" y="532" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">ECB rates for foreign bills</text>
+<rect x="1072" y="556" width="216" height="72" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="1088" y="580" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Push services</text>
+<text x="1088" y="600" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">FCM · Mozilla · Apple</text>
+<text x="1088" y="618" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">VAPID, RFC 8291 encryption</text>
+<line x1="278" y1="185" x2="326" y2="185" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#s)"/>
+<text x="302" y="177" font-size="10.5" font-weight="400" fill="#8e8e93" text-anchor="middle">HTTPS</text>
+<line x1="598" y1="262" x2="646" y2="262" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#s)"/>
+<text x="622" y="254" font-size="10.5" font-weight="400" fill="#8e8e93" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">/api/*</text>
+<line x1="598" y1="348" x2="646" y2="348" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#s)"/>
+<text x="622" y="340" font-size="10.5" font-weight="400" fill="#8e8e93" text-anchor="middle">SSR</text>
+<path d="M1018 185 H1042" fill="none" stroke="#8e8e93" stroke-width="1.6"/>
+<path d="M1042 185 V592" fill="none" stroke="#8e8e93" stroke-width="1.6"/>
+<line x1="1042" y1="221" x2="1066" y2="221" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="1042" y1="361" x2="1066" y2="361" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="1042" y1="447" x2="1066" y2="447" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="1042" y1="515" x2="1066" y2="515" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="1042" y1="592" x2="1066" y2="592" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="1066" y1="273" x2="1018" y2="273" stroke="#8e8e93" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#a)"/>
+<rect x="1017" y="279" width="50" height="14" fill="#0b0b0d"/>
+<text x="1042" y="290" font-size="10.5" font-weight="400" fill="#8e8e93" text-anchor="middle">webhooks</text>
+<path d="M1180 632 V746 H152 V530" fill="none" stroke="#8e8e93" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#a)"/>
+<text x="660" y="768" font-size="12" font-weight="400" fill="#8e8e93" text-anchor="middle">Web Push to the installed app: a friend asked you for money, the week needs approval, a payment failed</text>
+</svg>
