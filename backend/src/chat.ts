@@ -6,7 +6,7 @@ import { declined } from './checkout.ts';
 import * as friends from './friends.ts';
 import { HttpError, need } from './http.ts';
 import { isPhoto } from './lens.ts';
-import { cents, id, usd, type Debt } from './model.ts';
+import { cents, id, usd, type ChatMessage, type ChatPeer, type Debt } from './model.ts';
 import * as nudge from './nudge.ts';
 import { chargeSaved, createPayout, PayPalApiError, sendInvoice } from './paypal.ts';
 import * as push from './push.ts';
@@ -74,7 +74,7 @@ function me() {
   return { email: norm(profile.email), name: profile.name };
 }
 
-export type Peer = { email: string; name: string; onFlick: boolean; friendId?: string; color: string; shape: string };
+export type Peer = ChatPeer;
 
 /** Someone to chat with: your friend by that email (their name and face), or whoever signed in with it. */
 function peerOf(email: string): Peer {
@@ -112,29 +112,7 @@ function friendFor(peer: Peer) {
 
 // --- Conversations --------------------------------------------------------------------------
 
-export type Message = {
-  id: string;
-  at: string;
-  /** The PayPal email of whoever sent it. */
-  from: string;
-  /** text; request (for money); paid (a request was paid); reminder (Nudge's, about a request); note (a change, like pays by itself). */
-  kind: 'text' | 'request' | 'paid' | 'reminder' | 'note';
-  text?: string;
-  amount?: number;
-  what?: string;
-  /** A bill's photo, for a request: a small JPEG (Lens's copy). Only the newest few keep theirs. */
-  photo?: string;
-  status?: 'open' | 'paying' | 'paid' | 'declined';
-  /** Paid with no tap, as the payer allowed. */
-  auto?: boolean;
-  /** Paid, but Flick couldn't send it on to the asker's PayPal (yet). */
-  payout?: 'failed';
-  /** A request's record in the asker's Flick, which Nudge, Today and Money Studio follow. */
-  debtId?: string;
-  /** A paid message's or reminder's request. */
-  about?: string;
-  tries?: number;
-};
+export type Message = ChatMessage;
 
 /** `autopay`: by payer email, the most one request from the other person may be to pay by itself. `v`: changes, for polling. */
 type Conversation = { key: string; members: string[]; messages: Message[]; autopay: Record<string, number>; read: Record<string, string>; v: number };

@@ -86,8 +86,12 @@ export function checklist() {
 }
 
 // `node scripts/harness.ts 4200`: just the throwaway backend, for the frontend's end-to-end test.
+// STATE_FILE set: its folder holds the workspaces, so the test can add a person to it (Flick Chat).
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const base = await startBackend(Number(process.argv[2] ?? 4200), process.argv[3] ? { FRONTEND_URL: process.argv[3] } : {});
+  const base = await startBackend(Number(process.argv[2] ?? 4200), {
+    ...(process.argv[3] && { FRONTEND_URL: process.argv[3] }),
+    ...(process.env.STATE_FILE && { STATE_FILE: process.env.STATE_FILE }),
+  });
   console.log(`ready ${base}`);
   await new Promise(() => {});
 }

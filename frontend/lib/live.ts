@@ -71,8 +71,11 @@ export async function act<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 
-/** A payment waiting for the person's flick (components/flick-confirm.tsx) before PayPal opens. */
-export type Confirming = { url: string; amount?: number; to?: string; done: (went: boolean) => void };
+/**
+ * A payment waiting for the person's flick (components/flick-confirm.tsx): a PayPal checkout to
+ * approve (`url`), or a payment Flick makes itself once they've flicked (`pay`: Flick Chat's).
+ */
+export type Confirming = { url?: string; pay?: () => Promise<unknown>; amount?: number; to?: string; done: (went: boolean) => void };
 let confirming: Confirming | null = null;
 const confirmListeners = new Set<() => void>();
 const setConfirming = (next: Confirming | null) => {
@@ -96,6 +99,23 @@ export function approveOnPayPal(approveUrl: string | null | undefined, details: 
   return new Promise((resolve) =>
     setConfirming({
       url: approveUrl,
+      ...details,
+      done: (went) => {
+        setConfirming(null);
+        resolve(went);
+      },
+    }),
+  );
+}
+
+/**
+ * Pays with a flick, from the PayPal the person signed in with: `pay` runs once they've flicked (or
+ * tapped). Resolves true once it's paid, false if they backed out; nothing is paid until they flick.
+ */
+export function flickToPay(pay: () => Promise<unknown>, details: { amount?: number; to?: string } = {}): Promise<boolean> {
+  return new Promise((resolve) =>
+    setConfirming({
+      pay,
       ...details,
       done: (went) => {
         setConfirming(null);

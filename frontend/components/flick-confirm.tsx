@@ -11,7 +11,8 @@ import { refresh, useConfirming, useLive, type Confirming } from "@/lib/live";
 // spots it). The camera's frames stay in the browser: nothing is recorded or sent. No camera, or no
 // permission: a tap does it instead. Signed in with PayPal (/login), the flick pays from the saved
 // PayPal there and then; as a guest it opens PayPal's page to approve. "Not now" cancels the PayPal
-// checkout, just as cancelling on PayPal's page would. Every payment comes here, through approveOnPayPal.
+// checkout, just as cancelling on PayPal's page would. Every payment comes here, through
+// approveOnPayPal, or flickToPay for one Flick makes itself (paying a friend in Flick Chat).
 
 type CameraState = "starting" | "on" | "off";
 type Phase = "waiting" | "flicked" | "paid" | "failed" | "cancelling";
@@ -21,11 +22,11 @@ const stop = (media: MediaStream | null) => media?.getTracks().forEach((t) => t.
 export function FlickConfirm() {
   const confirming = useConfirming();
   // A new payment, a new sheet: its camera and phase start over.
-  return confirming ? <Sheet key={confirming.url} confirming={confirming} /> : null;
+  return confirming ? <Sheet key={confirming.url ?? `${confirming.to}-${confirming.amount}`} confirming={confirming} /> : null;
 }
 
 function Sheet({ confirming }: { confirming: Confirming }) {
-  const { url, amount, to, done } = confirming;
+  const { url, pay, amount, to, done } = confirming;
   // Signed in: the flick pays from this PayPal, with no PayPal page.
   const profile = useLive().state?.profile;
   const [camera, setCamera] = useState<CameraState>("starting");
@@ -44,16 +45,29 @@ function Sheet({ confirming }: { confirming: Confirming }) {
 
   // From the saved PayPal; then the page PayPal's return would have shown, saying it's paid.
   const payNow = async (still: boolean) => {
+    if (pay) return payItself(still);
     try {
       const res = await fetch("/api/paypal/flick", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: new URL(url).searchParams.get("token") }),
+        body: JSON.stringify({ orderId: new URL(url!).searchParams.get("token") }),
       });
       const body = (await res.json().catch(() => ({}))) as { to?: string; error?: { message?: string } };
       if (!res.ok || !body.to) throw new Error(body.error?.message ?? `Flick's backend answered ${res.status}.`);
       setPhase("paid");
       setTimeout(() => window.location.assign(body.to!), still ? 400 : 1100);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase("failed");
+    }
+  };
+
+  // A payment Flick makes itself (a friend's request in Flick Chat): paid here, and the sheet closes.
+  const payItself = async (still: boolean) => {
+    try {
+      await pay!();
+      setPhase("paid");
+      setTimeout(() => done(true), still ? 500 : 1200);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("failed");
@@ -66,8 +80,14 @@ function Sheet({ confirming }: { confirming: Confirming }) {
     stopCamera();
     setPhase("flicked");
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (profile) void payNow(still);
-    else setTimeout(() => window.location.assign(url), still ? 0 : 650);
+    if (profile || pay) void payNow(still);
+    else setTimeout(() => window.location.assign(url!), still ? 0 : 650);
+  };
+
+  const again = () => {
+    setError(undefined);
+    setPhase("flicked");
+    void payNow(true);
   };
   useEffect(() => {
     onFlick.current = go;
@@ -77,7 +97,7 @@ function Sheet({ confirming }: { confirming: Confirming }) {
     if (phase !== "waiting" && phase !== "failed") return;
     stopCamera();
     setPhase("cancelling");
-    const token = new URL(url).searchParams.get("token");
+    const token = url && new URL(url).searchParams.get("token");
     // The same route PayPal's own cancel link takes: the checkout is cancelled, the bill put back.
     if (token) await fetch(`/api/paypal/cancel?token=${encodeURIComponent(token)}`, { redirect: "manual" }).catch(() => {});
     await refresh();
@@ -199,7 +219,7 @@ function Sheet({ confirming }: { confirming: Confirming }) {
           {phase === "failed" && (
             <p role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center text-[13px] text-white/90">
               Your saved PayPal didn&apos;t pay: {error}
-              <span className="text-white/70">Nothing was taken. You can pay on PayPal&apos;s page instead.</span>
+              <span className="text-white/70">Nothing was taken.{url && " You can pay on PayPal's page instead."}</span>
             </p>
           )}
 
@@ -221,7 +241,7 @@ function Sheet({ confirming }: { confirming: Confirming }) {
           </div>
           {phase === "flicked" && (
             <p className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-1.5 text-[13px] text-white">
-              <LoaderCircle size={14} className="spinner" aria-hidden /> {profile ? "Paying from your PayPal…" : "Opening PayPal…"}
+              <LoaderCircle size={14} className="spinner" aria-hidden /> {profile || pay ? "Paying from your PayPal…" : "Opening PayPal…"}
             </p>
           )}
           {phase === "paid" && (
@@ -240,10 +260,10 @@ function Sheet({ confirming }: { confirming: Confirming }) {
             {phase === "cancelling" ? <LoaderCircle size={14} className="spinner" /> : "Not now"}
           </Secondary>
           {phase === "failed" ? (
-            <Primary onClick={() => window.location.assign(url)}>Pay on PayPal instead</Primary>
+            url ? <Primary onClick={() => window.location.assign(url)}>Pay on PayPal instead</Primary> : <Primary onClick={again}>Try again</Primary>
           ) : (
             <Primary onClick={go} disabled={phase !== "waiting"}>
-              {camera === "on" ? "Tap to pay instead" : profile ? "Pay now" : "Pay on PayPal"}
+              {camera === "on" ? "Tap to pay instead" : profile || pay ? "Pay now" : "Pay on PayPal"}
             </Primary>
           )}
         </div>

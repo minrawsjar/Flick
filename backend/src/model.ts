@@ -86,6 +86,34 @@ export type Debt = {
   chat?: { with: string; message: string };
 };
 
+/** A message in Flick Chat (chat.ts), between two people signed in with PayPal. */
+export type ChatMessage = {
+  id: string;
+  at: string;
+  /** The PayPal email of whoever sent it. */
+  from: string;
+  /** text; request (for money); paid (a request was paid); reminder (Nudge's, about a request); note (a change, like pays by itself). */
+  kind: 'text' | 'request' | 'paid' | 'reminder' | 'note';
+  text?: string;
+  amount?: number;
+  what?: string;
+  /** A bill's photo, for a request: a small JPEG (Lens's copy). Only the newest few keep theirs. */
+  photo?: string;
+  status?: 'open' | 'paying' | 'paid' | 'declined';
+  /** Paid with no tap, as the payer allowed. */
+  auto?: boolean;
+  /** Paid, but Flick couldn't send it on to the asker's PayPal (yet). */
+  payout?: 'failed';
+  /** A request's record in the asker's Flick, which Nudge, Today and Money Studio follow. */
+  debtId?: string;
+  /** A paid message's or reminder's request. */
+  about?: string;
+  tries?: number;
+};
+
+/** Someone to chat with: a friend, or whoever started a chat with you; on Flick if they've signed in. */
+export type ChatPeer = { email: string; name: string; onFlick: boolean; friendId?: string; color: string; shape: string };
+
 /** A PayPal checkout in flight: what to do once it's approved. */
 type Paying =
   | { kind: 'week'; orderId: string; amount: number; paymentIds: string[]; status: 'awaiting' | 'captured' | 'cancelled'; save?: boolean }

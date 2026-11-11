@@ -15,6 +15,7 @@ import { Logo } from "./ui";
 
 const links = [
   ["/home", "Today"],
+  ["/chat", "Chat"],
   ["/ask", "Ask Flick"],
   ["/lens", "Lens"],
   ["/autopilot", "Autopilot"],
@@ -24,7 +25,7 @@ const links = [
   ["/friends", "Friends"],
 ] as const;
 
-const people = ["/split", "/nudge", "/friends"];
+const people = ["/chat", "/split", "/nudge", "/friends"];
 const week = ["/autopilot", "/scout"];
 
 function Links({ className = "" }: { className?: string }) {
@@ -36,7 +37,7 @@ function Links({ className = "" }: { className?: string }) {
           key={href}
           href={href}
           aria-current={path === href ? "page" : undefined}
-          className={`shrink-0 rounded-full px-3 py-1 transition-colors ${path === href ? "bg-fill text-ink" : "text-ink/70 hover:text-ink"}`}
+          className={`shrink-0 rounded-full px-2.5 py-1 transition-colors xl:px-3 ${path === href ? "bg-fill text-ink" : "text-ink/70 hover:text-ink"}`}
         >
           {label}
         </Link>
@@ -78,9 +79,10 @@ export function Nav({ app = false }: { app?: boolean }) {
           Flick
         </Link>
         <Links className="hidden lg:flex" />
-        <span className="flex items-center gap-1.5">
-          <Link href="/install" className="pressable flex items-center gap-1 rounded-full bg-fill px-3 py-1 text-[13px] standalone:hidden">
-            <Download size={14} aria-hidden /> <span className="max-sm:hidden">Get the app</span>
+        {/* Between laptop and wide screens, "Get the app" is just its icon, so the links fit. */}
+        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+          <Link href="/install" aria-label="Get the app" className="pressable flex items-center gap-1 rounded-full bg-fill px-3 py-1 text-[13px] standalone:hidden">
+            <Download size={14} aria-hidden /> <span className="max-sm:hidden lg:max-xl:hidden">Get the app</span>
             <span className="sm:hidden">App</span>
           </Link>
           <Account />
@@ -92,7 +94,7 @@ export function Nav({ app = false }: { app?: boolean }) {
       </nav>
       {/* On phones the one-pager's links get their own row, which scrolls sideways if it must. */}
       {!app && <Links className="flex overflow-x-auto px-3 pb-2 lg:hidden" />}
-      {app && <Switch paths={people} labels={["Split", "Nudge", "Friends"]} />}
+      {app && <Switch paths={people} labels={["Chat", "Split", "Nudge", "Friends"]} />}
       {app && <Switch paths={week} labels={["Payments", "Groceries"]} />}
     </header>
   );
@@ -153,7 +155,7 @@ function useWaiting() {
 }
 
 /**
- * Pages that share a tab, switched under the bar: Split, Nudge and Friends (People); Autopilot's
+ * Pages that share a tab, switched under the bar: Chat, Split, Nudge and Friends (People); Autopilot's
  * payments and Scout's groceries (Week).
  */
 function Switch({ paths, labels }: { paths: string[]; labels: string[] }) {

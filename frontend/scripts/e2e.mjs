@@ -15,7 +15,7 @@
 // Real PayPal sandbox and AI calls, with the keys in backend/.env. Needs Google Chrome (CHROME=...).
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -41,7 +41,9 @@ if (build.status !== 0) {
   console.error(build.stdout.slice(-2000), build.stderr.slice(-2000));
   process.exit(1);
 }
-const backend = spawn(process.execPath, ["--env-file-if-exists=.env", "scripts/harness.ts", String(BACK), SITE], { cwd: new URL("../../backend", import.meta.url).pathname, stdio: ["ignore", "pipe", "inherit"] });
+// The backend's workspaces live here, so Flick Chat's step can add a friend who's signed in.
+const stateDir = mkdtempSync(join(tmpdir(), "flick-e2e-state-"));
+const backend = spawn(process.execPath, ["--env-file-if-exists=.env", "scripts/harness.ts", String(BACK), SITE], { cwd: new URL("../../backend", import.meta.url).pathname, env: { ...process.env, STATE_FILE: join(stateDir, "state.json") }, stdio: ["ignore", "pipe", "inherit"] });
 children.push(backend);
 await new Promise((resolve) => backend.stdout.on("data", (d) => String(d).includes("ready") && resolve()));
 // Next itself, not npx: killing a wrapper would leave the server running. BACKEND_URL again: server
@@ -244,6 +246,7 @@ const pages = [
   ["/autopilot", "Your week, on autopilot."],
   ["/scout", "Never overpay for the usual."],
   ["/split", "Split a bill."],
+  ["/chat", "Flick Chat"],
   ["/nudge", "Get paid back."],
   ["/friends", "Your people, by their PayPal."],
   ["/ask", "Say what you need."],
@@ -688,6 +691,44 @@ if (!email || !password) {
     const paid = Object.values(s.checkouts).find((c) => c.kind === "scan" && c.scanId === bill.id && c.status === "captured");
     check(paid?.captureId, "no captured checkout for the bill");
     check(s.activity.some((a) => a.agent === "lens" && a.text.startsWith(`Paid ${bill.title}`)), "no payout");
+  });
+  // Flick Chat (backend/src/chat.ts): Robin, a friend signed in too, asks for money. Robin's saved
+  // PayPal is made up, but Robin only asks: the one paying is this browser's real sandbox buyer.
+  await step("Flick Chat: a friend's request, paid with a flick from your saved PayPal, reaches their PayPal; then one pays by itself", async () => {
+    const me = (await state()).profile.email;
+    const ROBIN = "robin.e2e@flick.example.com";
+    const robinWs = "e2e-robin-00000000001";
+    const { blank } = await import(new URL("../../backend/src/seed.ts", import.meta.url).href);
+    mkdirSync(join(stateDir, "workspaces"), { recursive: true });
+    const friend = { id: "you-on-flick", name: "My friend", email: me, color: "green", shape: "drop" };
+    writeFileSync(join(stateDir, "workspaces", `${robinWs}.json`), JSON.stringify({ ...blank(), friends: [friend], profile: { name: "Robin", email: ROBIN, savedId: "not-a-real-vault-id", since: new Date().toISOString(), named: true } }));
+    const robin = (path, body) =>
+      fetch(`http://localhost:${BACK}/api/${path}`, { method: body ? "POST" : "GET", headers: { cookie: `flick=${robinWs}`, ...(body && { "Content-Type": "application/json" }) }, body: body && JSON.stringify(body) }).then(async (r) => ({ status: r.status, json: await r.json() }));
+
+    const asked = await robin("chat/request", { with: me, amount: 0.37, what: "Coffee" });
+    check(asked.status === 200 && asked.json.message?.status === "open", `Robin couldn't ask: ${JSON.stringify(asked.json).slice(0, 200)}`);
+    await open(`/chat?with=${encodeURIComponent(ROBIN)}`);
+    await waitFor("document.body.innerText.includes('Waiting for you')", 20_000, "Robin's request, in the chat");
+    await click("Pay $0.37");
+    await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('To Robin, from your PayPal')", 10_000, "the sheet paying Robin from your PayPal");
+    await tapToPay();
+    await waitFor("document.body.innerText.includes('You paid $0.37 for Coffee')", 30_000, "paid, in the chat");
+    problems.length = 0;
+    const theirs = (await robin("state")).json;
+    check(theirs.debts.find((d) => d.chat?.message === asked.json.message.id)?.status === "paid", "not paid in Robin's Flick");
+    check(theirs.activity.some((a) => a.text.includes("paid you $0.37 for Coffee")), "Robin's Flick doesn't say so");
+    const sent = (await robin(`chat/thread?with=${encodeURIComponent(me)}`)).json.messages.find((m) => m.id === asked.json.message.id);
+    check(sent?.status === "paid" && sent.payout !== "failed", `not paid out to Robin's PayPal: ${JSON.stringify(sent)}`);
+
+    // Robin's requests up to $10 pay by themselves: the next one is paid as it arrives, no tap.
+    await click("Pays by itself: off");
+    await click("$10.00");
+    await waitFor("document.body.innerText.includes('pays Robin\\'s requests up to $10.00 by itself')", 10_000, "the limit, in the chat");
+    const auto = await robin("chat/request", { with: me, amount: 0.23, what: "Gum" });
+    check(auto.json.message?.status === "paid" && auto.json.message.auto, `didn't pay by itself: ${JSON.stringify(auto.json.message)}`);
+    await waitFor("document.body.innerText.includes('You paid $0.23 for Gum, by itself')", 15_000, "paid by itself, in the chat");
+    check((await asMe("chat/allow", { with: ROBIN, cap: 0 })).mine === 0, "couldn't turn it off");
+    return "paid $0.37 with a flick, and $0.23 by itself";
   });
   await step("Signing out: a new guest Flick; signing in again brings yours back", async () => {
     const mine = await session();

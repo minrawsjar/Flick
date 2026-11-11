@@ -89,6 +89,10 @@ Without the cookie (the test scripts, curl) requests use the `local` workspace, 
 
 Every payment asks for one finger flicked up in front of the phone's front camera ([`flick-confirm.tsx`](frontend/components/flick-confirm.tsx)). The browser compares tiny 64×48 frames about 30 times a second and looks for a quick, mostly upward movement ([`lib/flick.ts`](frontend/lib/flick.ts), tested with `npm test` in `frontend/`). The camera is read, never shown, and frames never leave the device. Signed in, the flick pays there and then from your saved PayPal (`POST /api/paypal/flick`), with no PayPal page; as a guest it opens PayPal's page to approve. With no camera, or no permission, a tap does it instead; "Not now" cancels the PayPal checkout, as cancelling on PayPal's page would.
 
+### Flick Chat
+
+`/chat` is where friends signed in with PayPal talk, ask each other for money and pay ([`chat.ts`](backend/src/chat.ts), [`chat.tsx`](frontend/app/(app)/chat/chat.tsx)). A friend is "on Flick" once they've signed in with the PayPal email you have for them, so Flick knows where their money goes: whoever signed in with it. In a chat you can send messages, ask for money, and share a bill's photo, which Lens reads so you can ask for all of it or half. The friend pays a request with a flick from their saved PayPal: Flick charges it into its own account and pays you out to your PayPal email, as it does for billers. Each person can let a friend's requests pay by themselves, up to an amount each ($10 to $100), with no tap. Splitter sends friends on Flick their share in the chat, with the receipt's photo. Nudge's reminders for those go into the chat too. Today lists requests waiting for you, and a friend who turned notifications on gets one. A friend who isn't on Flick still gets requests, as PayPal invoices by email, but not messages. Who's on Flick is kept in `people.json`, and each conversation is its own file under `chats/`, beside the workspaces.
+
 ## How it works
 
 ```
@@ -130,7 +134,8 @@ The sandbox REST app's own account plays Flick. You approve payments on PayPal's
 
 - **Lens** reads a photo (`POST /api/lens/read`) and says who to pay, how much and when. Paying it (`POST /api/lens/pay`) opens a PayPal checkout; once approved, Flick captures it and pays the biller the same day. Ask it to, and Autopilot learns the bill as a monthly payment.
 - **Autopilot** plans the week from what it has seen: bills Lens read that fall due, monthly payments, and weekly habits (the same payee on the same weekday in 3 of the last 4 weeks). It only plans payees and amounts it has seen. You approve the whole week in one checkout (`POST /api/week/approve`), and each payment goes out as a payout on its day (`POST /api/week/tick` moves the demo's clock on a day). Skipping an approved payment refunds it from the capture.
-- **Splitter** works out who owes what on a receipt (tax and tip follow each person's share, and you take the rounding so it adds up to the cent) and sends each friend a PayPal invoice (`POST /api/split`).
+- **Splitter** works out who owes what on a receipt (tax and tip follow each person's share, and you take the rounding so it adds up to the cent) and asks each friend for their share (`POST /api/split`): in Flick Chat if they're on Flick, otherwise with a PayPal invoice.
+- **Flick Chat** pays a friend's request from your saved PayPal into Flick's account, then pays your friend out to the PayPal they signed in with (`POST /api/chat/pay`), or does it by itself under the limit you set (`POST /api/chat/allow`).
 - **Nudge** drafts a reminder in the tone you pick and sends it as PayPal's own invoice reminder (`POST /api/nudge/send`). `POST /api/debts/refresh` asks PayPal which invoices have been paid.
 
 Out-of-the-box payee and friend emails are placeholders: payouts to them succeed in the sandbox as "unclaimed". Change friends' emails to your sandbox personal accounts on `/friends` (or in [`seed.ts`](backend/src/seed.ts)) to see the invoices and money arrive.
@@ -173,6 +178,14 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `GET /api/auth/paypal/start?next=` | Signing in: PayPal's page to save PayPal with Flick; PayPal comes back to `/api/auth/paypal/return` (or `/cancel`) |
 | `POST /api/profile` `{ name }` | Signed in: the name Flick calls you (signing in again keeps it) |
 | `POST /api/auth/signout` | Ends this browser's session; its next visit is a new guest |
+| `GET /api/chat` | Signed in: your chats (every friend, and anyone who started one with you), newest first, with what's open between you |
+| `GET /api/chat/thread?with=&v=` | One chat's messages; with `v` (the version you have) and nothing new, just `{ v, same: true }` |
+| `POST /api/chat/send` `{ with, text }` | A message to a friend on Flick |
+| `POST /api/chat/request` `{ with, amount, what, text?, photo? }` | Asks a friend for money: in the chat (pays at once if they allow it), or as a PayPal invoice if they aren't on Flick |
+| `POST /api/chat/pay` `{ with, id }` | Pays a friend's request from your saved PayPal, and on to theirs |
+| `POST /api/chat/decline` `{ with, id }` | Turns a friend's request down |
+| `POST /api/chat/remind` `{ with, id, tone? }` | Nudge's reminder about your request, into the chat |
+| `POST /api/chat/allow` `{ with, cap }` | Lets a friend's requests up to `cap` pay by themselves (0 stops it) |
 | `GET /api/dashboard` | Money Studio's tables |
 | `GET /api/ai/models`, `POST /api/ai/responses` | Money Studio's assistant |
 
