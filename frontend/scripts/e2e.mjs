@@ -721,7 +721,9 @@ if (!email || !password) {
     check(sent?.status === "paid" && sent.payout !== "failed", `not paid out to Robin's PayPal: ${JSON.stringify(sent)}`);
 
     // Robin's requests up to $10 pay by themselves: the next one is paid as it arrives, no tap.
-    await click("Pays by itself: off");
+    // On a phone the button says just "Off": it's named in full for screen readers.
+    await js(`document.querySelector('button[aria-label="Pays by itself: off"]').click()`);
+    await sleep(300);
     await click("$10.00");
     await waitFor("document.body.innerText.includes('pays Robin\\'s requests up to $10.00 by itself')", 10_000, "the limit, in the chat");
     const auto = await robin("chat/request", { with: me, amount: 0.23, what: "Gum" });
