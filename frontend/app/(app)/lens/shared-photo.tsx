@@ -4,7 +4,7 @@ import { CircleCheck, Info, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { act, useLive } from "@/lib/live";
 import { usd } from "@/lib/format";
-import { shrink } from "@/app/_landing/lens";
+import { forLens } from "@/app/_landing/lens";
 import type { Scan } from "@backend/model";
 
 // A photo shared to Flick from another app (Android's share sheet: app/manifest.ts share_target).
@@ -33,7 +33,7 @@ export function SharedPhoto() {
         const cache = await caches.open("flick-share");
         const photo = await cache.match("/shared-photo");
         if (!photo) throw new Error("That photo didn't come through. Snap it here instead.");
-        const scan = await act<Scan>("lens/read", { image: await shrink(await photo.blob()) });
+        const scan = await act<Scan>("lens/read", await forLens(await photo.blob()));
         await cache.delete("/shared-photo");
         setNote({ ok: true, text: `Lens read ${scan.title}${scan.amount ? `, ${usd(scan.amount)}` : ""}. It's below, ready to pay.` });
       } catch (err) {

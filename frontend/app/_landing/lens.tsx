@@ -307,18 +307,72 @@ export function HeroLens({ width }: { width: number }) {
 // charged. Your own photo is real: the vision model reads it, and paying goes through PayPal's
 // sandbox checkout, into your own workspace and Money Studio.
 
-/** A phone photo, scaled down to upload quickly; Lens reads it just as well. */
-export async function shrink(file: Blob): Promise<string> {
+/** A phone photo as a JPEG, its longer side `longest` px at most: to upload quickly, or to keep. */
+export async function shrink(file: Blob, longest = 1600, quality = 0.85): Promise<string> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, longest / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.85);
+  const context = canvas.getContext("2d")!;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+/** What Lens uploads for a photo: a copy to read (Lens reads it just as well), and a small one to keep. */
+export async function forLens(file: Blob) {
+  const [image, photo] = await Promise.all([shrink(file), shrink(file, 480, 0.6)]);
+  return { image, photo };
 }
 
 type View = { sample: Sample; scan?: Scan; photo?: string; live?: boolean };
+
+/** How many scans Recent scans lists: as many as keep their photo (PHOTOS_KEPT in rules.ts). */
+const RECENT = 10;
+
+const scanStatus: Record<Scan["status"], [label: string, className: string]> = {
+  read: ["Read", "text-secondary"],
+  awaiting: ["Waiting for PayPal", "text-wait"],
+  paid: ["Paid", "text-paid"],
+};
+
+/** Your scans, newest first: tap one to see it in the phone again, and pay it if it isn't paid. */
+function RecentScans({ scans, open, on }: { scans: Scan[]; open: (scan: Scan) => void; on?: string }) {
+  return (
+    <Tile className="md:col-span-2">
+      <p className="text-[13px] text-secondary">Recent scans</p>
+      <div className="-mx-1 mt-2 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+        {scans.map((scan) => {
+          const sample = sampleFromScan(scan);
+          const [label, tone] = scanStatus[scan.status];
+          return (
+            <button
+              key={scan.id}
+              type="button"
+              aria-pressed={scan.id === on}
+              onClick={() => open(scan)}
+              className={`pressable flex w-[136px] shrink-0 snap-start cursor-pointer flex-col gap-1.5 rounded-2xl p-2 text-left transition-colors ${scan.id === on ? "bg-ink text-on-ink" : "bg-raised"}`}
+            >
+              <span className="flex h-[76px] items-center justify-center overflow-hidden rounded-xl bg-[radial-gradient(circle_at_50%_40%,#4a4033,#1f1b16_80%)]">
+                {scan.photo ? (
+                  // A data URL Lens kept; next/image adds nothing here.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={scan.photo} alt="" className="size-full object-cover" />
+                ) : (
+                  <Doc kind={sample.kind} width={44} />
+                )}
+              </span>
+              <span className="truncate text-[13px] leading-4">{scan.title}</span>
+              <span className="text-[12px] tabular-nums leading-4">{scan.kind === "tip" ? "Tip jar" : (sample.shown ?? usd(sample.amount))}</span>
+              <span className={`text-[12px] leading-4 ${scan.id === on ? "" : tone}`}>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </Tile>
+  );
+}
 
 export function Snap() {
   const live = useLive();
@@ -339,7 +393,7 @@ export function Snap() {
     if (view || live.mode !== "live" || !live.state) return null;
     const paid = returned?.paid === "scan" ? live.state.scans.find((s) => s.status === "paid") : undefined;
     const scan = paid ?? live.state.scans.find((s) => s.kind !== "unknown");
-    return scan ? { sample: sampleFromScan(scan), scan, paid: scan.status === "paid" } : null;
+    return scan ? { sample: sampleFromScan(scan), scan, photo: scan.photo, paid: scan.status === "paid" } : null;
   })();
   const current: View = view ?? auto ?? { sample: samples[0] };
   const currentStage: LensStage = view ? stage : auto ? (auto.paid ? "paid" : "read") : stage;
@@ -355,10 +409,10 @@ export function Snap() {
     setRun((r) => r + 1);
   };
 
-  const readLive = async (image: string, preview: View) => {
+  const readLive = async (upload: { image: string; photo: string }, preview: View) => {
     start({ ...preview, live: true });
     try {
-      const scan = await act<Scan>("lens/read", { image });
+      const scan = await act<Scan>("lens/read", upload);
       const sample = sampleFromScan(scan);
       setView({ sample, scan, photo: preview.photo, live: true });
       setShown(sample.fields.length);
@@ -372,10 +426,22 @@ export function Snap() {
 
   const tapSample = (s: Sample) => start({ sample: s });
 
+  // A scan from Recent scans, back in the phone: paid, or ready to pay.
+  const open = (scan: Scan) => {
+    const sample = sampleFromScan(scan);
+    const paid = scan.status === "paid";
+    setView({ sample, scan, photo: scan.photo, live: true });
+    setStage(paid ? "paid" : "read");
+    setShown(sample.fields.length);
+    setAt(paid ? sample.wire.length - 1 : -1);
+    setError(undefined);
+    setRun((r) => r + 1);
+  };
+
   const upload = async (file: File | undefined) => {
     if (!file) return;
-    const photo = await shrink(file);
-    await readLive(photo, { sample: { ...samples[0], heard: "your photo", fields: [] }, photo });
+    const copies = await forLens(file);
+    await readLive(copies, { sample: { ...samples[0], heard: "your photo", fields: [] }, photo: copies.photo });
   };
 
   useOnScreen(box, () => {
@@ -435,6 +501,7 @@ export function Snap() {
 
   const { sample } = current;
   const done = sample.kind === "bill" && !recurring && !current.scan ? "Paid with PayPal" : sample.done;
+  const recent = live.mode === "live" ? (live.state?.scans ?? []).filter((s) => s.kind !== "unknown").slice(0, RECENT) : [];
 
   return (
     <div ref={box} className="grid items-center justify-items-center gap-6 lg:grid-cols-[auto_1fr] lg:justify-items-stretch">
@@ -528,6 +595,8 @@ export function Snap() {
           </div>
           <Wire steps={sample.wire} at={wireAt} />
         </Tile>
+
+        {recent.length > 0 && <RecentScans scans={recent} open={open} on={current.scan?.id} />}
       </div>
     </div>
   );

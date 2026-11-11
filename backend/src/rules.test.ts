@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Past } from './model.ts';
-import { checkLens, dueNow, pickFace, planWeek, shares, unusual } from './rules.ts';
+import { checkLens, dueNow, keepNewestPhotos, pickFace, planWeek, shares, unusual } from './rules.ts';
 import { seed } from './seed.ts';
 
 // Run with `npm test`. Covers the rules every money movement depends on.
@@ -195,6 +195,15 @@ test('Lens output is checked before it can become a payment', () => {
   assert.equal(nonsense.amount, 0, 'never pay what Lens could not read');
   assert.equal(checkLens({ kind: 'tip', amount: -5 }, 's', 't').amount, 0);
   assert.equal(checkLens({ kind: 'tip', amount: Number.NaN }, 's', 't').amount, 0);
+});
+
+test('only the 10 newest scans keep their photo, so the state file stays small', () => {
+  // 20 snaps a minute apart, stored in a jumbled order: the newest are found by date, not position.
+  const scans = Array.from({ length: 20 }, (_, i) => ({ ...seed(monday).scans[0], id: `snap${i}`, at: new Date(Date.UTC(2026, 10, 9, 10, i)).toISOString(), photo: 'data:image/jpeg;base64,AAAA' }));
+  const jumbled = [...scans.slice(5), ...scans.slice(0, 5)].reverse();
+  keepNewestPhotos(jumbled);
+  assert.deepEqual(jumbled.filter((s) => s.photo).map((s) => s.id).sort(), scans.slice(10).map((s) => s.id).sort());
+  assert.equal(jumbled.length, 20, 'the scans themselves all stay');
 });
 
 test('new friends get a face nobody has, in a fresh colour while there are any', () => {

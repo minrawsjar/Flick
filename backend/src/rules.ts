@@ -211,6 +211,17 @@ export function checkLens(answer: Partial<LensAnswer>, id: string, at: string): 
   };
 }
 
+// --- Lens's photos ------------------------------------------------------------------------
+
+/** How many scans keep their photo. Each is about 40 KB, so the state file stays small. */
+export const PHOTOS_KEPT = 10;
+
+/** Takes the photo off every scan but the newest few (by when Lens read them). */
+export function keepNewestPhotos(scans: Scan[], keep = PHOTOS_KEPT) {
+  const newest = new Set([...scans].sort((a, b) => b.at.localeCompare(a.at)).slice(0, keep));
+  for (const scan of scans) if (!newest.has(scan)) delete scan.photo;
+}
+
 // --- Friends' faces -----------------------------------------------------------------------
 
 const COLORS = ['violet', 'orange', 'blue', 'red', 'green', 'pink', 'yellow', 'cyan'] as const;
