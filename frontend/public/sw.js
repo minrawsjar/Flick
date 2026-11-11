@@ -2,8 +2,9 @@
 // - The installed app opens offline: pages and GET /api/state come from the network when it
 //   answers, and from the last copy otherwise. Nothing that moves money is ever cached or replayed.
 // - Built files (/_next/static, content-hashed) come from the cache once fetched.
-// - Photos shared to Flick from another app (Android's share sheet, app/manifest.ts share_target)
-//   arrive here as a POST to /share; the photo is kept for /lens, which reads it with Lens.
+// - Bills shared to Flick from another app (Android's share sheet, app/manifest.ts share_target): a
+//   photo, an e-bill's PDF, or an e-mail's text arrive here as a POST to /share, and are kept for
+//   /lens, which reads them with Lens.
 
 // - Notifications (backend/src/push.ts): each push is a JSON { title, body, url, tag }; tapping one
 //   opens that page in the app.
@@ -97,10 +98,22 @@ async function cacheFirst(request) {
   return res;
 }
 
+// A bill shared to Flick: a photo or an e-bill's PDF, or else its text (an e-mail's title, text and
+// link). Kept for /lens, which reads it (app/(app)/lens/shared-photo.tsx).
 async function receiveShare(request) {
-  const photo = (await request.formData()).get("photo");
-  const ok = photo instanceof File && photo.type.startsWith("image/");
-  if (ok) await (await caches.open(SHARED)).put("/shared-photo", new Response(photo, { headers: { "Content-Type": photo.type } }));
+  const form = await request.formData();
+  const file = form.get("photo");
+  const words = ["title", "text", "url"].map((key) => form.get(key)).filter((v) => typeof v === "string" && v.trim()).join("\n");
+  const cache = await caches.open(SHARED);
+  await Promise.all([cache.delete("/shared-photo"), cache.delete("/shared-text")]);
+  let ok = false;
+  if (file instanceof File && (file.type.startsWith("image/") || file.type === "application/pdf" || /\.pdf$/i.test(file.name))) {
+    await cache.put("/shared-photo", new Response(file, { headers: { "Content-Type": file.type || "application/pdf" } }));
+    ok = true;
+  } else if (words.length >= 10) {
+    await cache.put("/shared-text", new Response(words, { headers: { "Content-Type": "text/plain" } }));
+    ok = true;
+  }
   return Response.redirect(new URL(ok ? "/lens?shared=1" : "/lens?shared=none", self.location.origin).href, 303);
 }
 

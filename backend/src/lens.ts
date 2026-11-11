@@ -1,4 +1,4 @@
-import { askJson } from './ai.ts';
+import { askJson, type Part } from './ai.ts';
 import { businessFor, received } from './business.ts';
 import { replan } from './autopilot.ts';
 import { startCheckout } from './checkout.ts';
@@ -10,10 +10,12 @@ import { log, save, state } from './store.ts';
 
 // Lens: reads a photo of something to pay (a bill, a receipt, a price tag, a tip jar) with a vision
 // model, then pays it through a PayPal checkout. A receipt goes to Splitter instead (split.ts).
+// It reads e-bills too: a PDF, or a bill as text (an e-mailed bill shared to Flick).
 
-const PROMPT = `You are Lens, the reader inside Flick, a payments app. You get one photo of something the
-person may want to pay: a bill or invoice, a restaurant receipt, a price tag or product, or a tip jar
-or QR code to tip someone. Report only what you can read in the photo; never guess an amount.
+const PROMPT = `You are Lens, the reader inside Flick, a payments app. You get one photo, PDF or text of
+something the person may want to pay: a bill, e-bill or invoice, a restaurant receipt, a price tag or
+product, or a tip jar or QR code to tip someone. Report only what you can read in it; never guess an
+amount.
 
 - kind: "bill", "receipt", "product" or "tip"; "unknown" if it isn't something to pay.
 - title: who gets paid (biller, merchant, shop or person), or the product's name.
@@ -117,10 +119,31 @@ function payeeFor(scan: Omit<Scan, 'payeeId'>): Payee {
 /** The small copy of a photo kept with its scan: a JPEG the browser shrank (about 40 KB, 110 at most). */
 export const isPhoto = (v: unknown): v is string => typeof v === 'string' && v.length <= 150_000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(v);
 
-/** Reads a photo, sent as a data URL, with a small copy of it to keep. */
-export async function read(body: Record<string, unknown>) {
-  const { image, photo } = body;
+/** An e-bill's PDF, as a data URL: 5 MB at most. */
+const isPdf = (v: unknown): v is string => typeof v === 'string' && v.length <= 7_000_000 && /^data:application\/pdf;base64,[A-Za-z0-9+/]+=*$/.test(v);
+
+/** What Lens is given to read: a photo, an e-bill's PDF, or a bill's text. Exactly one. */
+function given({ image, pdf, text }: Record<string, unknown>): Part {
+  need([image, pdf, text].filter((v) => v !== undefined).length === 1, 'Send one thing to read: image or pdf as a data URL, or text.');
+  if (pdf !== undefined) {
+    need(isPdf(pdf), 'pdf must be a data URL of a PDF, 5 MB at most.');
+    return { type: 'file', file: { filename: 'e-bill.pdf', file_data: pdf } };
+  }
+  if (text !== undefined) {
+    need(typeof text === 'string' && text.trim().length >= 10 && text.length <= 20_000, 'text must be the bill as text, 10 to 20,000 characters.');
+    return { type: 'text', text: `The bill, as text:\n\n${text.trim()}` };
+  }
   need(typeof image === 'string' && /^data:image\/(png|jpe?g|webp|gif|heic|heif);base64,/.test(image), 'image must be a data URL of a PNG, JPEG, WebP, GIF or HEIC photo.');
+  return { type: 'image_url', image_url: { url: image } };
+}
+
+/**
+ * Reads something to pay: a photo, sent as a data URL with a small copy of it to keep, an e-bill's
+ * PDF, or a bill as text (an e-mailed bill, shared to Flick).
+ */
+export async function read(body: Record<string, unknown>) {
+  const { photo } = body;
+  const it = given(body);
   need(photo === undefined || isPhoto(photo), 'photo must be a small JPEG data URL (480px at most).');
 
   const answer = await askJson<Partial<LensAnswer>>('lens_read', SCHEMA, [
@@ -129,7 +152,7 @@ export async function read(body: Record<string, unknown>) {
       role: 'user',
       content: [
         { type: 'text', text: `Today is ${ymd(new Date())}. What is this, and what is there to pay?` },
-        { type: 'image_url', image_url: { url: image } },
+        it,
       ],
     },
   ]);

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Payee, Scan } from "@backend/model";
-import { BadgeCheck, Camera, CircleCheck, Clock, LoaderCircle, Repeat, Zap } from "lucide-react";
+import { BadgeCheck, Camera, CircleCheck, Clock, FileText, LoaderCircle, Repeat, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -327,6 +327,20 @@ export async function forLens(file: Blob) {
   return { image, photo };
 }
 
+/** An e-bill's PDF, for Lens: a data URL, 5 MB at most (as backend/src/lens.ts takes it). */
+export function pdfForLens(file: Blob) {
+  if (file.size > 5_000_000) return Promise.reject(new Error("That e-bill is over 5 MB. Try a screenshot of it instead."));
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Couldn't open that e-bill."));
+    // Shared files sometimes come without a type: it's a PDF, so say so.
+    reader.readAsDataURL(new Blob([file], { type: "application/pdf" }));
+  });
+}
+
+const isPdf = (file: File) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+
 type View = { sample: Sample; scan?: Scan; photo?: string; live?: boolean };
 
 /** How many scans Recent scans lists: as many as keep their photo (PHOTOS_KEPT in rules.ts). */
@@ -410,7 +424,8 @@ export function Snap() {
     setRun((r) => r + 1);
   };
 
-  const readLive = async (upload: { image: string; photo: string }, preview: View) => {
+  /** Reads it for real: a photo (`image`, with a small `photo` to keep), an e-bill's `pdf`, or `text`. */
+  const readLive = async (upload: Record<string, string>, preview: View) => {
     start({ ...preview, live: true });
     try {
       const scan = await act<Scan>("lens/read", upload);
@@ -441,6 +456,14 @@ export function Snap() {
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
+    if (isPdf(file)) {
+      try {
+        await readLive({ pdf: await pdfForLens(file) }, { sample: { ...samples[0], heard: "your e-bill", fields: [] } });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
     const copies = await forLens(file);
     await readLive(copies, { sample: { ...samples[0], heard: "your photo", fields: [] }, photo: copies.photo });
   };
@@ -530,8 +553,16 @@ export function Snap() {
             <Camera size={20} /> Snap your own
             <input type="file" accept="image/*" capture="environment" className="sr-only" disabled={!canRead} onChange={(e) => void upload(e.target.files?.[0])} />
           </label>
+          {/* No camera here: a phone opens its files, for an e-bill's PDF or a screenshot of one. */}
+          <label
+            aria-disabled={!canRead || (currentStage === "scanning" && Boolean(view?.live))}
+            className="pressable mt-2 flex h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-fill text-[15px] aria-disabled:pointer-events-none aria-disabled:opacity-40"
+          >
+            <FileText size={17} /> Upload an e-bill
+            <input type="file" accept="application/pdf,.pdf,image/*" className="sr-only" disabled={!canRead} onChange={(e) => void upload(e.target.files?.[0])} />
+          </label>
           <p className="mt-2 text-center text-[12px] leading-4 text-secondary">
-            {canRead ? "A bill, a receipt, a price tag or a tip jar. Lens reads it, and you pay it with PayPal." : live.mode === "loading" ? "Getting Lens ready…" : "Lens can't read photos right now: Flick's AI is off."}
+            {canRead ? "A bill or an e-bill (PDF), a receipt, a price tag or a tip jar. Lens reads it, and you pay it with PayPal." : live.mode === "loading" ? "Getting Lens ready…" : "Lens can't read photos right now: Flick's AI is off."}
           </p>
           {error && <p className="mt-2 text-center text-[12px] leading-4 text-wait">{error}</p>}
 

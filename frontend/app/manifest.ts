@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 // What makes Flick installable as an app (see /install). It opens on Today, full screen. Long-press
-// the icon for shortcuts; on Android, photos shared to Flick go to Lens (public/sw.js takes them).
+// the icon for shortcuts; on Android, photos and e-bills shared to Flick go to Lens (public/sw.js takes them).
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -31,7 +31,8 @@ export default function manifest(): MetadataRoute.Manifest {
       action: "/share",
       method: "POST",
       enctype: "multipart/form-data",
-      params: { files: [{ name: "photo", accept: ["image/*"] }] },
+      // A photo or an e-bill (PDF) as a file, or a bill as text: an e-mail shared from a mail app.
+      params: { title: "title", text: "text", url: "url", files: [{ name: "photo", accept: ["image/*", "application/pdf", ".pdf"] }] },
     },
   };
 }

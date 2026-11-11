@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { workspaceFor } from '../src/account.ts';
 import { seed } from '../src/seed.ts';
-import { check, checklist, client, startBackend, type Json } from './harness.ts';
+import { check, checklist, client, pdfOf, startBackend, type Json } from './harness.ts';
 
 // Our own state folder, so a signed-in person's workspace can be put there (Signing in, below).
 const dir = mkdtempSync(join(tmpdir(), 'flick-api-'));
@@ -18,6 +18,8 @@ const { call, api, refuses } = client(base);
 const { step, section, done } = checklist();
 const state = () => api('state');
 const near = (a: number, b: number) => Math.abs(a - b) < 0.005;
+/** The seeded bill, wherever newer scans have put it. */
+const seeded = (s: Json) => s.scans.find((x: Json) => x.id === 'scan_seed');
 
 section('Basics');
 await step('health', async () => check((await api('health')).ok === true, 'not ok'));
@@ -58,6 +60,21 @@ await step('read refuses a missing or non-image photo', async () => {
   await refuses('lens/read', { image: 'https://example.com/bill.jpg' }, 400, 'data URL');
   await refuses('lens/read', { image: 'data:text/html;base64,PGI+' }, 400, 'data URL');
 });
+await step("read refuses two things at once, a PDF that isn't one, and text too short to be a bill", async () => {
+  await refuses('lens/read', { text: 'Amount due: $5.00 for coffee', image: 'data:image/png;base64,AAAA' }, 400, 'one thing');
+  await refuses('lens/read', { pdf: 'data:application/pdf;base64,!!' }, 400, 'PDF');
+  await refuses('lens/read', { text: 'Pay me' }, 400, 'text');
+});
+await step("an e-bill's PDF is read like a photo of the bill", async () => {
+  const scan = await api('lens/read', { pdf: pdfOf(['CITY WATER UTILITY', 'Account 5512-889', 'Billing period: October 2026', 'Amount due: $42.10', 'Due date: 2026-11-20']) });
+  check(scan.kind === 'bill' && near(scan.amount, 42.1) && /water/i.test(scan.title) && scan.due === '2026-11-20', `${scan.kind} ${scan.title} ${scan.amount} ${scan.due}`);
+  return `${scan.title}, $${scan.amount}, due ${scan.due}`;
+});
+await step('a bill shared as text (an e-mail) is read too', async () => {
+  const scan = await api('lens/read', { text: 'From: Xfinity <billing@xfinity.example.com>\nSubject: Your bill is ready\n\nYour Xfinity Internet bill for November is ready.\nAmount due: $89.99\nDue by: November 24, 2026' });
+  check(scan.kind === 'bill' && near(scan.amount, 89.99) && /xfinity/i.test(scan.title), `${scan.kind} ${scan.title} ${scan.amount}`);
+  return `${scan.title}, $${scan.amount}`;
+});
 await step('pay refuses an unknown scan', () => refuses('lens/pay', { scanId: 'scan_nope' }, 404));
 let lensOrder = '';
 await step('pay starts a real PayPal checkout for the seeded bill', async () => {
@@ -65,7 +82,7 @@ await step('pay starts a real PayPal checkout for the seeded bill', async () => 
   check(approveUrl?.startsWith('https://www.sandbox.paypal.com/'), `approveUrl ${approveUrl}`);
   check(near(amount, 64.2), `amount ${amount}`);
   const s = await state();
-  check(s.scans[0].status === 'awaiting', `scan ${s.scans[0].status}`);
+  check(seeded(s).status === 'awaiting', `scan ${seeded(s).status}`);
   check(s.checkouts[orderId]?.kind === 'scan', 'no checkout');
   lensOrder = orderId;
   return orderId;
@@ -73,7 +90,7 @@ await step('pay starts a real PayPal checkout for the seeded bill', async () => 
 await step('cancelling on PayPal puts the bill back, and comes back to /lens', async () => {
   const res = await call(`paypal/cancel?token=${lensOrder}`);
   check(res.status === 303 && res.headers.get('location')?.endsWith('/lens?checkout=cancelled'), `${res.status} ${res.headers.get('location')}`);
-  check((await state()).scans[0].status === 'read', 'still awaiting');
+  check(seeded(await state()).status === 'read', 'still awaiting');
 });
 await step('a return for an order Flick never made fails safely', async () => {
   const res = await call('paypal/return?token=NOTANORDER');

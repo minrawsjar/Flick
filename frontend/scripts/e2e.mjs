@@ -247,6 +247,7 @@ const pages = [
   ["/scout", "Never overpay for the usual."],
   ["/split", "Split a bill."],
   ["/chat", "Flick Chat"],
+  ["/business", "Get paid when Flick pays your bills."],
   ["/nudge", "Get paid back."],
   ["/friends", "Your people, by their PayPal."],
   ["/ask", "Say what you need."],
@@ -580,6 +581,33 @@ await step("a photo shared to Flick (Android's share sheet) is read by Lens", as
   check(Math.abs(scan.amount - 52.4) < 0.01, `read $${scan.amount}`);
   check(await js("caches.open('flick-share').then((c) => c.match('/shared-photo')).then((r) => !r)"), "the photo was kept");
   return `${scan.title}, $${scan.amount.toFixed(2)}`;
+});
+
+await step("an e-bill shared to Flick, as a PDF or as an e-mail's text, is read by Lens", async () => {
+  const { pdfOf } = await import("../../backend/scripts/harness.ts");
+  const pdf = pdfOf(["NORTHWIND MOBILE", "Account 77-1203", "Statement: November 2026", "Amount due: $31.75", "Due date: 2026-11-28"]).split(",")[1];
+  const share = (fill) => js(`(async () => {
+    const form = new FormData();
+    ${fill}
+    const res = await fetch('/share', { method: 'POST', body: form });
+    return new URL(res.url).pathname + new URL(res.url).search;
+  })()`);
+  const readShared = async (what, amount) => {
+    await open("/lens?shared=1", 1000);
+    const note = await waitFor("(() => { const t = document.querySelector('p[role=status]')?.innerText ?? ''; return !t.includes('reading') && t; })()", 60_000, `Lens's note on ${what}`);
+    check(note.includes("ready to pay"), `${what}: ${note}`);
+    const scan = (await state()).scans[0];
+    check(Math.abs(scan.amount - amount) < 0.01, `${what}: read $${scan.amount}`);
+    return scan;
+  };
+  const went = await share(`form.append('photo', new File([Uint8Array.from(atob(${JSON.stringify(pdf)}), (c) => c.charCodeAt(0))], 'statement.pdf', { type: 'application/pdf' }));`);
+  check(went === "/lens?shared=1", `the PDF went to ${went}`);
+  const fromPdf = await readShared("the PDF", 31.75);
+  const sent = await share(`form.append('title', 'Your Harbor Water bill is ready'); form.append('text', 'Hi! Your Harbor Water bill for November: amount due $27.30, due by November 29, 2026. Account 4410.');`);
+  check(sent === "/lens?shared=1", `the e-mail went to ${sent}`);
+  const fromText = await readShared("the e-mail", 27.3);
+  check(await js("caches.open('flick-share').then((c) => Promise.all([c.match('/shared-photo'), c.match('/shared-text')])).then((r) => r.every((x) => !x))"), "what was shared was kept");
+  return `${fromPdf.title}, $${fromPdf.amount.toFixed(2)}; ${fromText.title}, $${fromText.amount.toFixed(2)}`;
 });
 
 await step("notifications: subscribed through a real push service, and the welcome one sent", async () => {

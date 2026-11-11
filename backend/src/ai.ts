@@ -62,7 +62,9 @@ export function aiHeaders(key: string): Record<string, string> {
 
 export type Message =
   | { role: 'system' | 'assistant'; content: string }
-  | { role: 'user'; content: string | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[] };
+  | { role: 'user'; content: string | Part[] };
+/** What a user message can carry: text, a photo, or a file such as a PDF (OpenRouter and OpenAI take both). */
+export type Part = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } } | { type: 'file'; file: { filename: string; file_data: string } };
 
 /**
  * Asks the model for an answer shaped by `schema` (strict JSON Schema: every property required,
