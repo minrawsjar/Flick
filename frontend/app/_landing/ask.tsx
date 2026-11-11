@@ -122,7 +122,7 @@ function ReceiptCard({ items }: { items: ReceiptItem[] }) {
                 {item.done && item.link && (
                   <button
                     type="button"
-                    onClick={() => approveOnPayPal(item.link!.url)}
+                    onClick={() => void approveOnPayPal(item.link!.url, { amount: Number(/\$([\d.]+)/.exec(item.link!.label)?.[1]) || undefined })}
                     className="pressable flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-ink px-3 py-1 text-[12px] text-on-ink"
                   >
                     <CircleCheck size={13} /> {item.link.label || "Approve on PayPal"}
@@ -130,7 +130,7 @@ function ReceiptCard({ items }: { items: ReceiptItem[] }) {
                 )}
                 {item.done ? (
                   <span
-                    className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#34c759]/15 text-[#34c759]"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full bg-paid/15 text-paid"
                     title="Approved"
                   >
                     <Check size={14} />
@@ -144,7 +144,7 @@ function ReceiptCard({ items }: { items: ReceiptItem[] }) {
                   </span>
                 ) : (
                   <span
-                    className="flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 font-semibold text-[13px]"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full bg-wait/15 text-wait font-semibold text-[13px]"
                     title="Failed"
                   >
                     ⚠
@@ -458,7 +458,7 @@ export function Ask() {
                 role="switch"
                 aria-checked={readAloud}
                 onClick={() => setReadAloud(!readAloud)}
-                className={`flex h-[18px] w-[30px] cursor-pointer items-center rounded-full p-0.5 transition-colors ${readAloud ? "justify-end bg-[#34c759]" : "bg-fill"}`}
+                className={`flex h-[18px] w-[30px] cursor-pointer items-center rounded-full p-0.5 transition-colors ${readAloud ? "justify-end bg-paid" : "bg-fill"}`}
                 aria-label="Read replies aloud"
               >
                 <span className="size-3.5 rounded-full bg-white shadow" />
