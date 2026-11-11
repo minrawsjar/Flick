@@ -4,13 +4,14 @@
 placards. She installs Flick, five little agents pop out of her phone, and every bill vanishes with
 a flick of her finger. Then the Flick logo flicks, and "Install Flick now".
 
-Make the clips with an AI video tool (Veo 3, Sora 2, Kling or Runway), 4 to 8 seconds each. Then
+Make the clips with an AI video tool (Higgsfield, Veo 3, Sora 2, Kling or Runway), 4 to 8 seconds each. Then
 edit them together and end on `cards/install-now.mp4`, the real Flick logo animating.
 
 ## What's in this folder
 
 | File | What it's for |
 |---|---|
+| `higgsfield.md` | **Using Higgsfield? Start here.** Every prompt written out to paste as it is: start frames in Nano Banana Pro, Veo for the shots with sound, Kling start and end frames for the vanishes |
 | `ai-studio.md` | **Using Google AI Studio? Start here.** Every prompt written out to paste as it is: a start frame for Gemini's image model, then a video prompt for Veo |
 | `prompts.md` | This: the one-paragraph prompt, then every shot, for any tool |
 | `references/agent-*.png`, `references/agents.png` | Flick's five agents, drawn exactly as in the app. Attach them as references so the agents look right |
