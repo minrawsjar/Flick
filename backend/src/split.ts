@@ -99,7 +99,8 @@ export async function assign(body: Record<string, unknown>) {
     {
       role: 'system',
       content:
-        'You work out who had what on a shared bill from what the person says. "I", "me" and "my" are the person with id "you". "We all", "everyone" and "shared" mean every person listed. ' +
+        'You work out who had what on a shared bill from what the person says. "I", "me" and "my" are the person with id "you". "We all" and "everyone" mean every person listed, and so does "shared" when nobody is named. ' +
+        '"Maya and I shared the salmon" means only Maya and you had the salmon. What the sentence says about one item wins over what it says about everything: in "Maya and I shared everything, Leo had the tea", Maya and you had every item but the tea, and Leo had the tea. ' +
         "Match items loosely (\"the salmon\" is \"Salmon roll\"). Leave out items the description doesn't cover; never guess. Use only the given item indexes and people ids.",
     },
     {
