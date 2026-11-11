@@ -176,7 +176,8 @@ sequenceDiagram
 ## The agents
 
 Each agent is a module over the same workspace. Their colours and faces are the app's: Lens cyan,
-Autopilot green, Splitter yellow, Nudge pink, Scout orange, Ask Flick violet.
+Autopilot green, Splitter yellow, Nudge pink, Scout orange, Ask Flick violet. The working pages show
+only your own things, or an empty state that says how to start; the one-pager at `/` is the demo.
 
 ### Lens
 
@@ -306,7 +307,7 @@ flowchart LR
 - An [AG Studio](https://www.ag-grid.com/studio/) report over the PayPal sandbox: products, billing plans, invoices with their items and payments, transactions, payouts and balances, read from five endpoints at once and joined into related tables, plus Flick's own: this week's payments at each stage, past payments, money owed to you, and what each agent did.
 - Two custom widgets in a *Flick* group, *Who owes you* and *Week timeline*, read Studio's data from its context, in the app's colours.
 - AG Studio's own assistant builds and changes the pages, through the backend's [Responses API proxy](backend/src/ai-proxy.ts): it adds the key, allows only the configured models, and caps output tokens. *Ask Flick* in the corner is the same agent as `/ask`.
-- Reports you make are kept in the browser. Until you've paid anything, it shows a sample.
+- Reports you make are kept in the browser. Until you've paid anything, its tables are empty and it says how to start.
 
 ### Businesses on Flick
 
