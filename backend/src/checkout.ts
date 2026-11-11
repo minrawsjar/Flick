@@ -64,16 +64,19 @@ export async function flickCheckout(orderId: string) {
   try {
     ({ captureId } = await chargeSaved({ reference: `flick-${orderId}`, description: what, items: [{ name: what, amount: checkout.amount }], savedId, present: true }));
   } catch (err) {
-    if (!(err instanceof PayPalApiError)) throw err;
-    // The person sees PayPal's reason in a word or two (the sheet offers PayPal's page instead); the log has the rest.
-    console.error('Flick to pay:', err.message);
-    const issue = /"issue":"([A-Z_]+)"/.exec(err.message)?.[1] ?? /"name":"([A-Z_]+)"/.exec(err.message)?.[1];
-    throw new HttpError(402, `PayPal turned it down${issue ? ` (${issue.toLowerCase().replaceAll('_', ' ')})` : ''}.`);
+    throw err instanceof PayPalApiError ? declined(err) : err;
   }
   checkout.status = 'captured';
   checkout.captureId = captureId;
   save();
   return { checkout, captureId };
+}
+
+/** PayPal said no to a saved PayPal: its reason in a word or two, for the person (the log has the rest). */
+export function declined(err: PayPalApiError) {
+  console.error('Saved PayPal:', err.message);
+  const issue = /"issue":"([A-Z_]+)"/.exec(err.message)?.[1] ?? /"name":"([A-Z_]+)"/.exec(err.message)?.[1];
+  return new HttpError(402, `PayPal turned it down${issue ? ` (${issue.toLowerCase().replaceAll('_', ' ')})` : ''}.`);
 }
 
 export function cancelCheckout(orderId: string) {

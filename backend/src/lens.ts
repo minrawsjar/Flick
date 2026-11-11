@@ -103,7 +103,7 @@ function payeeFor(scan: Omit<Scan, 'payeeId'>): Payee {
 }
 
 /** The small copy of a photo kept with its scan: a JPEG the browser shrank (about 40 KB, 110 at most). */
-const isPhoto = (v: unknown): v is string => typeof v === 'string' && v.length <= 150_000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(v);
+export const isPhoto = (v: unknown): v is string => typeof v === 'string' && v.length <= 150_000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(v);
 
 /** Reads a photo, sent as a data URL, with a small copy of it to keep. */
 export async function read(body: Record<string, unknown>) {

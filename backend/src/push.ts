@@ -110,6 +110,18 @@ async function sendTo(subs: Subscription[], message: Message) {
   return delivered;
 }
 
+/**
+ * A notification for one workspace's browsers now (Flick Chat: a friend asked, paid, reminded).
+ * `tag` is also the inbox item's id when there is one, so check() doesn't send it again.
+ */
+export async function notify(workspace: string, message: { title: string; body: string; url: string; tag: string }) {
+  const d = load();
+  const browsers = d.subscriptions.filter((s) => (s.workspace ?? 'local') === workspace);
+  if (!browsers.length) return 0;
+  d.sent = [...d.sent, `${workspace}:${message.tag}`].slice(-3000);
+  return sendTo(browsers, message);
+}
+
 export const publicKey = () => ({ publicKey: load().vapid.publicKey });
 
 export async function subscribe(body: Record<string, unknown>) {

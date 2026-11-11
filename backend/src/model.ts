@@ -80,6 +80,10 @@ export type Debt = {
   status: 'requested' | 'paid' | 'cancelled';
   reminders: number;
   remindedAt?: string;
+  /** The split it's a share of (split.ts), so its friends' shares show together. */
+  split?: string;
+  /** Asked in Flick Chat (chat.ts), not with an invoice: the friend's PayPal email, and the request's message. */
+  chat?: { with: string; message: string };
 };
 
 /** A PayPal checkout in flight: what to do once it's approved. */

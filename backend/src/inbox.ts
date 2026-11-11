@@ -1,4 +1,5 @@
 import * as autopilot from './autopilot.ts';
+import * as chat from './chat.ts';
 import { HttpError } from './http.ts';
 import * as lens from './lens.ts';
 import { addDays, cents, usd, type Agent } from './model.ts';
@@ -32,6 +33,20 @@ const days = (iso: string) => Math.round((Date.now() - Date.parse(iso)) / 86_400
 function entries(): Entry[] {
   const out: Entry[] = [];
   const { week } = state;
+
+  // Friends on Flick waiting for you: their requests in Flick Chat, paid from your saved PayPal.
+  for (const m of chat.waiting().slice(0, 3)) {
+    out.push({
+      id: `chat-${m.id}`,
+      agent: 'splitter',
+      title: `${m.peer.name} asked you for ${usd(m.amount!)}`,
+      detail: `For ${m.what}, in Flick Chat. Pays from the PayPal you signed in with.`,
+      amount: m.amount,
+      action: 'Pay now',
+      href: `/chat?with=${encodeURIComponent(m.peer.email)}`,
+      run: async () => (await chat.pay({ with: m.peer.email, id: m.id }), { done: `Paid ${m.peer.name}` }),
+    });
+  }
 
   const failed = week.payments.filter((p) => p.status === 'failed');
   if (failed.length) {

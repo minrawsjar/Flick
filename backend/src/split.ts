@@ -1,17 +1,19 @@
 import { askJson } from './ai.ts';
+import * as chat from './chat.ts';
 import { need } from './http.ts';
 import { id, usd, type Debt } from './model.ts';
 import { sendInvoice } from './paypal.ts';
 import { shares, type SplitItem } from './rules.ts';
 import { friend, log, save, state } from './store.ts';
 
-// Splitter: who had what on a receipt (often one Lens just read), worked out with rules.ts, then a
-// PayPal invoice to each friend for their share. Each becomes a debt Nudge can follow up.
+// Splitter: who had what on a receipt (often one Lens just read), worked out with rules.ts, then each
+// friend is asked for their share: in Flick Chat if they're on Flick (paid in a tap, or by itself if
+// they allow it), otherwise with a PayPal invoice. Each becomes a debt Nudge can follow up.
 
 const money = (v: unknown, max: number) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max;
 
 export async function split(body: Record<string, unknown>) {
-  const { merchant, items, tax = 0, tip = 0 } = body;
+  const { merchant, items, tax = 0, tip = 0, scanId } = body;
   const people = new Set(['you', ...state.friends.map((f) => f.id)]);
 
   need(typeof merchant === 'string' && merchant.trim() && merchant.length <= 80, 'merchant must be a name of up to 80 characters.');
@@ -27,22 +29,32 @@ export async function split(body: Record<string, unknown>) {
   need(!nobody.length, `Nobody had the ${nobody.join(' or ')} yet: tick who did.`);
 
   const reference = id('split');
+  // The receipt's photo, when Lens read it: friends on Flick see it with their share.
+  const photo = typeof scanId === 'string' ? state.scans.find((s) => s.id === scanId)?.photo : undefined;
   const debts: Debt[] = [];
   const failed: { friendId: string; error: string }[] = [];
   for (const [friendId, amount] of Object.entries(each)) {
     const who = friend(friendId);
     if (!who || amount <= 0) continue;
     const had = (items as SplitItem[]).filter((i) => i.people.includes(friendId)).map((i) => i.name);
+    const note = `Split with Flick: ${had.join(', ')}, plus your part of the tax and tip.`;
     try {
+      const peer = chat.onFlick(who.email);
+      if (peer) {
+        const { debt } = await chat.ask(peer, amount, merchant as string, { text: note, ...(photo && { photo }) });
+        debt.split = reference;
+        debts.push(debt);
+        continue;
+      }
       const invoice = await sendInvoice({
         reference: `${reference}-${friendId}`,
         to: who.email,
         name: who.name,
         item: `Your share of ${merchant}`,
         amount,
-        note: `Split with Flick: ${had.join(', ')}, plus your part of the tax and tip.`,
+        note,
       });
-      const debt: Debt = { id: id('debt'), friendId, amount, what: merchant as string, createdAt: new Date().toISOString(), invoiceId: invoice.id, payerUrl: invoice.payerUrl, status: 'requested', reminders: 0 };
+      const debt: Debt = { id: id('debt'), friendId, amount, what: merchant as string, createdAt: new Date().toISOString(), invoiceId: invoice.id, payerUrl: invoice.payerUrl, status: 'requested', reminders: 0, split: reference };
       state.debts.unshift(debt);
       debts.push(debt);
     } catch (err) {

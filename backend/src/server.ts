@@ -4,6 +4,7 @@ import { aiResponses } from './ai-proxy.ts';
 import * as account from './account.ts';
 import * as agent from './agent.ts';
 import * as autopilot from './autopilot.ts';
+import * as chat from './chat.ts';
 import * as friends from './friends.ts';
 import * as inbox from './inbox.ts';
 import { cancelCheckout, captureCheckout, flickCheckout, frontendUrl } from './checkout.ts';
@@ -49,12 +50,16 @@ const routes: Record<string, Handler> = {
 
   /** Everything Flick knows, plus which services are configured. */
   // Not the saved PayPal's vault id, or a sign-in under way: the browser only needs who's signed in.
-  'GET /api/state': () => ({
-    ...state,
-    signingIn: undefined,
-    profile: state.profile && { ...state.profile, savedId: '' },
-    config: { paypal: Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_SECRET), ai: Boolean(aiKey()) },
-  }),
+  // Signed in before Flick Chat, a person shows up to friends there from their next visit.
+  'GET /api/state': () => {
+    chat.register();
+    return {
+      ...state,
+      signingIn: undefined,
+      profile: state.profile && { ...state.profile, savedId: '' },
+      config: { paypal: Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_SECRET), ai: Boolean(aiKey()) },
+    };
+  },
   /** Back to the start: an empty workspace (the demo seed without a workspace cookie). */
   'POST /api/reset': () => (reset(), state),
 
@@ -83,6 +88,16 @@ const routes: Record<string, Handler> = {
   'POST /api/nudge/draft': async ({ body }) => nudge.draft(await body()),
   'POST /api/nudge/send': async ({ body }) => nudge.send(await body()),
   'POST /api/debts/refresh': () => nudge.refresh(),
+
+  // Flick Chat: friends signed in with PayPal talk, ask for money, and pay in a tap (chat.ts)
+  'GET /api/chat': () => chat.list(),
+  'GET /api/chat/thread': ({ url }) => chat.thread(url.searchParams),
+  'POST /api/chat/send': async ({ body }) => chat.send(await body()),
+  'POST /api/chat/request': async ({ body }) => chat.request(await body()),
+  'POST /api/chat/pay': async ({ body }) => chat.pay(await body()),
+  'POST /api/chat/decline': async ({ body }) => chat.decline(await body()),
+  'POST /api/chat/remind': async ({ body }) => chat.remind(await body()),
+  'POST /api/chat/allow': async ({ body }) => chat.allow(await body()),
 
   // Scout: what you buy again and again, priced at every store; buying it through PayPal
   'GET /api/scout': () => scout.view(),

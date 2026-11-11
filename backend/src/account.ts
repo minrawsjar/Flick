@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { frontendUrl } from './checkout.ts';
 import { need } from './http.ts';
 import type { Profile, State } from './model.ts';
+import { register } from './chat.ts';
 import { deleteSaved, finishSaving, startSaving } from './paypal.ts';
 import { save, state, workspaceId } from './store.ts';
 
@@ -80,6 +81,8 @@ export async function welcome({ saved, guest }: SignedIn, isNew: boolean) {
     ...(named && { named }),
   } satisfies Profile;
   save();
+  // Friends find them in Flick Chat by this PayPal email.
+  register();
   return state.profile;
 }
 
@@ -91,5 +94,6 @@ export function rename(body: Record<string, unknown>) {
   state.profile.name = name;
   state.profile.named = true;
   save();
+  register();
   return { ...state.profile, savedId: '' };
 }

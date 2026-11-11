@@ -366,6 +366,98 @@ await step('signing out ends the session', async () => {
   check(res.status === 200 && cookie.startsWith('flick=;') && cookie.includes('Max-Age=0'), cookie);
 });
 
+section('Flick Chat');
+// A second person signed in, Robin, with a saved PayPal PayPal won't know either: chatting with them
+// works, paying fails safely. (scripts/../frontend e2e pays a request for real.)
+const ME = 'api-test@flick.example.com';
+const ROBIN = 'api-robin@flick.example.com';
+const robinWs = workspaceFor(ROBIN);
+writeFileSync(
+  join(dir, 'workspaces', `${robinWs}.json`),
+  JSON.stringify({ ...seed(), friends: [], debts: [], profile: { name: 'Robin', email: ROBIN, savedId: 'not-a-real-vault-id-2', since: new Date().toISOString() } }),
+);
+const robin = as(robinWs);
+const PHOTO = `data:image/jpeg;base64,${Buffer.from('a small jpeg, as Lens keeps').toString('base64')}`;
+const thread = async (who: typeof me, other: string) => (await who(`chat/thread?with=${encodeURIComponent(other)}`)).json;
+let asked = '';
+await step('a guest has no chats: Flick Chat needs signing in', async () => {
+  const res = await guest('chat');
+  check(res.status === 401 && /Sign in with PayPal/.test(res.json.error?.message), `${res.status}`);
+});
+await step("friends are in your chats; one who hasn't signed in isn't on Flick, so only a request reaches them", async () => {
+  await robin('state'); // Robin's first visit puts them on Flick.
+  const { json } = await me('chat');
+  const maya = json.chats.find((c: Json) => c.peer.name === 'Maya');
+  check(maya && !maya.peer.onFlick && json.me.email === ME, JSON.stringify(json).slice(0, 200));
+  const res = await me('chat/send', { with: maya.peer.email, text: 'Hi Maya' });
+  check(res.status === 409 && /isn't on Flick yet/.test(res.json.error?.message), `${res.status}`);
+  check((await me('chat/send', { with: ME, text: 'Me?' })).status === 400, 'chatted with myself');
+});
+await step('a message reaches a friend on Flick, and their chats show who started it', async () => {
+  const { json } = await me('chat/send', { with: ROBIN, text: 'Dinner was fun!' });
+  check(json.kind === 'text' && json.from === ME, JSON.stringify(json));
+  const theirs = (await robin('chat')).json.chats.find((c: Json) => c.peer.email === ME);
+  check(theirs?.peer.onFlick && theirs.peer.name === 'Swarnim Raj' && theirs.unread === 1 && theirs.last.text === 'Dinner was fun!', JSON.stringify(theirs));
+});
+await step('a request with the bill\'s photo: in the chat, and in your Flick as a request Nudge follows', async () => {
+  check((await me('chat/request', { with: ROBIN, amount: 12.5, what: 'Dinner', photo: 'data:image/png;base64,AAAA' })).status === 400, 'took a PNG');
+  check((await me('chat/request', { with: ROBIN, amount: 0, what: 'Dinner' })).status === 400, 'took $0');
+  const { json } = await me('chat/request', { with: ROBIN, amount: 12.5, what: 'Dinner', photo: PHOTO });
+  check(json.message?.status === 'open' && json.message.photo === PHOTO && json.debt?.chat?.with === ROBIN, JSON.stringify(json).slice(0, 200));
+  asked = json.message.id;
+  const debt = (await me('state')).json.debts.find((d: Json) => d.id === json.debt.id);
+  check(debt?.status === 'requested' && !debt.invoiceId, JSON.stringify(debt));
+  check((await me('state')).json.friends.some((f: Json) => f.email === ROBIN), 'Robin isn\'t a friend now');
+});
+await step('Robin sees it with its photo, and Today asks them to pay it', async () => {
+  const t = await thread(robin, ME);
+  check(t.messages.some((m: Json) => m.id === asked && m.photo === PHOTO), 'not in the chat');
+  check((await robin('chat')).json.chats.find((c: Json) => c.peer.email === ME)?.youOwe === 12.5, 'not owed');
+  const items = (await robin('inbox')).json.items;
+  check(items.some((i: Json) => i.title === 'Swarnim Raj asked you for $12.50' && i.action === 'Pay now'), JSON.stringify(items.map((i: Json) => i.title)));
+  const again = await thread(robin, ME);
+  check((await thread(robin, ME)).v === again.v && (await robin(`chat/thread?with=${ME}&v=${again.v}`)).json.same === true, 'polling sends it all again');
+});
+await step('only Robin pays it, and PayPal turning down their saved PayPal pays nothing', async () => {
+  check((await me('chat/pay', { with: ROBIN, id: asked })).status === 409, 'I paid my own request');
+  const res = await robin('chat/pay', { with: ME, id: asked });
+  check(res.status === 402 && /PayPal turned it down/.test(res.json.error?.message), `${res.status}: ${res.json.error?.message}`);
+  check((await thread(robin, ME)).messages.find((m: Json) => m.id === asked)?.status === 'open', 'not open again');
+  return `${res.status}: ${res.json.error?.message}`;
+});
+await step('a reminder from Nudge goes into the chat', async () => {
+  const { json } = await me('chat/remind', { with: ROBIN, id: asked, tone: 'Funny' });
+  check(json.reminders === 1, JSON.stringify(json));
+  const reminder = (await thread(robin, ME)).messages.find((m: Json) => m.kind === 'reminder' && m.about === asked);
+  check(reminder?.text, 'no reminder');
+  check((await robin('chat/remind', { with: ME, id: asked })).status === 409, 'Robin reminded themselves');
+  return reminder.text;
+});
+await step('Robin turns it down: it closes in your Flick too', async () => {
+  check((await robin('chat/decline', { with: ME, id: asked })).json.status === 'declined', 'not declined');
+  check((await robin('chat/decline', { with: ME, id: asked })).status === 409, 'declined twice');
+  check((await robin('chat/pay', { with: ME, id: asked })).status === 409, 'paid after declining');
+  const debt = (await me('state')).json.debts.find((d: Json) => d.chat?.message === asked);
+  check(debt?.status === 'cancelled', JSON.stringify(debt));
+});
+await step('pays by itself up to the limit Robin set: over it, a request waits for them', async () => {
+  check((await robin('chat/allow', { with: ME, cap: 600 })).status === 400, 'took $600');
+  check((await robin('chat/allow', { with: ME, cap: 20 })).json.mine === 20, 'no limit');
+  check((await thread(me, ROBIN)).autopay.theirs === 20, "I can't see Robin's limit");
+  const over = (await me('chat/request', { with: ROBIN, amount: 25, what: 'Tickets' })).json;
+  check(over.message.status === 'open' && !over.message.tries, 'tried to pay it');
+  // Under it: Flick tries Robin's saved PayPal at once. PayPal says no to this one, so it waits for them.
+  const under = await me('chat/request', { with: ROBIN, amount: 8, what: 'Coffee' });
+  check(under.status === 200 && under.json.message.status === 'open' && under.json.message.tries === 1, JSON.stringify(under.json.message));
+  check((await robin('chat/allow', { with: ME, cap: 0 })).json.mine === 0, 'still on');
+});
+await step('Split asks a friend on Flick in the chat, not with an invoice', async () => {
+  const id = (await me('state')).json.friends.find((f: Json) => f.email === ROBIN).id;
+  const { json } = await me('split', { merchant: 'Taco Night', items: [{ name: 'Tacos', price: 20, people: ['you', id] }] });
+  check(json.debts.length === 1 && json.debts[0].chat?.with === ROBIN && !json.debts[0].invoiceId && json.debts[0].split, JSON.stringify(json.debts));
+  check((await thread(robin, ME)).messages.some((m: Json) => m.kind === 'request' && m.what === 'Taco Night' && m.amount === 10 && /Tacos/.test(m.text)), 'not in the chat');
+});
+
 section('Money Studio');
 await step('the dashboard\'s tables, from PayPal and Flick', async () => {
   const data = await api('dashboard');

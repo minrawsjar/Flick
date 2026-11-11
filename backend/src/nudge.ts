@@ -1,12 +1,13 @@
 import { aiKey, askJson } from './ai.ts';
+import * as chat from './chat.ts';
 import { HttpError, need } from './http.ts';
 import { usd, type Debt, type Friend } from './model.ts';
 import { getInvoice, remindInvoice, sendInvoice } from './paypal.ts';
 import { friend, log, save, state } from './store.ts';
 
 // Nudge: drafts a reminder for a friend who owes you, in the tone you pick, and sends it as PayPal's
-// own invoice reminder (or as the first request, if no invoice went out yet). It also checks which
-// requests have been paid.
+// own invoice reminder (or as the first request, if no invoice went out yet), or into your Flick
+// Chat for a request made there (chat.ts). It also checks which invoices have been paid.
 
 export const TONES = ['Friendly', 'Funny', 'Straight'] as const;
 type Tone = (typeof TONES)[number];
@@ -55,7 +56,9 @@ export async function send(body: Record<string, unknown>) {
   need(typeof text === 'string' && text.trim() && text.length <= 600, 'text must be the message, up to 600 characters.');
   need(debt.status === 'requested', `${who.name} has already ${debt.status === 'paid' ? 'paid' : 'been let off'}.`, 409);
 
-  if (debt.invoiceId) {
+  if (debt.chat) {
+    chat.remindIn(debt, text.trim());
+  } else if (debt.invoiceId) {
     await remindInvoice(debt.invoiceId, `Reminder: ${debt.what}`, text);
   } else {
     const invoice = await sendInvoice({ reference: debt.id, to: who.email, name: who.name, item: `Your share of ${debt.what}`, amount: debt.amount, note: text });
