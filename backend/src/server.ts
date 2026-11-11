@@ -15,6 +15,7 @@ import { PayPalApiError } from './paypal.ts';
 import * as push from './push.ts';
 import { assign, split } from './split.ts';
 import { reset, save, state } from './store.ts';
+import { handleWebhookRequest } from './webhooks.ts';
 
 // Flick's API. The browser never calls it directly: the frontend rewrites /api/* to here
 // (frontend/next.config.ts), so everything is same-origin and no CORS is needed. The frontend's
@@ -28,6 +29,18 @@ const redirect = (res: ServerResponse, to: string) => res.writeHead(303, { Locat
 /** The frontend page a checkout started from: Autopilot's week, Scout's basket, or a Lens payment. */
 const pages = { week: 'autopilot', basket: 'scout', scan: 'lens' } as const;
 const pageFor = (orderId: string) => `${frontendUrl()}/${pages[state.checkouts[orderId]?.kind ?? 'scan']}`;
+
+/**
+ * Captures an approved checkout and notifies the appropriate agent (Autopilot, Lens, or Scout).
+ * Shared by GET /api/paypal/return and POST /api/paypal/webhook (CHECKOUT.ORDER.APPROVED).
+ */
+export async function completeCheckout(orderId: string) {
+  const { checkout, captureId, saved } = await captureCheckout(orderId);
+  if (captureId && checkout.kind === 'week') await autopilot.approved(checkout, captureId, saved);
+  if (captureId && checkout.kind === 'scan') await lens.paid(checkout);
+  if (captureId && checkout.kind === 'basket') await scout.paid(checkout);
+  return { checkout, captureId, saved };
+}
 
 const routes: Record<string, Handler> = {
   'GET /api/health': () => ({ ok: true }),
@@ -87,10 +100,7 @@ const routes: Record<string, Handler> = {
   'GET /api/paypal/return': async ({ res, url }) => {
     const orderId = url.searchParams.get('token') ?? '';
     try {
-      const { checkout, captureId, saved } = await captureCheckout(orderId);
-      if (captureId && checkout.kind === 'week') await autopilot.approved(checkout, captureId, saved);
-      if (captureId && checkout.kind === 'scan') await lens.paid(checkout);
-      if (captureId && checkout.kind === 'basket') await scout.paid(checkout);
+      const { checkout } = await completeCheckout(orderId);
       redirect(res, `${pageFor(orderId)}?paid=${checkout.kind}`);
     } catch (err) {
       // An order Flick never made (a stale or made-up link) needs no stack trace.
@@ -98,6 +108,9 @@ const routes: Record<string, Handler> = {
       redirect(res, `${pageFor(orderId)}?checkout=failed`);
     }
   },
+  // Webhooks: PayPal notifies Flick the moment a payment happens.
+  'POST /api/paypal/webhook': async ({ req, body }) =>
+    handleWebhookRequest({ headers: req.headers, body: await body(), completeCheckout }),
   'GET /api/paypal/cancel': ({ res, url }) => {
     const checkout = cancelCheckout(url.searchParams.get('token') ?? '');
     if (checkout?.kind === 'week' && state.week.approval?.orderId === checkout.orderId) delete state.week.approval;

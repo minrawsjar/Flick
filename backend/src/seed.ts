@@ -79,6 +79,7 @@ export function seed(now = new Date()): State {
       { id: 'act_seed2', at: `${day(-7)}T21:10:00.000Z`, agent: 'splitter', text: 'Split movie night and asked Maya for $18.40', amount: 18.4 },
       { id: 'act_seed1', at: `${day(-13)}T09:00:00.000Z`, agent: 'splitter', text: 'Split the airport cab and asked Leo for $27.00', amount: 27 },
     ],
+    webhookEvents: [],
   };
   state.week.payments = planWeek(starts, state);
   return state;

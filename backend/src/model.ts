@@ -100,6 +100,8 @@ export type State = {
   scout?: { purchases: Purchase[] };
   /** Autopilot paying by itself: the PayPal account the person saved for it, and the most it may pay in a week. */
   autopay?: { savedId: string; email?: string; since: string; cap: number };
+  /** The last 200 PayPal webhook event IDs processed, newest first. */
+  webhookEvents?: string[];
 };
 
 // --- Helpers ------------------------------------------------------------------------

@@ -77,6 +77,7 @@ In production, set the variables in your host's environment (e.g. Render's envir
 
 ```
 backend/src/server.ts           The API's routes
+backend/src/webhooks.ts         PayPal webhooks: signature verification, invoice/payout/checkout events
 backend/src/paypal.ts           Every PayPal call: OAuth, retries, orders, payouts, invoices, refunds
 backend/src/rules.ts            Pure rules: planning the week, splitting a bill, checking Lens (tested)
 backend/src/lens.ts             Lens: reads a photo with the AI model, pays what it read
@@ -153,8 +154,10 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `POST /api/scout/online` `{ productId }` or `{ query }` | Live prices at online stores, from Channel3 |
 | `POST /api/scout/buy` `{ storeId, items }` | One checkout for a basket at a store; returns `approveUrl` |
 | `GET /api/paypal/return`, `/cancel` | Where PayPal sends people back after a checkout |
+| `POST /api/paypal/webhook` | Receives and verifies PayPal webhook events (invoice paid, payouts, checkout approved) |
 | `GET /api/dashboard` | Money Studio's tables |
 | `GET /api/ai/models`, `POST /api/ai/responses` | Money Studio's assistant |
+
 
 Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 404 for an unknown id, 409 when the state doesn't allow it, 502 when PayPal or the AI model failed, 503 when a key isn't set.
 
