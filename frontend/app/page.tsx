@@ -172,7 +172,9 @@ function Closing() {
 
 export default function Home() {
   return (
-    <>
+    // One element around it all, first: arriving here, Next.js scrolls to the page's first element,
+    // and with a bare fragment that could be the footer, while the header and sections still load.
+    <div>
       <Nav />
       <ShowDemo>
       <main>
@@ -283,6 +285,6 @@ export default function Home() {
           </a>
         </p>
       </footer>
-    </>
+    </div>
   );
 }

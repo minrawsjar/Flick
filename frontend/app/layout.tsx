@@ -34,7 +34,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // The theme script sets data-theme before React hydrates, hence suppressHydrationWarning.
-    <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
+    // data-scroll-behavior: the page scrolls smoothly (globals.css), but going to another page lands
+    // at once, as Next.js did by itself before version 16.
+    <html lang="en" className={`${inter.variable} h-full antialiased`} data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

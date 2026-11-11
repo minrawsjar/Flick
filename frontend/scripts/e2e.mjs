@@ -599,6 +599,20 @@ await step("notifications: subscribed through a real push service, and the welco
   return `${out.host} took it`;
 });
 
+await step("the Flick logo goes to the top of the one-pager, from another page or from far down it", async () => {
+  const landed = [];
+  for (const from of ["/lens", "/"]) {
+    await open(from, 1500);
+    await js("window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' })");
+    await sleep(500);
+    const { x, y } = await js("(() => { const b = document.querySelector('header a[href=\"/\"]').getBoundingClientRect(); return { x: b.x + 10, y: b.y + b.height / 2 }; })()");
+    for (const type of ["mousePressed", "mouseReleased"]) await cdp("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+    await sleep(2000);
+    landed.push(`${from} → ${await js("location.pathname")} at ${await js("Math.round(scrollY)")}`);
+  }
+  check(landed.every((l) => l.endsWith("→ / at 0")), landed.join("; "));
+});
+
 await step("Sign in: /login opens PayPal's own page to save PayPal with Flick; cancelling comes back", async () => {
   await device(devices[0][1]);
   await open("/login");

@@ -67,10 +67,12 @@ function Account() {
 
 /** `app`: a working page, which has the tab bar below laptop width instead of a row of links. */
 export function Nav({ app = false }: { app?: boolean }) {
+  const path = usePathname();
   return (
     <header className="sticky top-0 z-30 bg-page/75 pt-[env(safe-area-inset-top)] backdrop-blur-2xl backdrop-saturate-150">
       <nav className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 text-[15px]">
+        {/* Already on the one-pager, the logo takes you back to its top: a link to the same page doesn't scroll. */}
+        <Link href="/" onClick={() => path === "/" && window.scrollTo({ top: 0 })} className="flex items-center gap-2 text-[15px]">
           <Logo />
           Flick
         </Link>
