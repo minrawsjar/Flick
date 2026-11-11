@@ -12,7 +12,8 @@ import { check, checklist, client, startBackend, type Json } from './harness.ts'
 
 // Our own state folder, so a signed-in person's workspace can be put there (Signing in, below).
 const dir = mkdtempSync(join(tmpdir(), 'flick-api-'));
-const base = await startBackend(4200, { STATE_FILE: join(dir, 'state.json') });
+// A made-up webhook id: PayPal's check of a webhook's signature runs for real, and must say no.
+const base = await startBackend(4200, { STATE_FILE: join(dir, 'state.json'), PAYPAL_WEBHOOK_ID: 'WH-FLICK-API-TEST' });
 const { call, api, refuses } = client(base);
 const { step, section, done } = checklist();
 const state = () => api('state');
@@ -209,6 +210,31 @@ await step('Nudge sends a PayPal reminder; empty messages refused', async () => 
 await step('Check who\'s paid asks PayPal about every open invoice', async () => {
   const debts = await api('debts/refresh', {});
   check(debts.filter((d: Json) => d.invoiceId).every((d: Json) => d.status === 'requested'), 'something changed unpaid');
+});
+
+section('PayPal webhooks');
+// A real webhook needs PayPal's signature, which only PayPal can make; webhooks.test.ts and
+// webhooks-route.test.ts apply signed events. Here: what anyone else sends changes nothing.
+const paid = () => ({ id: `WH-API-${crypto.randomUUID()}`, event_type: 'INVOICING.INVOICE.PAID', resource: { id: invoiced[0].invoiceId, status: 'PAID' } });
+const stillOwed = async () => (await state()).debts.find((d: Json) => d.id === invoiced[0].id)?.status === 'requested';
+await step('an "invoice paid" with no PayPal signature is turned away', async () => {
+  const res = await call('paypal/webhook', paid());
+  check(res.status === 200 && res.json.ok === false && res.json.reason === 'invalid signature', `${res.status} ${JSON.stringify(res.json)}`);
+  check(await stillOwed(), 'the request was marked paid');
+});
+await step('a forged signature is checked with PayPal, which says no', async () => {
+  const res = await call('paypal/webhook', paid(), {
+    headers: {
+      'Content-Type': 'application/json',
+      'paypal-auth-algo': 'SHA256withRSA',
+      'paypal-cert-url': 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-360caa42-fca2a594-a5cafa77',
+      'paypal-transmission-id': crypto.randomUUID(),
+      'paypal-transmission-sig': Buffer.from('not PayPal').toString('base64'),
+      'paypal-transmission-time': new Date().toISOString(),
+    },
+  });
+  check(res.json.ok === false && res.json.reason === 'invalid signature', JSON.stringify(res.json));
+  check(await stillOwed(), 'the request was marked paid');
 });
 
 section('Scout');

@@ -1,10 +1,13 @@
 import { id, type Agent, type State } from './model.ts';
 import { verifyWebhookSignature, type WebhookHeaders } from './paypal.ts';
-import { save, state as globalState } from './store.ts';
+import { findWorkspace, save, state } from './store.ts';
 
 // Webhooks: receives events from PayPal the moment they happen so Flick stays in sync.
 // Verifies every event's signature before processing, keeps the handling idempotent with
 // a 200-event memory, and answers 200 quickly so PayPal does not keep retrying.
+//
+// PayPal sends them with no cookie, so each event goes to the workspace whose checkout, invoice
+// or payout it is about (`concerns`), and is applied there after that workspace's other changes.
 
 export type WebhookEvent = {
   id: string;
@@ -24,6 +27,28 @@ function logActivity(state: State, agent: Agent, text: string, amount?: number) 
   if (!state.activity) state.activity = [];
   state.activity.unshift({ id: id('act'), at: new Date().toISOString(), agent, text, amount });
   state.activity.length = Math.min(state.activity.length, 200);
+}
+
+/**
+ * Whether an event is about this workspace: the checkout, invoice or week's payout batch is its own.
+ * Reads state saved by older versions too, so every field may be missing.
+ */
+export function concerns(state: State, event: WebhookEvent): boolean {
+  const resource = event.resource ?? {};
+  switch (event.event_type) {
+    case 'CHECKOUT.ORDER.APPROVED':
+      return Boolean(resource.id && state.checkouts?.[resource.id]);
+    case 'INVOICING.INVOICE.PAID': {
+      const invoiceId = resource.id ?? resource.invoice?.id;
+      return Boolean(invoiceId && state.debts?.some((d) => d.invoiceId === invoiceId));
+    }
+    case 'PAYMENT.PAYOUTS-ITEM.SUCCEEDED':
+    case 'PAYMENT.PAYOUTS-ITEM.FAILED':
+    case 'PAYMENT.PAYOUTS-ITEM.UNCLAIMED':
+      return Boolean(resource.payout_batch_id && state.week?.payments?.some((p) => p.payoutBatchId === resource.payout_batch_id));
+    default:
+      return false;
+  }
 }
 
 /**
@@ -133,20 +158,22 @@ export async function applyEvent(
 }
 
 /**
- * Validates the PayPal webhook signature and applies the event to Flick's state.
- * Always resolves to a response object (never throws), allowing server.ts to answer 200 quickly.
+ * Validates the PayPal webhook signature and applies the event to the workspace it's about.
+ * Resolves to a response object rather than throwing for anything PayPal sent, so server.ts answers
+ * 200 and PayPal doesn't keep retrying.
  */
 export async function handleWebhookRequest({
   headers,
   body,
   completeCheckout,
-  state = globalState,
+  within,
   verify = verifyWebhookSignature,
 }: {
   headers: Record<string, string | string[] | undefined>;
   body: Record<string, unknown>;
   completeCheckout?: (orderId: string) => Promise<unknown>;
-  state?: State;
+  /** Runs `work` in a workspace, after that workspace's other changes (server.ts). */
+  within: <T>(workspace: string, work: () => Promise<T>) => Promise<T>;
   verify?: typeof verifyWebhookSignature;
 }): Promise<{ ok: boolean; applied?: boolean; reason?: string }> {
   const webhookId = process.env.PAYPAL_WEBHOOK_ID;
@@ -167,9 +194,13 @@ export async function handleWebhookRequest({
     return { ok: false, reason: 'invalid signature' };
   }
 
-  const result = await applyEvent(state, body as WebhookEvent, { completeCheckout });
-  if (result.applied) {
-    save();
-  }
+  const event = body as WebhookEvent;
+  const workspace = findWorkspace((s) => concerns(s, event));
+  if (!workspace) return { ok: true, applied: false, reason: 'not about anything in Flick' };
+  const result = await within(workspace, async () => {
+    const applied = await applyEvent(state, event, { completeCheckout });
+    if (applied.applied) save();
+    return applied;
+  });
   return { ok: true, ...result };
 }

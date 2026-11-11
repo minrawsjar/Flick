@@ -143,9 +143,15 @@ const routes: Record<string, Handler> = {
       redirect(res, `${pageFor(orderId)}?checkout=failed`);
     }
   },
-  // Webhooks: PayPal notifies Flick the moment a payment happens.
+  // Webhooks: PayPal notifies Flick the moment a payment happens. They come with no cookie, so each
+  // is applied in the workspace it's about, in turn with that workspace's other changes.
   'POST /api/paypal/webhook': async ({ req, body }) =>
-    handleWebhookRequest({ headers: req.headers, body: await body(), completeCheckout }),
+    handleWebhookRequest({
+      headers: req.headers,
+      body: await body(),
+      completeCheckout,
+      within: (workspace, work) => serially(workspace, () => inWorkspace(workspace, work)),
+    }),
   'GET /api/paypal/cancel': ({ res, url }) => {
     const checkout = cancelCheckout(url.searchParams.get('token') ?? '');
     if (checkout?.kind === 'week' && state.week.approval?.orderId === checkout.orderId) delete state.week.approval;
@@ -216,6 +222,7 @@ function workspaceOf(req: IncomingMessage) {
   const cookie = /(?:^|;\s*)flick=([^;]+)/.exec(req.headers.cookie ?? '')?.[1] ?? '';
   return isWorkspaceId(cookie) ? cookie : 'local';
 }
+const UNLOCKED = new Set(['/api/ai/responses', '/api/paypal/webhook']);
 const isWrite = (method: string, path: string) => method !== 'GET' || path === '/api/paypal/return' || path === '/api/paypal/cancel' || path.startsWith('/api/auth/');
 
 function errorStatus(err: unknown) {
@@ -236,8 +243,9 @@ createServer(async (req, res) => {
   const workspace = workspaceOf(req);
   const run = () => inWorkspace(workspace, () => handler(ctx));
   try {
-    // The AI proxy streams for as long as a chat lasts, so it doesn't hold the write lock.
-    const data = await (isWrite(method, url.pathname) && url.pathname !== '/api/ai/responses' ? serially(workspace, run) : run());
+    // Not locked here: the AI proxy streams for as long as a chat lasts, and a webhook locks the
+    // workspace it turns out to be about (it has no cookie, so it would lock "local" first).
+    const data = await (isWrite(method, url.pathname) && !UNLOCKED.has(url.pathname) ? serially(workspace, run) : run());
     if (!res.headersSent) send(res, 200, data);
   } catch (err) {
     const status = errorStatus(err);

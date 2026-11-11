@@ -206,15 +206,17 @@ test('handleWebhookRequest rejects event with bad signature and leaves state unc
       resource: { id: 'INV2-NONE' },
     };
 
+    let ran = false;
     const res = await handleWebhookRequest({
       headers: { 'paypal-transmission-id': 'tx-1' },
       body: event,
-      state,
+      within: async (_workspace, work) => ((ran = true), work()),
       verify: mockVerify,
     });
 
     assert.equal(res.ok, false);
     assert.equal(res.reason, 'invalid signature');
+    assert.equal(ran, false, 'nothing ran in any workspace');
     assert.equal(state.webhookEvents?.includes('WH-EVT-BAD'), false);
   } finally {
     process.env.PAYPAL_WEBHOOK_ID = prevEnv;

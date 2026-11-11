@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { id, type Agent, type State } from './model.ts';
@@ -44,6 +44,25 @@ function open(workspaceId: string): Workspace {
 
 /** Whether a workspace has been started: anything saved, or open in memory. */
 export const hasWorkspace = (workspaceId: string) => opened.has(workspaceId) || existsSync(fileOf(workspaceId));
+
+/**
+ * The workspace something is in, for a caller with no cookie (a PayPal webhook): the open workspaces
+ * first, then the ones saved on disk, read without opening them.
+ * ponytail: reads every saved workspace; keep an index of PayPal ids if there are ever thousands.
+ */
+export function findWorkspace(has: (state: State) => boolean): string | undefined {
+  for (const [workspaceId, { state }] of opened) if (has(state)) return workspaceId;
+  const folder = dirname(fileOf('x'.repeat(16)));
+  const saved = existsSync(folder) ? readdirSync(folder).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)) : [];
+  for (const workspaceId of ['local', ...saved.filter(isWorkspaceId)]) {
+    if (opened.has(workspaceId) || !existsSync(fileOf(workspaceId))) continue;
+    try {
+      if (has(JSON.parse(readFileSync(fileOf(workspaceId), 'utf8')) as State)) return workspaceId;
+    } catch {
+      // A half-written or broken file is nobody's.
+    }
+  }
+}
 
 /** Runs `work` in a workspace: everything it does to `state` is that workspace's. */
 export const inWorkspace = <T>(workspaceId: string, work: () => T): T => current.run(open(workspaceId), work);
