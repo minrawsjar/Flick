@@ -1,7 +1,7 @@
 "use client";
 
 import { AudioLines, Mic } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } from "react";
 import { usd } from "@/lib/format";
 import { mark } from "@/lib/mark";
 import { Bot, botColors, type BotColor, type BotShape } from "./bot";
@@ -16,10 +16,12 @@ export type Face = { color: BotColor; shape: BotShape };
  * in both themes, like an app icon; in dark, a hairline (ink is white there) keeps it off the page.
  */
 export function Logo({ size = 24 }: { size?: number }) {
+  // Each logo's own gradient id (React's ids carry characters a url(#…) reference can't).
+  const id = `mark${useId().replace(/[^\w-]/g, "")}`;
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" className="shrink-0 overflow-hidden rounded-[29%] ring-1 ring-ink/15" aria-hidden>
       <rect width="64" height="64" fill="#000" />
-      {mark(true)}
+      {mark(true, id)}
     </svg>
   );
 }
