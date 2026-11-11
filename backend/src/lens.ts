@@ -4,7 +4,7 @@ import { startCheckout } from './checkout.ts';
 import { HttpError, need } from './http.ts';
 import { cents, id, usd, ymd, type Checkout, type Payee, type Scan } from './model.ts';
 import { createPayout } from './paypal.ts';
-import { checkLens, type LensAnswer } from './rules.ts';
+import { checkLens, keepNewestPhotos, type LensAnswer } from './rules.ts';
 import { log, save, state } from './store.ts';
 
 // Lens: reads a photo of something to pay (a bill, a receipt, a price tag, a tip jar) with a vision
@@ -102,10 +102,14 @@ function payeeFor(scan: Omit<Scan, 'payeeId'>): Payee {
   return created;
 }
 
-/** Reads a photo, sent as a data URL. */
+/** The small copy of a photo kept with its scan: a JPEG the browser shrank (about 40 KB, 110 at most). */
+const isPhoto = (v: unknown): v is string => typeof v === 'string' && v.length <= 150_000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(v);
+
+/** Reads a photo, sent as a data URL, with a small copy of it to keep. */
 export async function read(body: Record<string, unknown>) {
-  const { image } = body;
+  const { image, photo } = body;
   need(typeof image === 'string' && /^data:image\/(png|jpe?g|webp|gif|heic|heif);base64,/.test(image), 'image must be a data URL of a PNG, JPEG, WebP, GIF or HEIC photo.');
+  need(photo === undefined || isPhoto(photo), 'photo must be a small JPEG data URL (480px at most).');
 
   const answer = await askJson<Partial<LensAnswer>>('lens_read', SCHEMA, [
     { role: 'system', content: PROMPT },
@@ -121,7 +125,9 @@ export async function read(body: Record<string, unknown>) {
   const checked = await inUsd(checkLens(answer, id('scan'), new Date().toISOString()));
   // A receipt can be paid (a restaurant's bill) or split, so it gets a payee too.
   const scan: Scan = checked.kind === 'unknown' ? checked : { ...checked, payeeId: payeeFor(checked).id };
+  if (isPhoto(photo)) scan.photo = photo;
   state.scans.unshift(scan);
+  keepNewestPhotos(state.scans);
   // A bill due this week goes into Autopilot's plan too, ready to approve with the rest.
   if (scan.kind === 'bill') replan();
   log('lens', checked.kind === 'unknown' ? `Couldn't find anything to pay in that photo` : `Read a ${scan.kind}: ${scan.title}${scan.amount ? `, ${shown(scan)}` : ''}`, scan.amount || undefined);

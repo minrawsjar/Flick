@@ -64,6 +64,8 @@ export type Scan = {
   payeeId?: string;
   /** What the photo said, when it wasn't in USD. The amounts above are then in USD (lens.ts). */
   original?: { currency: string; amount: number; rate: number };
+  /** A small copy of your photo (a JPEG data URL, 480px at most). Only the newest scans keep one. */
+  photo?: string;
 };
 
 /** Money a friend owes you, requested with a PayPal invoice. */
