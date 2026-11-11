@@ -83,7 +83,7 @@ Without the cookie (the test scripts, curl) requests use the `local` workspace, 
 
 ### Sign in with PayPal
 
-`/login` signs you in with a PayPal sandbox account, so your Flick is yours on every device ([`account.ts`](backend/src/account.ts)). There's no password of Flick's own: one approval on PayPal's page saves your PayPal with Flick (PayPal's vault, without a purchase: `POST /v3/vault/setup-tokens`, then `POST /v3/vault/payment-tokens`), and that payment token tells Flick whose account it is. Your workspace's id is keyed from your PayPal account with the server's secret (`SESSION_SECRET`, or else `PAYPAL_SECRET`), so signing in anywhere opens the same one; the first time, what you did as a guest in that browser moves in with you. `/profile` shows who you're signed in as and what's in your Flick, and signs you out, which leaves it all kept. Signing in is optional: a guest can do everything, approving each payment on PayPal's page.
+`/login` signs you in with a PayPal sandbox account, so your Flick is yours on every device ([`account.ts`](backend/src/account.ts)). There's no password of Flick's own: one approval on PayPal's page saves your PayPal with Flick (PayPal's vault, without a purchase: `POST /v3/vault/setup-tokens`, then `POST /v3/vault/payment-tokens`), and that payment token tells Flick whose account it is. Your workspace's id is keyed from your PayPal account with the server's secret (`SESSION_SECRET`, or else `PAYPAL_SECRET`), so signing in anywhere opens the same one; the first time, what you did as a guest in that browser moves in with you. `/profile` shows who you're signed in as and what's in your Flick, lets you change the name Flick calls you (it starts as PayPal's, and the sandbox names everyone John Doe), and signs you out, which leaves it all kept. Signing in is optional: a guest can do everything, approving each payment on PayPal's page.
 
 ### Flick to pay
 
@@ -171,6 +171,7 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `GET /api/paypal/return`, `/cancel` | Where PayPal sends people back after a checkout |
 | `POST /api/paypal/flick` `{ orderId }` | Signed in: pays a checkout from the saved PayPal, on a flick, with no PayPal page; returns the page to show |
 | `GET /api/auth/paypal/start?next=` | Signing in: PayPal's page to save PayPal with Flick; PayPal comes back to `/api/auth/paypal/return` (or `/cancel`) |
+| `POST /api/profile` `{ name }` | Signed in: the name Flick calls you (signing in again keeps it) |
 | `POST /api/auth/signout` | Ends this browser's session; its next visit is a new guest |
 | `GET /api/dashboard` | Money Studio's tables |
 | `GET /api/ai/models`, `POST /api/ai/responses` | Money Studio's assistant |

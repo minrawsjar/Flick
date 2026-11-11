@@ -118,7 +118,15 @@ export type State = {
  * A person signed in with PayPal. Their PayPal is saved in PayPal's vault (`savedId`), so a flick
  * pays it straight away, with no PayPal page each time.
  */
-export type Profile = { name: string; email: string; payerId?: string; savedId: string; since: string };
+export type Profile = {
+  name: string;
+  email: string;
+  payerId?: string;
+  savedId: string;
+  since: string;
+  /** They chose `name` in Flick (/profile): signing in again keeps it, rather than PayPal's. */
+  named?: boolean;
+};
 
 // --- Helpers ------------------------------------------------------------------------
 

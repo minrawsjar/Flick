@@ -157,6 +157,7 @@ const routes: Record<string, Handler> = {
     save();
     redirect(res, `${frontendUrl()}/login?signin=cancelled`);
   },
+  'POST /api/profile': async ({ body }) => account.rename(await body()),
   // Signing out: this browser gets a new, empty guest Flick on its next visit (frontend/proxy.ts).
   'POST /api/auth/signout': ({ res }) => {
     session(res, null);

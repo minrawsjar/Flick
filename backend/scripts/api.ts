@@ -339,6 +339,13 @@ await step("state says who's signed in, never their saved PayPal's vault id", as
   check(json.profile?.name === 'Api Test' && json.profile.savedId === '' && !json.signingIn, JSON.stringify(json.profile));
   check(!JSON.stringify(json).includes('not-a-real-vault-id'), 'the vault id is in the state');
 });
+await step('a signed-in person changes the name Flick calls them; a guest, or a blank name, is refused', async () => {
+  check((await guest('profile', { name: 'Robin' })).status === 409, 'a guest renamed themselves');
+  check((await me('profile', { name: '   ' })).status === 400, 'a blank name was taken');
+  const { json } = await me('profile', { name: '  Swarnim   Raj ' });
+  check(json.name === 'Swarnim Raj' && json.named === true && json.savedId === '', JSON.stringify(json));
+  check((await me('state')).json.profile?.name === 'Swarnim Raj', 'state still has the old name');
+});
 await step("a guest's flick is refused: paying with a flick needs a saved PayPal", async () => {
   const { orderId } = await api('lens/pay', { scanId: 'scan_seed' });
   await refuses('paypal/flick', { orderId }, 409, 'Sign in with PayPal');

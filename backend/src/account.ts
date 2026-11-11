@@ -69,13 +69,27 @@ export async function welcome({ saved, guest }: SignedIn, isNew: boolean) {
   // Signing in again saves PayPal again: the one saved before isn't needed any more.
   const before = state.profile?.savedId;
   if (before && before !== saved.savedId) await deleteSaved(before).catch(() => {});
+  const named = state.profile?.named;
   state.profile = {
-    name: saved.name ?? saved.email?.split('@')[0] ?? 'You',
+    // PayPal's name for them, until they choose their own (PayPal's sandbox names everyone John Doe).
+    name: named ? state.profile!.name : (saved.name ?? saved.email?.split('@')[0] ?? 'You'),
     email: saved.email ?? '',
     payerId: saved.payerId,
     savedId: saved.savedId,
     since: state.profile?.since ?? new Date().toISOString(),
+    ...(named && { named }),
   } satisfies Profile;
   save();
   return state.profile;
+}
+
+/** The name Flick calls them by, chosen on /profile. */
+export function rename(body: Record<string, unknown>) {
+  need(state.profile, 'Sign in with PayPal first.', 409);
+  const name = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ') : '';
+  need(name.length >= 1 && name.length <= 60, 'name must be 1 to 60 characters.');
+  state.profile.name = name;
+  state.profile.named = true;
+  save();
+  return { ...state.profile, savedId: '' };
 }
