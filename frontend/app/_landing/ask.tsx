@@ -1,8 +1,8 @@
 "use client";
 
 import type { ChatMessage } from "@backend/ai";
-import { ArrowUp, Check, CircleCheck, LoaderCircle, ShieldCheck, Sparkles, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowUp, Check, CircleCheck, LoaderCircle, Mic, ShieldCheck, Sparkles, Volume2, X } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { Bot } from "@/components/bot";
 import { Phone } from "@/components/phone";
 import { Activity, Bubble, Tile, useOnScreen } from "@/components/ui";
@@ -72,6 +72,55 @@ const suggestions = [
   "Skip the coffee tip and approve the week",
 ];
 
+interface SpeechRecognitionResultItem {
+  transcript: string;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  [index: number]: {
+    [index: number]: SpeechRecognitionResultItem;
+  };
+}
+
+interface SpeechRecognitionEvent {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent {
+  error: string;
+  message?: string;
+}
+
+interface SpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionInstance;
+}
+
+function getSpeechRecognition(): SpeechRecognitionConstructor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
+}
+
+const noopSubscribe = () => () => {};
+
 /** The live conversation, on /ask. */
 export function Ask() {
   const live = useLive();
@@ -84,6 +133,24 @@ export function Ask() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [listening, setListening] = useState(false);
+  const [readAloud, setReadAloud] = useState(false);
+
+  const hasSpeechRecognition = useSyncExternalStore(
+    noopSubscribe,
+    () => Boolean(getSpeechRecognition()),
+    () => false,
+  );
+  const hasSpeechSynthesis = useSyncExternalStore(
+    noopSubscribe,
+    () => typeof window !== "undefined" && "speechSynthesis" in window,
+    () => false,
+  );
+
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const transcriptRef = useRef("");
+  const hasErrorRef = useRef(false);
+  const readAloudRef = useRef(readAloud);
   const end = useRef<HTMLDivElement>(null);
 
   // A block body on purpose: scrollIntoView returns a promise in newer browsers, and an effect may only return its cleanup.
@@ -91,12 +158,46 @@ export function Ask() {
     end.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, pending, busy]);
 
+  useEffect(() => {
+    readAloudRef.current = readAloud;
+    if (!readAloud && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  }, [readAloud]);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  const speak = (content: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const clean = content.replace(/\*\*(.+?)\*\*/g, "$1").replace(/[*_#`]/g, "").trim();
+    if (!clean) return;
+    const utterance = new SpeechSynthesisUtterance(clean);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const take = (turn: Turn) => {
     setMessages(turn.messages);
     setPending(turn.pending ?? []);
     setChoices(Object.fromEntries((turn.pending ?? []).map((p) => [p.id, true])));
     setSummaries((all) => ({ ...all, ...Object.fromEntries((turn.pending ?? []).map((p) => [p.id, p.summary])) }));
     if (turn.links.length) setLinks(turn.links);
+
+    const reply = turn.reply || [...turn.messages].reverse().find((m) => m.role === "assistant" && m.content)?.content;
+    if (readAloudRef.current && reply) {
+      speak(reply);
+    }
   };
 
   const run = async (work: () => Promise<Turn>) => {
@@ -122,10 +223,73 @@ export function Ask() {
     void run(() => act<Turn>("agent", { messages: next }));
   };
 
+  const toggleListening = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const SpeechRecognition = getSpeechRecognition();
+    if (!SpeechRecognition) return;
+
+    setError(undefined);
+    transcriptRef.current = "";
+    hasErrorRef.current = false;
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
+
+    recognition.onstart = () => {
+      setListening(true);
+    };
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = "";
+      for (let i = 0; i < event.results.length; i++) {
+        interim += event.results[i][0].transcript;
+      }
+      transcriptRef.current = interim;
+      setText(interim);
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      hasErrorRef.current = true;
+      setListening(false);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setError("Microphone permission was denied. Please allow microphone access in your browser settings to talk to Flick.");
+      } else if (event.error === "no-speech") {
+        // Quiet timeout
+      } else if (event.error !== "aborted") {
+        setError(`Microphone error: ${event.error}`);
+      }
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+      const spoken = transcriptRef.current.trim();
+      if (spoken && !hasErrorRef.current) {
+        send(spoken);
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch {
+      setListening(false);
+      setError("Could not start microphone. Please check your browser permissions.");
+    }
+  };
+
   const confirm = () => void run(() => act<Turn>("agent/decide", { messages, decisions: choices }));
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (listening) {
+      recognitionRef.current?.stop();
+    }
     send(text);
   };
 
@@ -159,12 +323,30 @@ export function Ask() {
   return (
     <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
       <Tile className="flex h-[min(680px,calc(100dvh-220px))] min-h-[460px] flex-col !p-0">
-        <div className="flex items-center gap-3 border-b border-separator/40 px-5 py-3">
-          <Crew size={26} />
-          <div className="min-w-0">
-            <p className="text-[15px]">Flick</p>
-            <p className="truncate text-[12px] text-secondary">Lens, Autopilot, Splitter and Nudge, in one conversation</p>
+        <div className="flex items-center justify-between gap-3 border-b border-separator/40 px-5 py-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Crew size={26} />
+            <div className="min-w-0">
+              <p className="text-[15px]">Flick</p>
+              <p className="truncate text-[12px] text-secondary">Lens, Autopilot, Splitter and Nudge, in one conversation</p>
+            </div>
           </div>
+          {hasSpeechSynthesis && (
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[12px] text-secondary select-none">
+              <Volume2 size={15} className={readAloud ? "text-ink" : "text-secondary/70"} />
+              <span className="hidden sm:inline">Read replies aloud</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={readAloud}
+                onClick={() => setReadAloud(!readAloud)}
+                className={`flex h-[18px] w-[30px] cursor-pointer items-center rounded-full p-0.5 transition-colors ${readAloud ? "justify-end bg-[#34c759]" : "bg-fill"}`}
+                aria-label="Read replies aloud"
+              >
+                <span className="size-3.5 rounded-full bg-white shadow" />
+              </button>
+            </label>
+          )}
         </div>
 
         <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4">
@@ -202,12 +384,39 @@ export function Ask() {
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={ready ? (pending.length ? "Answer the card above first" : "Ask Flick…") : "Flick needs the live backend with AI turned on"}
+            placeholder={
+              listening
+                ? "Listening… speak now"
+                : ready
+                  ? (pending.length ? "Answer the card above first" : "Ask Flick…")
+                  : "Flick needs the live backend with AI turned on"
+            }
             disabled={!ready || busy || pending.length > 0}
             maxLength={2000}
             className="h-11 flex-1 rounded-full bg-raised px-4 text-[15px] outline-none ring-1 ring-separator/60 focus:ring-2 focus:ring-ink disabled:opacity-60"
           />
-          <button type="submit" aria-label="Send" disabled={!ready || busy || pending.length > 0 || !text.trim()} className="pressable flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink text-on-ink disabled:opacity-40">
+          {hasSpeechRecognition && (
+            <button
+              type="button"
+              aria-label={listening ? "Stop listening" : "Talk to Flick"}
+              title={listening ? "Listening… tap to stop and send" : "Tap to talk"}
+              disabled={!ready || busy || pending.length > 0}
+              onClick={toggleListening}
+              className={`pressable flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
+                listening
+                  ? "bg-danger text-white animate-pulse"
+                  : "bg-raised text-ink ring-1 ring-separator/60 hover:bg-fill"
+              }`}
+            >
+              <Mic size={18} />
+            </button>
+          )}
+          <button
+            type="submit"
+            aria-label="Send"
+            disabled={!ready || busy || pending.length > 0 || !text.trim()}
+            className="pressable flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-ink text-on-ink disabled:opacity-40"
+          >
             <ArrowUp size={18} />
           </button>
         </form>
