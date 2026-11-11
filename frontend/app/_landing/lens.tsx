@@ -1,7 +1,8 @@
 "use client";
 
-import type { Scan } from "@backend/model";
-import { Camera, CircleCheck, LoaderCircle, Repeat, Zap } from "lucide-react";
+import type { Payee, Scan } from "@backend/model";
+import { BadgeCheck, Camera, CircleCheck, Clock, LoaderCircle, Repeat, Zap } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Bot } from "@/components/bot";
@@ -500,6 +501,7 @@ export function Snap() {
   };
 
   const { sample } = current;
+  const payee = current.scan?.payeeId ? live.state?.payees.find((p) => p.id === current.scan?.payeeId) : undefined;
   const done = sample.kind === "bill" && !recurring && !current.scan ? "Paid with PayPal" : sample.done;
   const recent = live.mode === "live" ? (live.state?.scans ?? []).filter((s) => s.kind !== "unknown").slice(0, RECENT) : [];
 
@@ -578,6 +580,7 @@ export function Snap() {
               </div>
             ))}
           </dl>
+          {payee && current.scan?.status !== "paid" && <PaidTo payee={payee} />}
         </Tile>
 
         <Tile className="md:col-span-2">
@@ -600,4 +603,36 @@ export function Snap() {
       </div>
     </div>
   );
+}
+
+/**
+ * Where a bill's money goes, before it's paid: a business registered on Flick is paid at its own
+ * PayPal (backend/src/business.ts); one that isn't gets a payout that waits, unclaimed, until it
+ * signs up with that email.
+ */
+function PaidTo({ payee }: { payee: Payee }) {
+  if (payee.business) {
+    return (
+      <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-paid/10 px-3 py-2 text-[12px] leading-4 text-paid">
+        <BadgeCheck size={14} className="mt-px shrink-0" aria-hidden />
+        <span>
+          {payee.name} is on Flick: paid to its own PayPal, {payee.email}.
+        </span>
+      </p>
+    );
+  }
+  if (payee.email.endsWith("@flick.example.com")) {
+    return (
+      <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-fill px-3 py-2 text-[12px] leading-4 text-secondary">
+        <Clock size={14} className="mt-px shrink-0" aria-hidden />
+        <span>
+          {payee.name} isn&apos;t on Flick yet, so its payout waits, unclaimed.{" "}
+          <Link href="/business" className="text-ink underline underline-offset-2">
+            Is it yours? Register it
+          </Link>
+        </span>
+      </p>
+    );
+  }
+  return <p className="mt-3 px-1 text-[12px] text-secondary">Paid to {payee.email}.</p>;
 }

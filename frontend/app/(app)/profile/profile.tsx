@@ -140,6 +140,14 @@ export function Profile() {
 
         <Money />
 
+        <Link href="/business" className="mt-3 flex items-center justify-between rounded-2xl bg-tile px-4 py-3 text-[14px]">
+          <span>
+            Run a business?
+            <span className="block text-[12px] text-secondary">Register it, and bills Flick reads with its name pay this PayPal.</span>
+          </span>
+          <ChevronRight size={16} className="shrink-0 text-secondary" />
+        </Link>
+
         <p className="mt-6 text-[13px] text-secondary">In your Flick</p>
         <div className="mt-2 grid grid-cols-3 gap-2">
           {counts.map(([label, n]) => (

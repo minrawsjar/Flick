@@ -4,6 +4,7 @@ import { aiResponses } from './ai-proxy.ts';
 import * as account from './account.ts';
 import * as agent from './agent.ts';
 import * as autopilot from './autopilot.ts';
+import * as business from './business.ts';
 import * as chat from './chat.ts';
 import * as friends from './friends.ts';
 import * as inbox from './inbox.ts';
@@ -193,6 +194,10 @@ const routes: Record<string, Handler> = {
     save();
     redirect(res, `${frontendUrl()}/login?signin=cancelled`);
   },
+  // Businesses on Flick: paid at the PayPal they signed in with, when Lens reads their bill (business.ts)
+  'GET /api/business': () => business.view(),
+  'POST /api/business': async ({ body }) => business.register(await body()),
+  'POST /api/business/remove': () => business.remove(),
   'POST /api/profile': async ({ body }) => account.rename(await body()),
   'GET /api/profile/money': () => account.money(),
   // Signing out: this browser gets a new, empty guest Flick on its next visit (frontend/proxy.ts).

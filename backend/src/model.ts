@@ -5,7 +5,8 @@ export type Day = (typeof DAYS)[number];
 export type Agent = 'lens' | 'autopilot' | 'splitter' | 'nudge' | 'scout';
 
 /** Someone Flick pays: a biller, a shop, or a friend. Emails should be PayPal sandbox accounts. */
-export type Payee = { id: string; name: string; email: string; icon: 'power' | 'phone' | 'friend' | 'coffee' | 'cart' | 'ball' | 'bag' | 'bill' };
+/** `business`: a business registered on Flick (business.ts), paid at the PayPal it signed in with. */
+export type Payee = { id: string; name: string; email: string; icon: 'power' | 'phone' | 'friend' | 'coffee' | 'cart' | 'ball' | 'bag' | 'bill'; business?: string };
 export type Friend = { id: string; name: string; email: string; color: string; shape: string };
 
 /** A payment that happened, which Autopilot learns habits from. */

@@ -1,4 +1,5 @@
 import { askJson } from './ai.ts';
+import { businessFor, received } from './business.ts';
 import { replan } from './autopilot.ts';
 import { startCheckout } from './checkout.ts';
 import { HttpError, need } from './http.ts';
@@ -92,12 +93,23 @@ const shown = (scan: Scan) => {
 
 const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'payee';
 
-/** The payee a scan pays: one Flick already knows by name, or a new one. */
+/**
+ * The payee a scan pays. A business registered on Flick by a name on the bill (business.ts) is paid
+ * at the PayPal it signed in with. Otherwise one Flick already knows by name, or a new one: at the
+ * PayPal email the bill shows, or a placeholder whose payout waits unclaimed.
+ */
 function payeeFor(scan: Omit<Scan, 'payeeId'>): Payee {
-  const known = state.payees.find((p) => p.name.toLowerCase() === scan.title.toLowerCase());
-  if (known) return known;
-  const email = scan.handle && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(scan.handle) ? scan.handle : `${slug(scan.title)}@flick.example.com`;
-  const created: Payee = { id: `${slug(scan.title)}-${id('p').slice(2)}`, name: scan.title, email, icon: scan.kind === 'tip' ? 'coffee' : scan.kind === 'product' ? 'bag' : 'bill' };
+  const business = businessFor(scan.title);
+  const known = state.payees.find((p) => (business && p.business === business.id) || p.name.toLowerCase() === scan.title.toLowerCase());
+  if (known) {
+    // A business that registered since this payee was made: its PayPal, not the placeholder. An email
+    // the person set for a payee themselves stays theirs.
+    if (business && (known.business === business.id || known.email.endsWith('@flick.example.com'))) Object.assign(known, { email: business.email, business: business.id });
+    return known;
+  }
+  const email = business?.email ?? (scan.handle && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(scan.handle) ? scan.handle : `${slug(scan.title)}@flick.example.com`);
+  const name = business?.name ?? scan.title;
+  const created: Payee = { id: `${slug(name)}-${id('p').slice(2)}`, name, email, icon: scan.kind === 'tip' ? 'coffee' : scan.kind === 'product' ? 'bag' : 'bill', ...(business && { business: business.id }) };
   state.payees.push(created);
   return created;
 }
@@ -124,7 +136,9 @@ export async function read(body: Record<string, unknown>) {
 
   const checked = await inUsd(checkLens(answer, id('scan'), new Date().toISOString()));
   // A receipt can be paid (a restaurant's bill) or split, so it gets a payee too.
-  const scan: Scan = checked.kind === 'unknown' ? checked : { ...checked, payeeId: payeeFor(checked).id };
+  // A business on Flick is called what it registered as ("KFC", not the "Kfc" of a shouting bill).
+  const payee = checked.kind === 'unknown' ? undefined : payeeFor(checked);
+  const scan: Scan = payee ? { ...checked, ...(payee.business && { title: payee.name }), payeeId: payee.id } : checked;
   if (isPhoto(photo)) scan.photo = photo;
   state.scans.unshift(scan);
   keepNewestPhotos(state.scans);
@@ -143,7 +157,8 @@ export async function pay(body: Record<string, unknown>) {
   need(scan.status !== 'paid', `${scan.title} is already paid.`, 409);
   // Scans read before Lens converted currencies, or paid receipts, didn't get these when read.
   if (scan.currency !== 'USD') Object.assign(scan, await inUsd(scan));
-  scan.payeeId ??= payeeFor(scan).id;
+  // Again at paying: a business may have registered since Lens read the bill.
+  scan.payeeId = payeeFor(scan).id;
   need(scan.currency === 'USD', `Flick pays in USD on the sandbox, and couldn't get today's rate for ${scan.currency}. Try again in a minute.`, 409);
 
   // A tip's amount is the person's choice; everything else is what Lens read.
@@ -176,6 +191,7 @@ export async function paid(checkout: Extract<Checkout, { kind: 'scan' }>) {
       { id: scan.id, email: to.email, amount: checkout.amount, note: `${scan.summary || scan.title}, paid by Flick` },
     ]);
     checkout.paidOut = new Date().toISOString();
+    if (to.business) received(to.business, checkout.amount, scan.summary || scan.title);
     log('lens', `Paid ${to.name}${scan.summary ? `: ${scan.summary}` : ''}`, checkout.amount);
   } catch (err) {
     log('lens', `Took ${usd(checkout.amount)} for ${to.name}, but couldn't pay them out: ${err instanceof Error ? err.message : err}`);

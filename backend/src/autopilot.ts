@@ -1,3 +1,4 @@
+import { received } from './business.ts';
 import { startCheckout } from './checkout.ts';
 import { HttpError, need } from './http.ts';
 import { addDays, cents, DAYS, id, usd, ymd, type Checkout, type Day } from './model.ts';
@@ -156,6 +157,8 @@ async function payDue() {
     for (const p of due) {
       p.status = 'paid';
       p.payoutBatchId = batch.batchId;
+      const business = payee(p.payeeId)?.business;
+      if (business) received(business, p.amount, p.what);
       log('autopilot', `Paid ${p.payee}: ${p.what}`, p.amount);
     }
   } catch (err) {

@@ -506,6 +506,39 @@ await step("the profile's money adds up your Flick afresh: what you're owed, and
   return `owed to you ${mine.owedToYou.amount} (${mine.owedToYou.count}), Robin owes ${theirs.youOwe.amount}`;
 });
 
+section('Businesses');
+// Kai has a KFC bill Lens read before KFC was on Flick: its payee is a placeholder.
+const kaiWs = 'api-kai-000000000001';
+writeFileSync(
+  join(dir, 'workspaces', `${kaiWs}.json`),
+  JSON.stringify({
+    ...seed(),
+    payees: [{ id: 'kfc-1', name: 'KFC Koramangala', email: 'kfc-koramangala@flick.example.com', icon: 'bill' }],
+    scans: [{ id: 'scan_kfc', at: new Date().toISOString(), kind: 'bill', title: 'KFC Koramangala', summary: 'Dinner', amount: 7.5, currency: 'USD', due: null, repeats: null, handle: null, items: [], tax: 0, tip: 0, fields: [], status: 'read', payeeId: 'kfc-1' }],
+  }),
+);
+const kai = as(kaiWs);
+await step('a business registers with the PayPal it signed in with; a guest, a blank or a taken name is refused', async () => {
+  check((await guest('business', { name: 'KFC' })).status === 409, 'a guest registered a business');
+  check((await me('business', { name: ' ' })).status === 400, 'a blank name was taken');
+  const { json } = await me('business', { name: 'KFC', names: 'Kentucky Fried Chicken' });
+  check(json.yours?.email === ME && json.yours.names.join() === 'KFC,Kentucky Fried Chicken', JSON.stringify(json.yours));
+  const taken = await robin('business', { name: 'Fried Things', names: ['kfc'] });
+  check(taken.status === 409 && /already on Flick/.test(taken.json.error?.message), `${taken.status}`);
+  check((await guest('business')).json.all.some((b: Json) => b.name === 'KFC' && !('email' in b)), 'the directory shows emails, or not KFC');
+});
+await step("a bill from a registered business pays its PayPal, even one read before it registered", async () => {
+  const { json: started } = await kai('lens/pay', { scanId: 'scan_kfc' });
+  check(Boolean(started.orderId), JSON.stringify(started));
+  const payee = (await kai('state')).json.payees.find((p: Json) => p.id === 'kfc-1');
+  check(payee.email === ME && payee.business, JSON.stringify(payee));
+  await kai(`paypal/cancel?token=${started.orderId}`);
+});
+await step('taking the business off Flick: its names are free again', async () => {
+  check((await me('business/remove', {})).json.yours === null, 'still registered');
+  check(!(await guest('business')).json.all.some((b: Json) => b.name === 'KFC'), 'KFC still listed');
+});
+
 section('Money Studio');
 await step('the dashboard\'s tables, from PayPal and Flick', async () => {
   const data = await api('dashboard');
