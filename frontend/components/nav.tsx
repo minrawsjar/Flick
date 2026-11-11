@@ -70,7 +70,8 @@ export function Nav({ app = false }: { app?: boolean }) {
   const path = usePathname();
   return (
     <header className="sticky top-0 z-30 bg-page/75 pt-[env(safe-area-inset-top)] backdrop-blur-2xl backdrop-saturate-150">
-      <nav className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+      {/* Wider with the screen: the page's own width on laptops, most of a big monitor's. */}
+      <nav className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 min-[1280px]:max-w-7xl min-[1536px]:max-w-[88rem] min-[1920px]:max-w-[110rem]">
         {/* Already on the one-pager, the logo takes you back to its top: a link to the same page doesn't scroll. */}
         <Link href="/" onClick={() => path === "/" && window.scrollTo({ top: 0 })} className="flex items-center gap-2 text-[15px]">
           <Logo />
