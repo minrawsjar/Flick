@@ -1,19 +1,20 @@
 "use client";
 
-import { Camera, CameraOff, ChevronUp, LoaderCircle, Pointer } from "lucide-react";
+import { Camera, CameraOff, CircleCheck, ChevronUp, LoaderCircle, Pointer } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Logo, Primary, Secondary } from "@/components/ui";
 import { isFlick, gray, motion, type Motion } from "@/lib/flick";
 import { usd } from "@/lib/format";
-import { refresh, useConfirming, type Confirming } from "@/lib/live";
+import { refresh, useConfirming, useLive, type Confirming } from "@/lib/live";
 
-// "Flick to pay": before PayPal opens, a sheet asks for one flick of the hand across the front
-// camera (lib/flick.ts spots it). The camera's frames stay in the browser: nothing is recorded or
-// sent. No camera, or no permission: a tap does it instead. "Not now" cancels the PayPal checkout,
-// just as cancelling on PayPal's page would. Every payment comes here, through approveOnPayPal.
+// "Flick to pay": a sheet asks for one finger flicked up in front of the front camera (lib/flick.ts
+// spots it). The camera's frames stay in the browser: nothing is recorded or sent. No camera, or no
+// permission: a tap does it instead. Signed in with PayPal (/login), the flick pays from the saved
+// PayPal there and then; as a guest it opens PayPal's page to approve. "Not now" cancels the PayPal
+// checkout, just as cancelling on PayPal's page would. Every payment comes here, through approveOnPayPal.
 
 type CameraState = "starting" | "on" | "off";
-type Phase = "waiting" | "flicked" | "cancelling";
+type Phase = "waiting" | "flicked" | "paid" | "failed" | "cancelling";
 
 const stop = (media: MediaStream | null) => media?.getTracks().forEach((t) => t.stop());
 
@@ -25,8 +26,11 @@ export function FlickConfirm() {
 
 function Sheet({ confirming }: { confirming: Confirming }) {
   const { url, amount, to, done } = confirming;
+  // Signed in: the flick pays from this PayPal, with no PayPal page.
+  const profile = useLive().state?.profile;
   const [camera, setCamera] = useState<CameraState>("starting");
   const [phase, setPhase] = useState<Phase>("waiting");
+  const [error, setError] = useState<string>();
   const video = useRef<HTMLVideoElement>(null);
   const glow = useRef<HTMLDivElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -38,20 +42,39 @@ function Sheet({ confirming }: { confirming: Confirming }) {
     stream.current = null;
   };
 
-  // Flicked (or tapped): the card flies off, and PayPal opens.
+  // From the saved PayPal; then the page PayPal's return would have shown, saying it's paid.
+  const payNow = async (still: boolean) => {
+    try {
+      const res = await fetch("/api/paypal/flick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: new URL(url).searchParams.get("token") }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { to?: string; error?: { message?: string } };
+      if (!res.ok || !body.to) throw new Error(body.error?.message ?? `Flick's backend answered ${res.status}.`);
+      setPhase("paid");
+      setTimeout(() => window.location.assign(body.to!), still ? 400 : 1100);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase("failed");
+    }
+  };
+
+  // Flicked (or tapped): the card flies off, and it's paid (signed in) or PayPal opens (a guest).
   const go = () => {
     if (phase !== "waiting") return;
     stopCamera();
     setPhase("flicked");
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setTimeout(() => window.location.assign(url), still ? 0 : 650);
+    if (profile) void payNow(still);
+    else setTimeout(() => window.location.assign(url), still ? 0 : 650);
   };
   useEffect(() => {
     onFlick.current = go;
   });
 
   const cancel = async () => {
-    if (phase !== "waiting") return;
+    if (phase !== "waiting" && phase !== "failed") return;
     stopCamera();
     setPhase("cancelling");
     const token = new URL(url).searchParams.get("token");
@@ -125,7 +148,8 @@ function Sheet({ confirming }: { confirming: Confirming }) {
     };
   });
 
-  const flicked = phase === "flicked";
+  const flicked = phase === "flicked" || phase === "paid";
+  const via = profile ? `from your PayPal${profile.email ? ` (${profile.email})` : ""}` : "with PayPal";
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/55 backdrop-blur-sm fade-in sm:items-center sm:p-6">
       <div
@@ -140,7 +164,7 @@ function Sheet({ confirming }: { confirming: Confirming }) {
         <h2 id="flick-title" className="mt-3 text-[34px] font-semibold leading-none tracking-tight tabular-nums">
           {amount !== undefined ? `Pay ${usd(amount)}` : "Pay with PayPal"}
         </h2>
-        <p className="mt-1.5 text-[14px] text-secondary">{to ? `To ${to}, with PayPal` : "With PayPal"}</p>
+        <p className="mt-1.5 text-[14px] text-secondary">{to ? `To ${to}, ${via}` : via.charAt(0).toUpperCase() + via.slice(1)}</p>
 
         <div className="relative mt-4 aspect-[4/3] overflow-hidden rounded-3xl bg-[radial-gradient(circle_at_50%_70%,#12305a,#0b0b0c_75%)]">
           {/* The camera is read, never shown: the video stays a pixel, out of sight. */}
@@ -166,10 +190,16 @@ function Sheet({ confirming }: { confirming: Confirming }) {
               <Camera size={16} aria-hidden /> Turning on the camera…
             </p>
           )}
-          {camera === "off" && !flicked && (
+          {camera === "off" && phase === "waiting" && (
             <p className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center text-[13px] text-white/80">
               <CameraOff size={22} aria-hidden />
               No camera to flick at here. Tap below to pay instead.
+            </p>
+          )}
+          {phase === "failed" && (
+            <p role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center text-[13px] text-white/90">
+              Your saved PayPal didn&apos;t pay: {error}
+              <span className="text-white/70">Nothing was taken. You can pay on PayPal&apos;s page instead.</span>
             </p>
           )}
 
@@ -189,9 +219,15 @@ function Sheet({ confirming }: { confirming: Confirming }) {
             </span>
             <span className="text-[26px] font-semibold tabular-nums">{amount !== undefined ? usd(amount) : "Approve"}</span>
           </div>
-          {flicked && (
+          {phase === "flicked" && (
             <p className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-1.5 text-[13px] text-white">
-              <LoaderCircle size={14} className="spinner" aria-hidden /> Opening PayPal…
+              <LoaderCircle size={14} className="spinner" aria-hidden /> {profile ? "Paying from your PayPal…" : "Opening PayPal…"}
+            </p>
+          )}
+          {phase === "paid" && (
+            <p role="status" className="rise absolute inset-0 flex flex-col items-center justify-center gap-2 text-white">
+              <CircleCheck size={44} strokeWidth={1.75} className="text-[#34c759]" aria-hidden />
+              <span className="text-[17px] font-medium">Paid{amount !== undefined ? ` ${usd(amount)}` : ""}</span>
             </p>
           )}
         </div>
@@ -200,12 +236,16 @@ function Sheet({ confirming }: { confirming: Confirming }) {
           The camera only looks for your flick, here on this device. Nothing is recorded or sent.
         </p>
         <div className="mt-4 grid grid-cols-[auto_1fr] gap-2">
-          <Secondary onClick={() => void cancel()} disabled={phase !== "waiting"}>
+          <Secondary onClick={() => void cancel()} disabled={phase !== "waiting" && phase !== "failed"}>
             {phase === "cancelling" ? <LoaderCircle size={14} className="spinner" /> : "Not now"}
           </Secondary>
-          <Primary onClick={go} disabled={phase !== "waiting"}>
-            {camera === "on" ? "Tap to pay instead" : "Pay on PayPal"}
-          </Primary>
+          {phase === "failed" ? (
+            <Primary onClick={() => window.location.assign(url)}>Pay on PayPal instead</Primary>
+          ) : (
+            <Primary onClick={go} disabled={phase !== "waiting"}>
+              {camera === "on" ? "Tap to pay instead" : profile ? "Pay now" : "Pay on PayPal"}
+            </Primary>
+          )}
         </div>
       </div>
     </div>

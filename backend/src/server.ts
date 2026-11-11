@@ -1,20 +1,22 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { aiKey, studioModels } from './ai.ts';
 import { aiResponses } from './ai-proxy.ts';
+import * as account from './account.ts';
 import * as agent from './agent.ts';
 import * as autopilot from './autopilot.ts';
 import * as friends from './friends.ts';
 import * as inbox from './inbox.ts';
-import { cancelCheckout, captureCheckout, frontendUrl } from './checkout.ts';
+import { cancelCheckout, captureCheckout, flickCheckout, frontendUrl } from './checkout.ts';
 import { getDashboardData } from './dashboard-data.ts';
 import { HttpError, readBody, send } from './http.ts';
 import * as lens from './lens.ts';
+import type { Checkout } from './model.ts';
 import * as nudge from './nudge.ts';
 import * as scout from './scout.ts';
-import { PayPalApiError } from './paypal.ts';
+import { PayPalApiError, type Saved } from './paypal.ts';
 import * as push from './push.ts';
 import { assign, split } from './split.ts';
-import { inWorkspace, isWorkspaceId, reset, save, state } from './store.ts';
+import { hasWorkspace, inWorkspace, isWorkspaceId, reset, save, state } from './store.ts';
 
 // Flick's API. The browser never calls it directly: the frontend rewrites /api/* to here
 // (frontend/next.config.ts), so everything is same-origin and no CORS is needed. The frontend's
@@ -29,11 +31,30 @@ const redirect = (res: ServerResponse, to: string) => res.writeHead(303, { Locat
 const pages = { week: 'autopilot', basket: 'scout', scan: 'lens' } as const;
 const pageFor = (orderId: string) => `${frontendUrl()}/${pages[state.checkouts[orderId]?.kind ?? 'scan']}`;
 
+/** A paid checkout (on PayPal's page, or with a flick) goes to the agent that asked for it. */
+async function settle(checkout: Checkout, captureId: string, saved?: Saved) {
+  if (checkout.kind === 'week') await autopilot.approved(checkout, captureId, saved);
+  if (checkout.kind === 'scan') await lens.paid(checkout);
+  if (checkout.kind === 'basket') await scout.paid(checkout);
+}
+
+/** The session cookie: which workspace this browser is in (null signs out). A guest's comes from frontend/proxy.ts. */
+function session(res: ServerResponse, workspace: string | null) {
+  const secure = frontendUrl().startsWith('https:') ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `flick=${workspace ?? ''}; Path=/; Max-Age=${workspace ? 31_536_000 : 0}; SameSite=Lax; HttpOnly${secure}`);
+}
+
 const routes: Record<string, Handler> = {
   'GET /api/health': () => ({ ok: true }),
 
   /** Everything Flick knows, plus which services are configured. */
-  'GET /api/state': () => ({ ...state, config: { paypal: Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_SECRET), ai: Boolean(aiKey()) } }),
+  // Not the saved PayPal's vault id, or a sign-in under way: the browser only needs who's signed in.
+  'GET /api/state': () => ({
+    ...state,
+    signingIn: undefined,
+    profile: state.profile && { ...state.profile, savedId: '' },
+    config: { paypal: Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_SECRET), ai: Boolean(aiKey()) },
+  }),
   /** Back to the start: an empty workspace (the demo seed without a workspace cookie). */
   'POST /api/reset': () => (reset(), state),
 
@@ -88,9 +109,7 @@ const routes: Record<string, Handler> = {
     const orderId = url.searchParams.get('token') ?? '';
     try {
       const { checkout, captureId, saved } = await captureCheckout(orderId);
-      if (captureId && checkout.kind === 'week') await autopilot.approved(checkout, captureId, saved);
-      if (captureId && checkout.kind === 'scan') await lens.paid(checkout);
-      if (captureId && checkout.kind === 'basket') await scout.paid(checkout);
+      if (captureId) await settle(checkout, captureId, saved);
       redirect(res, `${pageFor(orderId)}?paid=${checkout.kind}`);
     } catch (err) {
       // An order Flick never made (a stale or made-up link) needs no stack trace.
@@ -107,6 +126,41 @@ const routes: Record<string, Handler> = {
     }
     save();
     redirect(res, `${pageFor(url.searchParams.get('token') ?? '')}?checkout=cancelled`);
+  },
+  // Signed in, a flick pays the checkout from the saved PayPal: no PayPal page. Returns the page to show, as PayPal's return would.
+  'POST /api/paypal/flick': async ({ body }) => {
+    const orderId = String((await body()).orderId ?? '');
+    const { checkout, captureId } = await flickCheckout(orderId);
+    if (captureId) await settle(checkout, captureId);
+    return { to: `${new URL(pageFor(orderId)).pathname}?paid=${checkout.kind}` };
+  },
+
+  // Signing in with PayPal (account.ts): PayPal's page saves PayPal with Flick, and comes back here.
+  'GET /api/auth/paypal/start': async ({ res, url }) => redirect(res, await account.start(url.searchParams.get('next'))),
+  'GET /api/auth/paypal/return': async ({ res, url }) => {
+    try {
+      const signedIn = await account.finish(url.searchParams.get('approval_token_id') ?? '');
+      const isNew = !hasWorkspace(signedIn.workspace);
+      const welcome = () => inWorkspace(signedIn.workspace, () => account.welcome(signedIn, isNew));
+      // Signing in again in the same browser is already in that workspace (and holds its lock).
+      await (signedIn.workspace === signedIn.from ? welcome() : serially(signedIn.workspace, welcome));
+      push.move(signedIn.from, signedIn.workspace);
+      session(res, signedIn.workspace);
+      redirect(res, `${frontendUrl()}${signedIn.next}${signedIn.next.includes('?') ? '&' : '?'}signedin=1`);
+    } catch (err) {
+      console.error('PayPal sign-in:', err instanceof HttpError ? err.message : err);
+      redirect(res, `${frontendUrl()}/login?signin=failed`);
+    }
+  },
+  'GET /api/auth/paypal/cancel': ({ res }) => {
+    delete state.signingIn;
+    save();
+    redirect(res, `${frontendUrl()}/login?signin=cancelled`);
+  },
+  // Signing out: this browser gets a new, empty guest Flick on its next visit (frontend/proxy.ts).
+  'POST /api/auth/signout': ({ res }) => {
+    session(res, null);
+    return { signedOut: true };
   },
 
   // Every PayPal endpoint the demo reads, joined into the AG Studio dashboard's tables.
@@ -132,7 +186,7 @@ function workspaceOf(req: IncomingMessage) {
   const cookie = /(?:^|;\s*)flick=([^;]+)/.exec(req.headers.cookie ?? '')?.[1] ?? '';
   return isWorkspaceId(cookie) ? cookie : 'local';
 }
-const isWrite = (method: string, path: string) => method !== 'GET' || path === '/api/paypal/return' || path === '/api/paypal/cancel';
+const isWrite = (method: string, path: string) => method !== 'GET' || path === '/api/paypal/return' || path === '/api/paypal/cancel' || path.startsWith('/api/auth/');
 
 function errorStatus(err: unknown) {
   if (err instanceof HttpError) return err.status;

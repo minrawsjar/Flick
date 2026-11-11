@@ -4,6 +4,7 @@ import { CalendarCheck, Download, House, ScanLine, Sparkles, Users } from "lucid
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { initial } from "@/lib/format";
 import { useLive } from "@/lib/live";
 import { ThemeToggle } from "./theme-toggle";
 import { Logo } from "./ui";
@@ -44,6 +45,26 @@ function Links({ className = "" }: { className?: string }) {
   );
 }
 
+/** Signed in (with PayPal, /login): your initial, to your profile. A guest: Sign in. Hidden while the backend is out of reach. */
+function Account() {
+  const live = useLive();
+  if (live.mode !== "live") return null;
+  const profile = live.state?.profile;
+  return profile ? (
+    <Link
+      href="/profile"
+      aria-label={`Your profile: signed in as ${profile.name}`}
+      className="pressable flex size-7 items-center justify-center rounded-full bg-ink text-[13px] font-semibold text-on-ink"
+    >
+      {initial(profile.name)}
+    </Link>
+  ) : (
+    <Link href="/login" className="pressable rounded-full bg-fill px-3 py-1 text-[13px]">
+      Sign in
+    </Link>
+  );
+}
+
 /** `app`: a working page, which has the tab bar below laptop width instead of a row of links. */
 export function Nav({ app = false }: { app?: boolean }) {
   return (
@@ -56,8 +77,10 @@ export function Nav({ app = false }: { app?: boolean }) {
         <Links className="hidden lg:flex" />
         <span className="flex items-center gap-1.5">
           <Link href="/install" className="pressable flex items-center gap-1 rounded-full bg-fill px-3 py-1 text-[13px] standalone:hidden">
-            <Download size={14} aria-hidden /> Get the app
+            <Download size={14} aria-hidden /> <span className="max-sm:hidden">Get the app</span>
+            <span className="sm:hidden">App</span>
           </Link>
+          <Account />
           <ThemeToggle />
           <Link href="/dashboard" className="pressable rounded-full bg-ink px-3 py-1 text-[13px] text-on-ink">
             <span className="max-sm:hidden">Money </span>Studio

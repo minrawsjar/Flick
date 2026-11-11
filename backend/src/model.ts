@@ -108,7 +108,17 @@ export type State = {
   scout?: { purchases: Purchase[] };
   /** Autopilot paying by itself: the PayPal account the person saved for it, and the most it may pay in a week. */
   autopay?: { savedId: string; email?: string; since: string; cap: number };
+  /** Who this Flick belongs to, once they've signed in with PayPal (account.ts). */
+  profile?: Profile;
+  /** A sign-in under way in this browser: the PayPal approval it's waiting for, and the page to go back to. */
+  signingIn?: { setupTokenId: string; next: string; at: string };
 };
+
+/**
+ * A person signed in with PayPal. Their PayPal is saved in PayPal's vault (`savedId`), so a flick
+ * pays it straight away, with no PayPal page each time.
+ */
+export type Profile = { name: string; email: string; payerId?: string; savedId: string; since: string };
 
 // --- Helpers ------------------------------------------------------------------------
 

@@ -3,9 +3,16 @@
 // model; no money moves without a buyer's approval, so checkouts are created and then cancelled.
 // The approval page itself is `npm run loop`'s job.
 
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { workspaceFor } from '../src/account.ts';
+import { seed } from '../src/seed.ts';
 import { check, checklist, client, startBackend, type Json } from './harness.ts';
 
-const base = await startBackend(4200);
+// Our own state folder, so a signed-in person's workspace can be put there (Signing in, below).
+const dir = mkdtempSync(join(tmpdir(), 'flick-api-'));
+const base = await startBackend(4200, { STATE_FILE: join(dir, 'state.json') });
 const { call, api, refuses } = client(base);
 const { step, section, done } = checklist();
 const state = () => api('state');
@@ -296,6 +303,60 @@ await step('proposes groceries from Scout, priced on the server', async () => {
   const card = turn.pending?.find((p: Json) => /groceries/i.test(p.summary));
   check(card, `no grocery card: ${turn.reply}`);
   return card.summary;
+});
+
+section('Signing in');
+// A browser's requests, with its session cookie.
+const as = (workspace: string) => (path: string, body?: unknown) =>
+  call(path, body, { headers: { cookie: `flick=${workspace}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) } });
+const guest = as('signin-guest-0000001');
+const where = (res: { headers: Headers }) => res.headers.get('location') ?? '';
+await step('signing in starts on PayPal, on a page that saves PayPal with Flick', async () => {
+  const res = await guest('auth/paypal/start?next=/lens');
+  const to = new URL(where(res));
+  check(res.status === 303 && to.hostname === 'www.sandbox.paypal.com' && to.pathname.startsWith('/agreements/approve'), `${res.status} to ${to.href}`);
+});
+await step('a sign-in another browser started, or a made-up one, signs no one in', async () => {
+  const other = await as('signin-other-0000001')('auth/paypal/return?approval_token_id=NOT-THIS-ONE');
+  const wrong = await guest('auth/paypal/return?approval_token_id=NOT-THIS-ONE');
+  for (const res of [other, wrong]) check(res.status === 303 && where(res).endsWith('/login?signin=failed') && !res.headers.get('set-cookie'), `${res.status} to ${where(res)}`);
+});
+await step('cancelling on PayPal comes back to /login', async () => {
+  const res = await guest('auth/paypal/cancel');
+  check(res.status === 303 && where(res).endsWith('/login?signin=cancelled'), `${res.status} to ${where(res)}`);
+});
+// Someone signed in: their workspace as account.ts leaves it (here the demo seed), with a saved
+// PayPal that PayPal won't know.
+const signedIn = workspaceFor('api-test@flick.example.com');
+mkdirSync(join(dir, 'workspaces'), { recursive: true });
+writeFileSync(
+  join(dir, 'workspaces', `${signedIn}.json`),
+  JSON.stringify({ ...seed(), profile: { name: 'Api Test', email: 'api-test@flick.example.com', savedId: 'not-a-real-vault-id', since: new Date().toISOString() } }),
+);
+const me = as(signedIn);
+await step("state says who's signed in, never their saved PayPal's vault id", async () => {
+  const { json } = await me('state');
+  check(json.profile?.name === 'Api Test' && json.profile.savedId === '' && !json.signingIn, JSON.stringify(json.profile));
+  check(!JSON.stringify(json).includes('not-a-real-vault-id'), 'the vault id is in the state');
+});
+await step("a guest's flick is refused: paying with a flick needs a saved PayPal", async () => {
+  const { orderId } = await api('lens/pay', { scanId: 'scan_seed' });
+  await refuses('paypal/flick', { orderId }, 409, 'Sign in with PayPal');
+  await call(`paypal/cancel?token=${orderId}`);
+});
+await step('a flick PayPal turns down pays nothing, and the bill waits', async () => {
+  const { json: started } = await me('lens/pay', { scanId: 'scan_seed' });
+  const res = await me('paypal/flick', { orderId: started.orderId });
+  const after = (await me('state')).json;
+  check(res.status >= 400, `answered ${res.status}`);
+  check(after.checkouts[started.orderId]?.status === 'awaiting' && after.scans.find((s: Json) => s.id === 'scan_seed')?.status === 'awaiting', 'it counts as paid');
+  await me(`paypal/cancel?token=${started.orderId}`);
+  return `${res.status}: ${String(res.json.error?.message ?? '').slice(0, 90)}`;
+});
+await step('signing out ends the session', async () => {
+  const res = await me('auth/signout', {});
+  const cookie = res.headers.get('set-cookie') ?? '';
+  check(res.status === 200 && cookie.startsWith('flick=;') && cookie.includes('Max-Age=0'), cookie);
 });
 
 section('Money Studio');

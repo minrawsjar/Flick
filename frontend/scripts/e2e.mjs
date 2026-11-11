@@ -177,8 +177,28 @@ const fakeCamera = () =>
 /** Past "Flick to pay" with its button: the test browser has no camera. */
 async function tapToPay() {
   await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('Flick to pay')", 15_000, "the Flick to pay sheet");
-  await click("Pay on PayPal", "document.querySelector('[role=dialog]')");
+  // A guest's button opens PayPal; signed in, it pays from the saved PayPal.
+  const label = await js("[...document.querySelectorAll('[role=dialog] button')].map((b) => b.innerText.trim()).find((t) => t === 'Pay on PayPal' || t === 'Pay now')");
+  await click(label ?? "Pay on PayPal", "document.querySelector('[role=dialog]')");
 }
+/** On PayPal's own pages: logs in as the sandbox buyer and approves (paying, or saving PayPal with Flick), until PayPal sends the browser back. */
+async function throughPayPal(email, password) {
+  await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal");
+  for (let i = 0; i < 80 && !String(await js("location.href")).startsWith(SITE); i++) {
+    await sleep(1500);
+    const page = await js(`(() => { const v = (el) => el && el.offsetParent !== null; const e = document.querySelector('#email'), p = document.querySelector('#password');
+      return { email: v(e) ? e.value : null, password: v(p) ? p.value : null, buttons: [...document.querySelectorAll('button')].filter(v).map((b) => b.innerText.trim()) }; })()`).catch(() => null);
+    if (!page) continue;
+    if (page.email === "") { await fill("#email", email); await js("(document.querySelector('#btnNext') || document.querySelector('#btnLogin'))?.click()"); continue; }
+    if (page.password === "") { await fill("#password", password); await js("document.querySelector('#btnLogin')?.click()"); continue; }
+    const yes = page.buttons.find((b) => /^(pay|agree|continue|complete|save)/i.test(b));
+    if (yes) await js(`[...document.querySelectorAll('button')].find((b) => b.innerText.trim() === ${JSON.stringify(yes)})?.click()`);
+  }
+  await waitFor(`location.href.startsWith(${JSON.stringify(SITE)})`, 30_000, "back at Flick");
+  problems.length = 0; // PayPal's own pages log errors of their own
+}
+/** This browser's session cookie: its workspace. */
+const session = async () => (await cdp("Network.getCookies", { urls: [SITE] })).result.cookies.find((c) => c.name === "flick")?.value;
 const daysAfter = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 // --- The checklist --------------------------------------------------------------------------
@@ -216,6 +236,8 @@ const pages = [
   ["/friends", "Your people, by their PayPal."],
   ["/ask", "Say what you need."],
   ["/install", "Flick, on your home screen."],
+  ["/login", "Sign in to Flick"],
+  ["/profile", "You're a guest."],
   ["/dashboard", "Money Studio"],
 ];
 const devices = [
@@ -493,11 +515,19 @@ await step("a new deploy replaces an installed app's old pages, and the open app
   const { result } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: "sessionStorage.loads = String(Number(sessionStorage.loads || 0) + 1)" });
   await js("sessionStorage.loads = '0'");
   await cdp("Page.reload");
-  await waitFor(`document.readyState === 'complete' && navigator.serviceWorker.controller?.scriptURL.endsWith('v=${build}')`, 30_000, "this deploy's worker in charge");
+  const reloaded = Date.now();
+  // A fresh browser takes over in about a second. Late in this long session the new worker installs
+  // at once but then waits about 30s to take over (seen with a timeline of the takeover), so: 60s.
+  await waitFor(`document.readyState === 'complete' && navigator.serviceWorker.controller?.scriptURL.endsWith('v=${build}')`, 60_000, "this deploy's worker in charge").catch(async (err) => {
+    // Where the update got stuck: which worker controls the page, and which are active, waiting or installing.
+    const where = await js(`navigator.serviceWorker.getRegistration().then((r) => { const v = (w) => (w ? new URL(w.scriptURL).searchParams.get('v') + ' ' + w.state : 'none'); return 'controller ' + v(navigator.serviceWorker.controller) + ', active ' + v(r?.active) + ', waiting ' + v(r?.waiting) + ', installing ' + v(r?.installing) + ', on ' + location.pathname; })`).catch((e) => String(e));
+    throw new Error(`${err.message} (${where})`);
+  });
   await waitFor("sessionStorage.loads === '2'", 15_000, "the app reloading itself onto this deploy");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: result.identifier });
   const caches = await js("caches.keys()");
   check(!caches.includes("flick-older") && caches.includes(`flick-${build}`), `caches: ${caches.join(", ")}`);
+  return `took over ${((Date.now() - reloaded) / 1000).toFixed(1)}s after the reload`;
 });
 
 await step("offline, Today and Autopilot still open, and say so", async () => {
@@ -557,6 +587,20 @@ await step("notifications: subscribed through a real push service, and the welco
   return `${out.host} took it`;
 });
 
+await step("Sign in: /login opens PayPal's own page to save PayPal with Flick; cancelling comes back", async () => {
+  await device(devices[0][1]);
+  await open("/login");
+  check(await js("[...document.querySelectorAll('header a')].some((a) => a.innerText.trim() === 'Sign in')"), "the nav doesn't offer Sign in");
+  await click("Sign in with PayPal");
+  await waitFor("location.hostname === 'www.sandbox.paypal.com'", 30_000, "PayPal's page");
+  await cdp("Page.navigate", { url: `${SITE}/api/auth/paypal/cancel` });
+  await waitFor("location.pathname === '/login' && document.body.innerText.includes('Sign-in cancelled')", 20_000, "back on /login, cancelled");
+  problems.length = 0; // PayPal's page logs errors of its own
+  // The backend's session cookie gets through the frontend's /api rewrite: signing in depends on it.
+  const res = await fetch(`${SITE}/api/auth/signout`, { method: "POST", headers: { cookie: "flick=e2e-cookie-check-01" } });
+  check(/^flick=;.*Max-Age=0/.test(res.headers.get("set-cookie") ?? ""), `set-cookie: ${res.headers.get("set-cookie")}`);
+});
+
 // --- 4. Paying on PayPal's real page, from the screen -------------------------------------------
 
 console.log("\nOn PayPal's page");
@@ -572,24 +616,62 @@ if (!email || !password) {
     await waitFor("[...document.querySelectorAll('button')].some((b) => /^Pay \\$/.test(b.innerText.trim()) && !b.disabled)", 60_000, "a Pay button");
     await js("[...document.querySelectorAll('button')].find((b) => /^Pay \\$/.test(b.innerText.trim())).click()");
     await tapToPay();
-    await waitFor("location.hostname.endsWith('paypal.com')", 30_000, "PayPal");
-    for (let i = 0; i < 80 && !(await js("location.href")).startsWith(SITE); i++) {
-      await sleep(1500);
-      const page = await js(`(() => { const v = (el) => el && el.offsetParent !== null; const e = document.querySelector('#email'), p = document.querySelector('#password');
-        return { email: v(e) ? e.value : null, password: v(p) ? p.value : null, buttons: [...document.querySelectorAll('button')].filter(v).map((b) => b.innerText.trim()) }; })()`).catch(() => null);
-      if (!page) continue;
-      if (page.email === "") { await fill("#email", email); await js("(document.querySelector('#btnNext') || document.querySelector('#btnLogin'))?.click()"); continue; }
-      if (page.password === "") { await fill("#password", password); await js("document.querySelector('#btnLogin')?.click()"); continue; }
-      const pay = page.buttons.find((b) => /^(pay|agree|continue|complete)/i.test(b));
-      if (pay) await js(`[...document.querySelectorAll('button')].find((b) => b.innerText.trim() === ${JSON.stringify(pay)})?.click()`);
-    }
-    await waitFor(`location.href.startsWith(${JSON.stringify(SITE)})`, 30_000, "back at Flick");
+    await throughPayPal(email, password);
     await waitFor("document.body.innerText.includes('Paid with PayPal')", 20_000, "Paid with PayPal");
-    problems.length = 0; // PayPal's own page logs errors of its own
+    problems.length = 0;
     const s = await state();
     check(s.scans[0].status === "paid", `scan is ${s.scans[0].status}`);
     check(s.activity.some((a) => a.agent === "lens" && a.text.startsWith("Paid")), "no payout");
     await device(devices[0][1]);
+  });
+
+  // Signing in with that PayPal (backend/src/account.ts): one approval on PayPal saves it with Flick.
+  let guestFriends = 0;
+  await step("Sign in with PayPal: back on Flick, signed in, with what you did as a guest", async () => {
+    const guest = await session();
+    guestFriends = (await state()).friends.length;
+    await open("/login");
+    await click("Sign in with PayPal");
+    await throughPayPal(email, password);
+    await waitFor("document.body.innerText.includes('Signed in with PayPal')", 20_000, "Signed in with PayPal");
+    problems.length = 0;
+    const s = await state();
+    check(s.profile?.email && s.profile.savedId === "", `profile ${JSON.stringify(s.profile)}`);
+    check((await session()) !== guest, "still the guest's workspace");
+    check(s.friends.length === guestFriends, `${s.friends.length} friends, not the guest's ${guestFriends}`);
+    check(await js("Boolean(document.querySelector('header a[href=\"/profile\"]'))"), "the nav doesn't show who's signed in");
+    return `as ${s.profile.name} (${s.profile.email})`;
+  });
+  await step("Signed in, a flick pays at once from the saved PayPal: no PayPal page", async () => {
+    await open("/lens");
+    await snap([["HARBOR GAS CO", 36], ["Gas bill, November", 24], ["Amount due: $0.42", 28], ["Due date: 2026-12-02", 24]]);
+    await waitFor("[...document.querySelectorAll('button')].some((b) => /^Pay \\$/.test(b.innerText.trim()) && !b.disabled)", 60_000, "a Pay button");
+    await js("[...document.querySelectorAll('button')].find((b) => /^Pay \\$/.test(b.innerText.trim())).click()");
+    await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('from your PayPal')", 15_000, "the sheet paying from your PayPal");
+    await tapToPay();
+    await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('Paid') || location.search.includes('paid=scan')", 30_000, "Paid");
+    await waitFor("location.pathname === '/lens' && location.search.includes('paid=scan') || document.body.innerText.includes('Paid with PayPal')", 20_000, "back on Lens, paid");
+    const s = await state();
+    const scan = s.scans.find((x) => x.title?.toUpperCase().includes("HARBOR"));
+    check(scan?.status === "paid", `the bill is ${scan?.status}`);
+    const paid = Object.values(s.checkouts).find((c) => c.kind === "scan" && c.scanId === scan.id);
+    check(paid?.status === "captured" && paid.captureId, `checkout ${JSON.stringify(paid)}`);
+  });
+  await step("Signing out: a new guest Flick; signing in again brings yours back", async () => {
+    const mine = await session();
+    await open("/profile");
+    await click("Sign out");
+    await waitFor("location.pathname === '/login' && document.body.innerText.includes('Signed out')", 20_000, "signed out, on /login");
+    await open("/home");
+    const guest = await state();
+    check(!guest.profile && !guest.friends.length, "still signed in, or the guest Flick isn't new");
+    await open("/login");
+    await click("Sign in with PayPal");
+    await throughPayPal(email, password);
+    await waitFor("document.body.innerText.includes('Signed in with PayPal')", 20_000, "Signed in with PayPal");
+    problems.length = 0;
+    check((await session()) === mine, "a different workspace from last time");
+    check((await state()).friends.length === guestFriends, "your friends didn't come back");
   });
 }
 

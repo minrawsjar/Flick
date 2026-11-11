@@ -367,7 +367,20 @@ function completed(order: Order) {
  * approval page. The order is captured as it's created, or straight after if PayPal leaves it
  * APPROVED. Safe to repeat: the request ids make it idempotent.
  */
-export async function chargeSaved({ reference, description, items, savedId }: { reference: string; description: string; items: OrderItem[]; savedId: string }) {
+export async function chargeSaved({
+  reference,
+  description,
+  items,
+  savedId,
+  present = false,
+}: {
+  reference: string;
+  description: string;
+  items: OrderItem[];
+  savedId: string;
+  /** The person is there, paying (a flick), rather than Flick paying for them later. */
+  present?: boolean;
+}) {
   const total = items.reduce((sum, item) => sum + Math.round(item.amount * 100), 0) / 100;
   const order = await call<Order>('POST', '/v2/checkout/orders', {
     requestId: `saved-${reference}`,
@@ -382,7 +395,7 @@ export async function chargeSaved({ reference, description, items, savedId }: { 
           items: items.map((item) => ({ name: item.name.slice(0, 127), quantity: '1', unit_amount: money(item.amount), category: 'DIGITAL_GOODS' })),
         },
       ],
-      payment_source: { paypal: { vault_id: savedId, stored_credential: { payment_initiator: 'MERCHANT', usage: 'SUBSEQUENT' } } },
+      payment_source: { paypal: { vault_id: savedId, stored_credential: { payment_initiator: present ? 'CUSTOMER' : 'MERCHANT', usage: 'SUBSEQUENT' } } },
     },
   });
   return completed(order.status === 'APPROVED' ? await captureOrderRaw(order.id) : order);
@@ -390,6 +403,45 @@ export async function chargeSaved({ reference, description, items, savedId }: { 
 
 const captureOrderRaw = (orderId: string) =>
   call<Order>('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, { requestId: `capture-${orderId}`, prefer: 'return=representation', body: {} });
+
+/**
+ * Asks the person to save their PayPal with Flick, with no purchase: signing in to Flick (account.ts).
+ * Returns the setup token and the PayPal page where they approve it.
+ */
+export async function startSaving({ reference, returnUrl, cancelUrl }: { reference: string; returnUrl: string; cancelUrl: string }) {
+  const token = await call<{ id: string; links?: { rel: string; href: string }[] }>('POST', '/v3/vault/setup-tokens', {
+    requestId: `setup-${reference}`,
+    body: {
+      payment_source: {
+        paypal: {
+          usage_type: 'MERCHANT',
+          customer_type: 'CONSUMER',
+          experience_context: { brand_name: 'Flick', shipping_preference: 'NO_SHIPPING', return_url: returnUrl, cancel_url: cancelUrl },
+        },
+      },
+    },
+  });
+  const approveUrl = token.links?.find((l) => l.rel === 'approve')?.href;
+  if (!approveUrl) throw new Error(`PayPal returned setup token ${token.id} without an approval link`);
+  return { setupTokenId: token.id, approveUrl };
+}
+
+type PaymentToken = {
+  id: string;
+  customer?: { id?: string };
+  payment_source?: { paypal?: { email_address?: string; payer_id?: string; name?: { given_name?: string; surname?: string; full_name?: string } } };
+};
+
+/** Once the person approved saving their PayPal: the saved account, and whose it is. Safe to repeat. */
+export async function finishSaving(setupTokenId: string) {
+  const token = await call<PaymentToken>('POST', '/v3/vault/payment-tokens', {
+    requestId: `saved-from-${setupTokenId}`,
+    body: { payment_source: { token: { id: setupTokenId, type: 'SETUP_TOKEN' } } },
+  });
+  const paypal = token.payment_source?.paypal;
+  const name = paypal?.name?.full_name ?? [paypal?.name?.given_name, paypal?.name?.surname].filter(Boolean).join(' ');
+  return { savedId: token.id, email: paypal?.email_address, payerId: paypal?.payer_id, name: name || undefined };
+}
 
 /** Forgets a saved PayPal account, at PayPal too. */
 export function deleteSaved(savedId: string) {

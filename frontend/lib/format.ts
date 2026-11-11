@@ -3,3 +3,5 @@
 export const usd = (n: number) => `$${n.toFixed(2)}`;
 /** An amount in any currency, e.g. "₹801.00". */
 export const money = (n: number, currency: string) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(n);
+/** The first letter of a name, for a person's round badge (the nav, /profile). */
+export const initial = (name: string) => (name.trim()[0] ?? "?").toUpperCase();

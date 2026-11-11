@@ -81,9 +81,13 @@ Until you have something of your own, each page shows a sample as a walkthrough:
 
 Without the cookie (the test scripts, curl) requests use the `local` workspace, the old single state file, which starts from the demo seed.
 
+### Sign in with PayPal
+
+`/login` signs you in with a PayPal sandbox account, so your Flick is yours on every device ([`account.ts`](backend/src/account.ts)). There's no password of Flick's own: one approval on PayPal's page saves your PayPal with Flick (PayPal's vault, without a purchase: `POST /v3/vault/setup-tokens`, then `POST /v3/vault/payment-tokens`), and that payment token tells Flick whose account it is. Your workspace's id is keyed from your PayPal account with the server's secret (`SESSION_SECRET`, or else `PAYPAL_SECRET`), so signing in anywhere opens the same one; the first time, what you did as a guest in that browser moves in with you. `/profile` shows who you're signed in as and what's in your Flick, and signs you out, which leaves it all kept. Signing in is optional: a guest can do everything, approving each payment on PayPal's page.
+
 ### Flick to pay
 
-Before PayPal opens, every payment asks for one flick of the hand across the phone's front camera ([`flick-confirm.tsx`](frontend/components/flick-confirm.tsx)). The browser compares tiny 64×48 frames about 20 times a second and looks for a hand-sized movement that crosses the frame fast, in one direction ([`lib/flick.ts`](frontend/lib/flick.ts), tested with `npm test` in `frontend/`). Frames never leave the device. With no camera, or no permission, a tap does it instead; "Not now" cancels the PayPal checkout, as cancelling on PayPal's page would.
+Every payment asks for one finger flicked up in front of the phone's front camera ([`flick-confirm.tsx`](frontend/components/flick-confirm.tsx)). The browser compares tiny 64×48 frames about 30 times a second and looks for a quick, mostly upward movement ([`lib/flick.ts`](frontend/lib/flick.ts), tested with `npm test` in `frontend/`). The camera is read, never shown, and frames never leave the device. Signed in, the flick pays there and then from your saved PayPal (`POST /api/paypal/flick`), with no PayPal page; as a guest it opens PayPal's page to approve. With no camera, or no permission, a tap does it instead; "Not now" cancels the PayPal checkout, as cancelling on PayPal's page would.
 
 ## How it works
 
@@ -165,10 +169,13 @@ Out-of-the-box payee and friend emails are placeholders: payouts to them succeed
 | `POST /api/scout/online` `{ productId }` or `{ query }` | Live prices at online stores, from Channel3 |
 | `POST /api/scout/buy` `{ storeId, items }` | One checkout for a basket at a store; returns `approveUrl` |
 | `GET /api/paypal/return`, `/cancel` | Where PayPal sends people back after a checkout |
+| `POST /api/paypal/flick` `{ orderId }` | Signed in: pays a checkout from the saved PayPal, on a flick, with no PayPal page; returns the page to show |
+| `GET /api/auth/paypal/start?next=` | Signing in: PayPal's page to save PayPal with Flick; PayPal comes back to `/api/auth/paypal/return` (or `/cancel`) |
+| `POST /api/auth/signout` | Ends this browser's session; its next visit is a new guest |
 | `GET /api/dashboard` | Money Studio's tables |
 | `GET /api/ai/models`, `POST /api/ai/responses` | Money Studio's assistant |
 
-Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 404 for an unknown id, 409 when the state doesn't allow it, 502 when PayPal or the AI model failed, 503 when a key isn't set.
+Errors are JSON, `{ "error": { "message" } }`: 400 for bad input, 402 when PayPal turned down a payment from a saved PayPal, 404 for an unknown id, 409 when the state doesn't allow it, 502 when PayPal or the AI model failed, 503 when a key isn't set.
 
 ### Autopilot that pays by itself
 

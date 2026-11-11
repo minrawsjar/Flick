@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { id, type Agent, type State } from './model.ts';
@@ -8,7 +8,9 @@ import { blank, seed } from './seed.ts';
 // Everything Flick knows for one person, their workspace: one JSON document, kept in memory and
 // written to disk after each change. Every browser gets its own workspace id from the frontend
 // (frontend/proxy.ts), so what one visitor snaps, adds and pays is theirs alone, and starts empty.
-// Without an id (the tests, scripts, curl) it's the "local" workspace, which starts from the demo seed.
+// Signing in with PayPal (account.ts) moves the browser onto its person's workspace, the same one on
+// every device. Without an id (the tests, scripts, curl) it's the "local" workspace, which starts
+// from the demo seed.
 //
 // `state` is the current request's workspace (server.ts runs each request inside `inWorkspace`), so
 // the agents read and write `state` as if there were only one.
@@ -40,6 +42,9 @@ function open(workspaceId: string): Workspace {
   return workspace;
 }
 
+/** Whether a workspace has been started: anything saved, or open in memory. */
+export const hasWorkspace = (workspaceId: string) => opened.has(workspaceId) || existsSync(fileOf(workspaceId));
+
 /** Runs `work` in a workspace: everything it does to `state` is that workspace's. */
 export const inWorkspace = <T>(workspaceId: string, work: () => T): T => current.run(open(workspaceId), work);
 /** Runs `work` on a throwaway copy of the demo seed (Money Studio's sample, before you've paid anything). */
@@ -70,11 +75,12 @@ export function save() {
   renameSync(`${file}.tmp`, file);
 }
 
-/** Back to the start: empty for a visitor, the demo seed for "local". */
+/** Back to the start: empty for a visitor, the demo seed for "local". Whoever is signed in stays signed in. */
 export function reset(now = new Date()) {
+  const { profile } = state;
   // Clear first: anything the start doesn't have (e.g. Scout's purchases) starts over too.
   for (const key of Object.keys(state)) delete state[key as keyof State];
-  Object.assign(state, fresh(workspaceId(), now));
+  Object.assign(state, fresh(workspaceId(), now), profile && { profile });
   save();
 }
 

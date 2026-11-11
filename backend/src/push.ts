@@ -125,6 +125,13 @@ export async function subscribe(body: Record<string, unknown>) {
   return { subscribed: true, delivered };
 }
 
+/** A browser's notifications follow it into the Flick it signs in to (account.ts). */
+export function move(from: string, to: string) {
+  const d = load();
+  for (const s of d.subscriptions) if ((s.workspace ?? 'local') === from) s.workspace = to;
+  persist();
+}
+
 export function unsubscribe(body: Record<string, unknown>) {
   const d = load();
   d.subscriptions = d.subscriptions.filter((s) => s.endpoint !== body.endpoint);

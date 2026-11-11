@@ -105,7 +105,7 @@ export function approveOnPayPal(approveUrl: string | null | undefined, details: 
   );
 }
 
-/** Where PayPal just brought the person back from, read once when the page loads. */
+/** Where PayPal just brought the person back from (a payment, or signing in), read once when the page loads. */
 export const returned =
   typeof window === "undefined"
     ? null
@@ -113,7 +113,7 @@ export const returned =
         const params = new URLSearchParams(window.location.search);
         const paid = params.get("paid");
         const checkout = params.get("checkout");
-        return paid ? { paid } : checkout ? { checkout } : null;
+        return paid ? { paid } : checkout ? { checkout } : params.has("signedin") ? { paid: "signedin" } : null;
       })();
 
 /** Days since an ISO date. */
