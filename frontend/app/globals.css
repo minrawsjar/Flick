@@ -270,3 +270,14 @@ body {
   .loop-wave, .loop-scan, .loop-tick, .loop-part-left, .loop-part-right, .rise, .caret,
   .loop-drift, .loop-bob, .loop-marquee, .text-gradient, .sheet-up, .fade-in, .loop-flick-hint, .loop-finger-flick, .mark-finger, .mark-trail, .mark-spark { animation: none; }
 }
+
+/* Money Studio scrolls with no scroll bars: a trackpad, wheel or touch still scrolls it. The rule
+   covers the whole page while Studio is open because AG Grid measures the browser's scroll bar on
+   <body>: measured at zero, its grids leave no gap for one either. */
+html:has([data-studio]),
+html:has([data-studio]) * {
+  scrollbar-width: none;
+}
+html:has([data-studio]) *::-webkit-scrollbar {
+  display: none;
+}

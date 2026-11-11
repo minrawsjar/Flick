@@ -37,7 +37,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <div className="relative flex h-dvh flex-col bg-grouped font-sans text-ink">
+    <div data-studio className="relative flex h-dvh flex-col bg-grouped font-sans text-ink">
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <nav className="flex w-64 shrink-0 flex-col border-r border-separator bg-card" aria-label="Reports">
