@@ -197,6 +197,18 @@ async function throughPayPal(email, password) {
   await waitFor(`location.href.startsWith(${JSON.stringify(SITE)})`, 30_000, "back at Flick");
   problems.length = 0; // PayPal's own pages log errors of their own
 }
+/**
+ * Snaps a bill and waits until Lens has read it and offers to pay `amount` ("$0.42"): not the Pay
+ * button of a bill read before, which shows until the new one is in. Returns the new scan.
+ */
+async function snapToPay(lines, amount) {
+  const before = (await state()).scans.length;
+  await snap(lines);
+  for (let i = 0; i < 300 && (await state()).scans.length <= before; i++) await sleep(300);
+  await waitFor(`[...document.querySelectorAll('button')].some((b) => b.innerText.trim().startsWith(${JSON.stringify(`Pay ${amount}`)}) && !b.disabled)`, 30_000, `a Pay ${amount} button`);
+  return (await state()).scans[0];
+}
+const clickPay = (amount) => js(`[...document.querySelectorAll('button')].find((b) => b.innerText.trim().startsWith(${JSON.stringify(`Pay ${amount}`)})).click()`);
 /** This browser's session cookie: its workspace. */
 const session = async () => (await cdp("Network.getCookies", { urls: [SITE] })).result.cookies.find((c) => c.name === "flick")?.value;
 const daysAfter = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -612,16 +624,15 @@ if (!email || !password) {
   await step("Lens: Pay → PayPal login → approve → back to Flick, paid", async () => {
     await device(devices[2][1]);
     await open("/lens");
-    await snap([["CITY POWER", 36], ["Electricity, November", 24], ["Account •••• 4821", 22], ["Amount due: $64.20", 28], ["Due date: 2026-12-02", 24]]);
-    await waitFor("[...document.querySelectorAll('button')].some((b) => /^Pay \\$/.test(b.innerText.trim()) && !b.disabled)", 60_000, "a Pay button");
-    await js("[...document.querySelectorAll('button')].find((b) => /^Pay \\$/.test(b.innerText.trim())).click()");
+    const bill = await snapToPay([["CITY POWER", 36], ["Electricity, November", 24], ["Account •••• 4821", 22], ["Amount due: $0.31", 28], ["Due date: 2026-12-02", 24]], "$0.31");
+    await clickPay("$0.31");
     await tapToPay();
     await throughPayPal(email, password);
-    await waitFor("document.body.innerText.includes('Paid with PayPal')", 20_000, "Paid with PayPal");
+    await waitFor("location.search.includes('paid=scan') || document.querySelector('[role=status]')?.innerText.includes('Paid with PayPal')", 20_000, "back on Lens, paid");
     problems.length = 0;
     const s = await state();
-    check(s.scans[0].status === "paid", `scan is ${s.scans[0].status}`);
-    check(s.activity.some((a) => a.agent === "lens" && a.text.startsWith("Paid")), "no payout");
+    check(s.scans.find((x) => x.id === bill.id)?.status === "paid", `the bill is ${s.scans.find((x) => x.id === bill.id)?.status}`);
+    check(s.activity.some((a) => a.agent === "lens" && a.text.startsWith(`Paid ${bill.title}`)), "no payout");
     await device(devices[0][1]);
   });
 
@@ -644,18 +655,24 @@ if (!email || !password) {
   });
   await step("Signed in, a flick pays at once from the saved PayPal: no PayPal page", async () => {
     await open("/lens");
-    await snap([["HARBOR GAS CO", 36], ["Gas bill, November", 24], ["Amount due: $0.42", 28], ["Due date: 2026-12-02", 24]]);
-    await waitFor("[...document.querySelectorAll('button')].some((b) => /^Pay \\$/.test(b.innerText.trim()) && !b.disabled)", 60_000, "a Pay button");
-    await js("[...document.querySelectorAll('button')].find((b) => /^Pay \\$/.test(b.innerText.trim())).click()");
+    const bill = await snapToPay([["HARBOR GAS CO", 36], ["Gas bill, November", 24], ["Amount due: $0.42", 28], ["Due date: 2026-12-02", 24]], "$0.42");
+    await clickPay("$0.42");
     await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('from your PayPal')", 15_000, "the sheet paying from your PayPal");
+    // Never PayPal's page: note every place the browser goes until it's back on Lens, paid.
+    // (Lens tidies ?paid= out of the address bar as it loads, so it's the navigation that says it.)
+    const went = [];
+    const watch = (e) => { const m = JSON.parse(String(e.data)); if (m.method === "Page.frameNavigated" && !m.params.frame.parentId) went.push(new URL(m.params.frame.url)); };
+    ws.addEventListener("message", watch);
     await tapToPay();
-    await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('Paid') || location.search.includes('paid=scan')", 30_000, "Paid");
-    await waitFor("location.pathname === '/lens' && location.search.includes('paid=scan') || document.body.innerText.includes('Paid with PayPal')", 20_000, "back on Lens, paid");
+    for (let i = 0; i < 100 && !went.some((u) => u.pathname === "/lens" && u.search.includes("paid=scan")); i++) await sleep(300);
+    ws.removeEventListener("message", watch);
+    check(went.some((u) => u.pathname === "/lens" && u.search.includes("paid=scan")), `not back on Lens, paid: went to ${went.map((u) => u.pathname + u.search).join(", ") || "nowhere"}`);
+    check(!went.some((u) => u.hostname.endsWith("paypal.com")), `went to PayPal: ${went.map((u) => u.hostname).join(", ")}`);
     const s = await state();
-    const scan = s.scans.find((x) => x.title?.toUpperCase().includes("HARBOR"));
-    check(scan?.status === "paid", `the bill is ${scan?.status}`);
-    const paid = Object.values(s.checkouts).find((c) => c.kind === "scan" && c.scanId === scan.id);
-    check(paid?.status === "captured" && paid.captureId, `checkout ${JSON.stringify(paid)}`);
+    check(s.scans.find((x) => x.id === bill.id)?.status === "paid", `the bill is ${s.scans.find((x) => x.id === bill.id)?.status}`);
+    const paid = Object.values(s.checkouts).find((c) => c.kind === "scan" && c.scanId === bill.id && c.status === "captured");
+    check(paid?.captureId, "no captured checkout for the bill");
+    check(s.activity.some((a) => a.agent === "lens" && a.text.startsWith(`Paid ${bill.title}`)), "no payout");
   });
   await step("Signing out: a new guest Flick; signing in again brings yours back", async () => {
     const mine = await session();
