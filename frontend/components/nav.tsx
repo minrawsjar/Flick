@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { initial } from "@/lib/format";
 import { useLive } from "@/lib/live";
+import { UnreadCount, useUnread } from "./chat-alerts";
 import { ThemeToggle } from "./theme-toggle";
 import { Logo } from "./ui";
 
@@ -30,6 +31,7 @@ const week = ["/autopilot", "/scout"];
 
 function Links({ className = "" }: { className?: string }) {
   const path = usePathname();
+  const { count } = useUnread();
   return (
     <div className={`items-center gap-1 text-[13px] ${className}`}>
       {links.map(([href, label]) => (
@@ -37,9 +39,10 @@ function Links({ className = "" }: { className?: string }) {
           key={href}
           href={href}
           aria-current={path === href ? "page" : undefined}
-          className={`shrink-0 rounded-full px-2.5 py-1 transition-colors xl:px-3 ${path === href ? "bg-fill text-ink" : "text-ink/70 hover:text-ink"}`}
+          className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 transition-colors xl:px-3 ${path === href ? "bg-fill text-ink" : "text-ink/70 hover:text-ink"}`}
         >
           {label}
+          {href === "/chat" && <UnreadCount count={count} />}
         </Link>
       ))}
     </div>
@@ -108,16 +111,21 @@ const tabs = [
   ["/ask", "Ask", Sparkles],
 ] as const;
 
-/** The working pages' tab bar, below laptop width. Its Week tab (and the app's icon) shows what needs you. */
+/**
+ * The working pages' tab bar, below laptop width. Its Week tab shows what needs you, its People tab
+ * unread chats, and the app's icon both.
+ */
 export function TabBar() {
   const path = usePathname();
   const waiting = useWaiting();
+  const { count: unread } = useUnread();
 
   // The installed app's icon badge (Chrome, Edge, Safari on iOS 16.4+ for home-screen apps).
   useEffect(() => {
     if (!("setAppBadge" in navigator)) return;
-    (waiting ? navigator.setAppBadge(waiting) : navigator.clearAppBadge()).catch(() => {});
-  }, [waiting]);
+    const all = waiting + unread;
+    (all ? navigator.setAppBadge(all) : navigator.clearAppBadge()).catch(() => {});
+  }, [waiting, unread]);
 
   return (
     <nav
@@ -138,6 +146,7 @@ export function TabBar() {
             {href === "/autopilot" && waiting > 0 && (
               <span aria-label={`${waiting} waiting for you`} className="absolute right-3 top-1 size-2 rounded-full bg-danger" />
             )}
+            {href === "/split" && unread > 0 && <span aria-label={`${unread} unread in Chat`} className="absolute right-3 top-1 size-2 rounded-full bg-danger" />}
           </Link>
         );
       })}
@@ -160,6 +169,7 @@ function useWaiting() {
  */
 function Switch({ paths, labels }: { paths: string[]; labels: string[] }) {
   const path = usePathname();
+  const { count } = useUnread();
   if (!paths.includes(path)) return null;
   return (
     <div className="flex justify-center px-4 pb-2 lg:hidden">
@@ -169,9 +179,10 @@ function Switch({ paths, labels }: { paths: string[]; labels: string[] }) {
             key={label}
             href={paths[i]}
             aria-current={path === paths[i] ? "page" : undefined}
-            className={`rounded-full py-1 text-center transition-colors ${path === paths[i] ? "bg-raised shadow-sm" : "text-ink/70"}`}
+            className={`flex items-center justify-center gap-1 rounded-full py-1 transition-colors ${path === paths[i] ? "bg-raised shadow-sm" : "text-ink/70"}`}
           >
             {label}
+            {paths[i] === "/chat" && <UnreadCount count={count} />}
           </Link>
         ))}
       </div>

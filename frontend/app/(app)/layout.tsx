@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ChatBanner } from "@/components/chat-alerts";
 import { Nav, TabBar } from "@/components/nav";
 import { BackendNotice, OfflineNotice, ReturnNotice } from "../_landing/live-notice";
 
@@ -16,6 +17,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       {/* Room for the tab bar, below laptop width. */}
       <main className="pb-[calc(env(safe-area-inset-bottom)+84px)] lg:pb-0">{children}</main>
       <TabBar />
+      <ChatBanner />
     </div>
   );
 }

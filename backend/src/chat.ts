@@ -166,12 +166,17 @@ const total = (list: Message[]) => cents(list.reduce((sum, m) => sum + (m.amount
 
 // --- Reading ---------------------------------------------------------------------------------
 
+/** Everyone you have a chat with, or could: your friends, and anyone who started one with you. */
+function others(email: string) {
+  const emails = new Set([...state.friends.map((f) => norm(f.email)), ...(directory()[email]?.peers ?? [])]);
+  emails.delete(email);
+  return [...emails];
+}
+
 /** Your chats: every friend, and anyone who started one with you, newest first, with what's open between you. */
 export function list() {
   const { email, name } = me();
-  const emails = new Set([...state.friends.map((f) => norm(f.email)), ...(directory()[email]?.peers ?? [])]);
-  emails.delete(email);
-  const chats = [...emails].map((other) => {
+  const chats = others(email).map((other) => {
     const peer = peerOf(other);
     const c = find(email, other);
     const messages = c?.messages ?? [];
@@ -187,6 +192,35 @@ export function list() {
   });
   chats.sort((a, b) => (b.last?.at ?? '').localeCompare(a.last?.at ?? '') || Number(b.peer.onFlick) - Number(a.peer.onFlick) || a.peer.name.localeCompare(b.peer.name));
   return { me: { email, name }, chats };
+}
+
+/**
+ * What's new for you across your chats: how many messages you haven't seen, and the newest of them.
+ * Every page asks every few seconds, for the Chat link's count and a banner when one arrives
+ * (frontend/components/chat-alerts.tsx). A guest has no chats: nothing, rather than a 401.
+ */
+export function unread() {
+  if (!state.profile?.email) return { count: 0 };
+  const email = norm(state.profile.email);
+  let count = 0;
+  let newest: { m: Message; other: string } | undefined;
+  for (const other of others(email)) {
+    const c = find(email, other);
+    const readAt = c?.read[email] ?? '';
+    for (const m of c?.messages ?? []) {
+      if (m.from === email || m.at <= readAt) continue;
+      count += 1;
+      if (!newest || m.at > newest.m.at) newest = { m, other };
+    }
+  }
+  if (!newest) return { count };
+  const { m, other } = newest;
+  const text =
+    m.kind === 'request' ? `Asked you for ${usd(m.amount ?? 0)}: ${m.what}`
+    : m.kind === 'paid' ? `Paid you ${usd(m.amount ?? 0)}${m.auto ? ', by itself' : ''}`
+    : m.kind === 'reminder' ? `A reminder: ${m.text}`
+    : (m.text ?? '');
+  return { count, latest: { id: m.id, at: m.at, kind: m.kind, peer: peerOf(other), text: text.slice(0, 160) } };
 }
 
 /** One chat. `v`: the version the page has; unchanged, only that comes back (the page polls). */

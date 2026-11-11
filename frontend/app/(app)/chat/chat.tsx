@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Bot, type BotColor, type BotShape } from "@/components/bot";
+import { checkChats } from "@/components/chat-alerts";
+import { Notify } from "@/components/pwa";
 import { Logo } from "@/components/ui";
 import { usd } from "@/lib/format";
 import { act, flickToPay, useLive } from "@/lib/live";
@@ -125,9 +127,13 @@ function Messenger({ open, select }: { open: string | null; select: (email: stri
       <aside aria-label="Your chats" className={`${open ? "hidden lg:flex" : "flex"} min-h-0 w-full flex-col overflow-hidden rounded-[24px] bg-card lg:w-[320px] lg:shrink-0`}>
         <div className="flex items-center justify-between px-4 pb-2 pt-4">
           <h1 className="text-[22px] tracking-tight">Chats</h1>
-          <Link href="/friends" className="pressable flex items-center gap-1 rounded-full bg-fill px-3 py-1 text-[12px]">
-            <UserPlus size={13} /> Add a friend
-          </Link>
+          <span className="flex items-start gap-1.5">
+            {/* Notifications for messages, requests and payments when Flick is closed (push.ts). */}
+            <Notify />
+            <Link href="/friends" className="pressable flex h-8 items-center gap-1 rounded-full bg-fill px-3 text-[12px]">
+              <UserPlus size={13} /> Add a friend
+            </Link>
+          </span>
         </div>
         {error && <p className="px-4 text-[12px] text-wait">{error}</p>}
         <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
@@ -194,6 +200,8 @@ function Conversation({ email, me, back, changed }: { email: string; me: Me; bac
       version.current = next.v;
       setThread(next);
       setError(undefined);
+      // Opening it read it: the counts elsewhere go now, not at their next check.
+      checkChats();
     } catch (err) {
       setError(message(err));
     }

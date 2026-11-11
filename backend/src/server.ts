@@ -104,6 +104,7 @@ const routes: Record<string, Handler> = {
   // Flick Chat: friends signed in with PayPal talk, ask for money, and pay in a tap (chat.ts)
   'GET /api/chat': () => chat.list(),
   'GET /api/chat/thread': ({ url }) => chat.thread(url.searchParams),
+  'GET /api/chat/unread': () => chat.unread(),
   'POST /api/chat/send': async ({ body }) => chat.send(await body()),
   'POST /api/chat/request': async ({ body }) => chat.request(await body()),
   'POST /api/chat/pay': async ({ body }) => chat.pay(await body()),

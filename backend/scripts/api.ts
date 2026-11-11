@@ -425,6 +425,14 @@ await step('a message reaches a friend on Flick, and their chats show who starte
   const theirs = (await robin('chat')).json.chats.find((c: Json) => c.peer.email === ME);
   check(theirs?.peer.onFlick && theirs.peer.name === 'Swarnim Raj' && theirs.unread === 1 && theirs.last.text === 'Dinner was fun!', JSON.stringify(theirs));
 });
+await step("Robin's unread: a count and the newest message, gone once read; a guest has none", async () => {
+  const { json: before } = await robin('chat/unread');
+  check(before.count >= 1 && before.latest?.peer.email === ME && before.latest.text === 'Dinner was fun!', JSON.stringify(before));
+  await thread(robin, ME);
+  check((await robin('chat/unread')).json.count === 0, 'still unread after reading');
+  const { status, json } = await guest('chat/unread');
+  check(status === 200 && json.count === 0 && !json.latest, `${status} ${JSON.stringify(json)}`);
+});
 await step('a request with the bill\'s photo: in the chat, and in your Flick as a request Nudge follows', async () => {
   check((await me('chat/request', { with: ROBIN, amount: 12.5, what: 'Dinner', photo: 'data:image/png;base64,AAAA' })).status === 400, 'took a PNG');
   check((await me('chat/request', { with: ROBIN, amount: 0, what: 'Dinner' })).status === 400, 'took $0');
