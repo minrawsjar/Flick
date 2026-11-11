@@ -75,6 +75,55 @@ test('one past payment is too little history to call anything unusual', () => {
   assert.equal(unusual('gym', 400, bills([40])), null);
 });
 
+// The seeded week, plus a gym paid on these dates (for $30 unless said).
+function withGym(dates: string[], amounts = dates.map(() => 30)) {
+  const state = seed(monday);
+  state.payees.push({ id: 'gym', name: 'Gym', email: 'pay@gym.example.com', icon: 'bill' });
+  state.history.push(...dates.map((date, i) => ({ payeeId: 'gym', what: 'Membership', amount: amounts[i], date })));
+  return state;
+}
+const gymIn = (state: ReturnType<typeof seed>) => planWeek('2026-11-09', state).filter((p) => p.payee === 'Gym').map((p) => [p.day, p.amount, p.why]);
+
+test('a bill paid around the same day each month is learned as monthly', () => {
+  assert.deepEqual(gymIn(withGym(['2026-08-12', '2026-09-12', '2026-10-12'], [30, 30, 32])), [
+    ['Thu', 32, "You've paid Gym around the 12th for the last 3 months."],
+  ]);
+  assert.deepEqual(gymIn(withGym(['2026-08-12', '2026-10-13'])), [['Thu', 30, "You've paid Gym around the 12th in 2 of the last 3 months."]], 'a day off, a month missed');
+});
+
+test('payments too irregular to call monthly are not', () => {
+  assert.deepEqual(gymIn(withGym(['2026-08-25', '2026-09-03', '2026-10-12'])), []);
+  assert.deepEqual(gymIn(withGym(['2026-10-12'])), [], 'one month is not a pattern');
+});
+
+test('someone paid every week is a habit, not a monthly bill as well', () => {
+  const thursdays = Array.from({ length: 14 }, (_, i) => new Date(Date.UTC(2026, 7, 6 + 7 * i)).toISOString().slice(0, 10));
+  assert.deepEqual(gymIn(withGym(thursdays)), [['Thu', 30, "You've paid Gym every Thursday for the last 4 weeks."]]);
+});
+
+test("a month that already has a bill from Lens doesn't plan it again", () => {
+  const state = withGym(['2026-08-12', '2026-09-12', '2026-10-12']);
+  state.scans.push({ ...state.scans[0], id: 'scan_gym', payeeId: 'gym', title: 'Gym', summary: 'Membership', amount: 30, due: '2026-11-13' });
+  assert.deepEqual(gymIn(state).map(([day]) => day), ['Fri'], "only the bill Lens read, on its own day, not also the 12th");
+  state.scans[1].status = 'paid';
+  assert.deepEqual(gymIn(state), [], 'and once paid, nothing');
+});
+
+test('a payee with a monthly rule is paid by the rule, even when history points at another day', () => {
+  const state = withGym(['2026-08-10', '2026-09-10', '2026-10-10']);
+  state.monthly.push({ payeeId: 'gym', what: 'Membership', amount: 30, dayOfMonth: 13, since: '2026-08-01' });
+  assert.deepEqual(gymIn(state).map(([day]) => day), ['Fri'], 'the rule on the 13th, not also the 10th');
+});
+
+test('the seeded week learns nothing new: a monthly rule and a bill Lens read come first', () => {
+  // Mobile Co and City Power both look monthly, but the phone plan's rule and the electricity bill
+  // Lens read already cover them, so the week stays the one-pager's.
+  const state = seed(monday);
+  state.monthly = [];
+  const mobile = planWeek('2026-11-09', state).filter((p) => p.payee === 'Mobile Co');
+  assert.deepEqual(mobile.map((p) => [p.day, p.amount, p.why]), [['Thu', 25, "You've paid Mobile Co around the 12th for the last 3 months."]], 'without its rule, Mobile Co is learned');
+});
+
 test('only approved payments whose day has come are due', () => {
   const { week } = seed(monday);
   week.today = 3;
