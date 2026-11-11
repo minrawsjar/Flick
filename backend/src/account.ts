@@ -1,8 +1,8 @@
 import { createHmac } from 'node:crypto';
 import { frontendUrl } from './checkout.ts';
 import { need } from './http.ts';
-import type { Profile, State } from './model.ts';
-import { register } from './chat.ts';
+import { cents, type Checkout, type Profile, type State } from './model.ts';
+import { paidByYou, register, waiting } from './chat.ts';
 import { deleteSaved, finishSaving, startSaving } from './paypal.ts';
 import { save, state, workspaceId } from './store.ts';
 
@@ -96,4 +96,33 @@ export function rename(body: Record<string, unknown>) {
   save();
   register();
   return { ...state.profile, savedId: '' };
+}
+
+/**
+ * Your money through Flick, worked out afresh each time /profile opens: what left your PayPal through
+ * Flick and where it went, what friends paid you back, and what's still open either way. It isn't
+ * your PayPal balance: PayPal doesn't share a customer's balance with the apps they pay.
+ */
+export function money() {
+  need(state.profile, 'Sign in with PayPal first.', 409);
+  const month = new Date().toISOString().slice(0, 7);
+  const sum = (list: { amount: number }[]) => cents(list.reduce((total, x) => total + x.amount, 0));
+  const captured = Object.values(state.checkouts).filter((c) => c.status === 'captured');
+  const of = (kind: Checkout['kind']) => captured.filter((c) => c.kind === kind);
+  // A payment skipped after the week was approved went back to the person's PayPal.
+  const refunds = state.activity.filter((a) => a.agent === 'autopilot' && a.text.startsWith('Skipped ') && a.text.includes('refunded') && a.amount).map((a) => ({ amount: a.amount!, at: a.at }));
+  const friends = paidByYou();
+  const out = [...captured.map((c) => ({ amount: c.amount, at: c.at ?? '' })), ...friends];
+  const back = state.debts.filter((d) => d.status === 'paid');
+  const open = state.debts.filter((d) => d.status === 'requested');
+  const asked = waiting();
+  return {
+    at: new Date().toISOString(),
+    paid: cents(sum(out) - sum(refunds)),
+    thisMonth: cents(sum(out.filter((x) => x.at.startsWith(month))) - sum(refunds.filter((r) => r.at.startsWith(month)))),
+    where: { bills: sum(of('scan')), weeks: cents(sum(of('week')) - sum(refunds)), groceries: sum(of('basket')), friends: sum(friends) },
+    paidBack: sum(back),
+    owedToYou: { amount: sum(open), count: open.length },
+    youOwe: { amount: sum(asked.map((m) => ({ amount: m.amount ?? 0 }))), count: asked.length },
+  };
 }

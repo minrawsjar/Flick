@@ -492,6 +492,20 @@ await step('Split asks a friend on Flick in the chat, not with an invoice', asyn
   check((await thread(robin, ME)).messages.some((m: Json) => m.kind === 'request' && m.what === 'Taco Night' && m.amount === 10 && /Tacos/.test(m.text)), 'not in the chat');
 });
 
+await step("the profile's money adds up your Flick afresh: what you're owed, and what you owe in Chat", async () => {
+  const { json: mine } = await me('profile/money');
+  const s = (await me('state')).json;
+  const open = s.debts.filter((d: Json) => d.status === 'requested');
+  check(near(mine.owedToYou.amount, open.reduce((t: number, d: Json) => t + d.amount, 0)) && mine.owedToYou.count === open.length, JSON.stringify(mine.owedToYou));
+  const captured = Object.values(s.checkouts as Record<string, Json>).filter((c) => c.status === 'captured');
+  check(near(mine.where.bills + mine.where.groceries, captured.filter((c) => c.kind !== 'week').reduce((t: number, c) => t + c.amount, 0)), JSON.stringify(mine.where));
+  const { json: theirs } = await robin('profile/money');
+  const youOwe = (await robin('chat')).json.chats.find((c: Json) => c.peer.email === ME)?.youOwe ?? 0;
+  check(near(theirs.youOwe.amount, youOwe), `Robin owes ${theirs.youOwe.amount}, the chat says ${youOwe}`);
+  check((await guest('profile/money')).status === 409, 'a guest has money');
+  return `owed to you ${mine.owedToYou.amount} (${mine.owedToYou.count}), Robin owes ${theirs.youOwe.amount}`;
+});
+
 section('Money Studio');
 await step('the dashboard\'s tables, from PayPal and Flick', async () => {
   const data = await api('dashboard');

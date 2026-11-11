@@ -1,10 +1,11 @@
 "use client";
 
-import { LoaderCircle, Pencil } from "lucide-react";
+import type { money } from "@backend/account";
+import { ArrowUpRight, ChevronRight, LoaderCircle, Pencil, RotateCw } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Secondary } from "@/components/ui";
-import { initial } from "@/lib/format";
+import { initial, usd } from "@/lib/format";
 import { refresh, useLive } from "@/lib/live";
 
 // Who this Flick belongs to (signed in with PayPal, /login) and what's in it. The name starts as
@@ -137,6 +138,8 @@ export function Profile() {
           <Row label="Member since" value={new Date(profile.since).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })} />
         </dl>
 
+        <Money />
+
         <p className="mt-6 text-[13px] text-secondary">In your Flick</p>
         <div className="mt-2 grid grid-cols-3 gap-2">
           {counts.map(([label, n]) => (
@@ -162,5 +165,110 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="text-secondary">{label}</dt>
       <dd className="text-right">{value}</dd>
     </div>
+  );
+}
+
+type Money = ReturnType<typeof money>;
+
+/**
+ * Your money through Flick, asked afresh each time the profile opens (GET /api/profile/money): paid
+ * this month and in all, where it went, and what's open with friends either way. Not your PayPal
+ * balance, which PayPal keeps to itself: the link opens it on PayPal.
+ */
+function Money() {
+  const [money, setMoney] = useState<Money>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(true);
+
+  // The state is set once the answer comes, not as the effect runs.
+  const fetchIt = useCallback(
+    () =>
+      fetch("/api/profile/money", { cache: "no-store" })
+        .then(async (res) => {
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error?.message ?? `Flick's backend answered ${res.status}.`);
+          setMoney(json as Money);
+          setError(undefined);
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+        .finally(() => setBusy(false)),
+    [],
+  );
+  useEffect(() => {
+    void fetchIt();
+  }, [fetchIt]);
+  const load = () => {
+    setBusy(true);
+    void fetchIt();
+  };
+
+  const where = money
+    ? ([
+        ["Bills", money.where.bills],
+        ["Weeks", money.where.weeks],
+        ["Groceries", money.where.groceries],
+        ["Friends", money.where.friends],
+      ] as const).filter(([, amount]) => amount > 0)
+    : [];
+
+  return (
+    <section aria-label="Your money through Flick" className="mt-6 rounded-2xl bg-tile p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] text-secondary">Paid through Flick this month</p>
+        <button type="button" onClick={load} disabled={busy} aria-label="Update" className="pressable flex size-7 cursor-pointer items-center justify-center rounded-full text-secondary hover:bg-fill disabled:cursor-default">
+          <RotateCw size={14} className={busy ? "spinner" : ""} />
+        </button>
+      </div>
+      {money ? (
+        <>
+          <p className="mt-0.5 text-[34px] font-semibold tabular-nums leading-tight tracking-tight">{usd(money.thisMonth)}</p>
+          <p className="text-[12px] text-secondary">
+            {usd(money.paid)} in all · as of {new Date(money.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+          </p>
+          {where.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5 text-[12px]">
+              {where.map(([label, amount]) => (
+                <span key={label} className="rounded-full bg-fill px-2.5 py-1">
+                  {label} <span className="tabular-nums">{usd(amount)}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <dl className="mt-3 divide-y divide-separator/50 text-[14px]">
+            <MoneyRow label="Friends paid you back" value={usd(money.paidBack)} />
+            <MoneyRow label="Owed to you" value={usd(money.owedToYou.amount)} note={money.owedToYou.count ? `${money.owedToYou.count} open` : undefined} href="/nudge" />
+            <MoneyRow label="You owe" value={usd(money.youOwe.amount)} note={money.youOwe.count ? `${money.youOwe.count} in Chat` : undefined} href="/chat" />
+          </dl>
+        </>
+      ) : (
+        <p className="mt-2 text-[13px] text-secondary">{error ?? "Adding it up…"}</p>
+      )}
+      <p className="mt-3 text-[12px] leading-4 text-secondary">
+        Your PayPal balance stays with PayPal: it doesn&apos;t share a customer&apos;s balance with apps.{" "}
+        <a href="https://www.sandbox.paypal.com/myaccount/summary" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-ink underline-offset-2 hover:underline">
+          See it on PayPal <ArrowUpRight size={12} />
+        </a>
+      </p>
+    </section>
+  );
+}
+
+function MoneyRow({ label, value, note, href }: { label: string; value: string; note?: string; href?: string }) {
+  const body = (
+    <>
+      <dt className="text-secondary">{label}</dt>
+      <dd className="flex items-center gap-1.5 tabular-nums">
+        {note && <span className="text-[12px] text-secondary">{note}</span>}
+        {value}
+        {href && <ChevronRight size={14} className="text-secondary" />}
+      </dd>
+    </>
+  );
+  return href ? (
+    <Link href={href} className="flex items-center justify-between gap-3 py-2.5">
+      {body}
+    </Link>
+  ) : (
+    <div className="flex items-center justify-between gap-3 py-2.5">{body}</div>
   );
 }

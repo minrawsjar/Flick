@@ -245,6 +245,15 @@ export function thread(query: URLSearchParams) {
 }
 
 /** Requests friends on Flick are waiting for you to pay: Today's inbox (inbox.ts). None for a guest. */
+/** What you've paid friends in Flick Chat, each with when: /profile's money (account.ts). */
+export function paidByYou() {
+  const email = state.profile?.email && norm(state.profile.email);
+  if (!email) return [];
+  return others(email).flatMap((other) =>
+    (find(email, other)?.messages ?? []).filter((m) => m.kind === 'paid' && m.from === email).map((m) => ({ amount: m.amount ?? 0, at: m.at })),
+  );
+}
+
 export function waiting() {
   const email = state.profile?.email && norm(state.profile.email);
   if (!email) return [];
