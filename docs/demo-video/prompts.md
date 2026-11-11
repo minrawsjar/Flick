@@ -11,7 +11,8 @@ edit them together and end on `cards/install-now.mp4`, the real Flick logo anima
 
 | File | What it's for |
 |---|---|
-| `prompts.md` | This: the one-paragraph prompt, then every shot |
+| `ai-studio.md` | **Using Google AI Studio? Start here.** Every prompt written out to paste as it is: a start frame for Gemini's image model, then a video prompt for Veo |
+| `prompts.md` | This: the one-paragraph prompt, then every shot, for any tool |
 | `references/agent-*.png`, `references/agents.png` | Flick's five agents, drawn exactly as in the app. Attach them as references so the agents look right |
 | `cards/install-now.mp4` | The last 6 seconds, 1920×1080: the logo flicks, its sparks burst, then "Install Flick now", flickit.site and a QR code that opens flickit.site/install |
 | `cards/install-card.png` | Its last frame, as a still |
