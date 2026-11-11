@@ -1,70 +1,50 @@
-import React from 'react';
+'use client';
+
+import type { AgWidgetParams } from 'ag-studio';
+import { usd } from '@/lib/format';
+import type { StudioContext } from './widget-parts';
+
+// "Week timeline": Autopilot's week, Monday to Sunday, each payment on its day, coloured by where it
+// stands. A custom AG Studio widget (custom-widgets.tsx), drawn from Money Studio's own data in
+// Studio's context.
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+/** 0 = Monday, for a YYYY-MM-DD date (calendar days, in UTC, as the backend keeps them). */
+const weekday = (date: string) => (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
 
-export function WeekTimelineWidget({ data = [] }: { data?: any[] }) {
-  const getDayName = (dateString: string) => {
-    const date = new Date(dateString);
-    const dayIndex = date.getDay();
-    const mappedIndex = dayIndex === 0 ? 6 : dayIndex - 1;
-    return DAYS[mappedIndex];
-  };
+const looks: Record<string, string> = {
+  paid: 'bg-paid/15 text-paid',
+  scheduled: 'bg-sky/15 text-ink',
+  planned: 'bg-fill text-ink',
+  failed: 'bg-danger/15 text-danger',
+  skipped: 'bg-fill text-secondary line-through',
+};
 
-  const getStatusColor = (status: string) => {
-    switch(status?.toLowerCase()) {
-      case 'paid': return 'var(--color-paid)';
-      case 'planned': return 'var(--color-planned)';
-      case 'scheduled': return 'var(--color-scheduled)';
-      case 'skipped': return 'var(--color-skipped)';
-      case 'failed': return 'var(--color-failed)';
-      default: return 'var(--color-pending, #666)';
-    }
-  };
+export function WeekTimelineWidget({ context }: AgWidgetParams) {
+  const { data } = context as StudioContext;
+  const payments = data.flickPayments;
 
   return (
-    <div style={{ 
-      padding: '16px', 
-      background: 'var(--color-card)', 
-      borderRadius: '8px',
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 600 }}>Week timeline</h3>
-      
-      <div style={{ display: 'flex', gap: '8px', flex: 1, overflowX: 'auto' }}>
-        {DAYS.map((day) => {
-          const dayPayments = data.filter(p => p.date && getDayName(p.date) === day);
-          
-          return (
-            <div key={day} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '70px' }}>
-              <div style={{ textAlign: 'center', fontSize: '12px', opacity: 0.7, fontWeight: 500 }}>
-                {day}
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {dayPayments.map((payment, idx) => (
-                  <div key={idx} style={{
-                    padding: '8px',
-                    background: getStatusColor(payment.status),
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    color: '#fff',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '2px'
-                  }}>
-                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {payment.payee}
-                    </span>
-                    <span>${payment.amount}</span>
+    <div className="flex h-full flex-col overflow-hidden px-3 pb-3 pt-1 text-ink">
+      {payments.length ? (
+        <div className="grid min-h-0 flex-1 grid-cols-7 gap-1.5 overflow-y-auto">
+          {DAYS.map((day, i) => (
+            <div key={day} className="flex min-w-0 flex-col gap-1.5">
+              <p className="text-center text-[11px] font-medium text-secondary">{day}</p>
+              {payments
+                .filter((p) => weekday(p.date) === i)
+                .map((p) => (
+                  <div key={p.id} title={`${p.payee}: ${p.reason}`} className={`rounded-lg px-1.5 py-1.5 text-[11px] leading-[14px] ${looks[p.status] ?? 'bg-fill'}`}>
+                    <span className="block break-words font-medium">{p.payee}</span>
+                    <span className="tabular-nums">{usd(p.amount)}</span>
                   </div>
                 ))}
-              </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <p className="flex flex-1 items-center justify-center text-[13px] text-secondary">Autopilot hasn&apos;t planned a week yet.</p>
+      )}
     </div>
   );
 }

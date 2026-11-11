@@ -310,6 +310,8 @@ function flickRows() {
       reminders: d.reminders,
     })),
     flickActivity: state.activity.map((a) => ({ id: a.id, date: a.at.slice(0, 10), agent: a.agent, text: a.text, amount: a.amount ?? null })),
+    // Each friend's face, for Money Studio's "Who owes you" widget (not a table of its own).
+    faces: state.friends.map(({ name, color, shape }) => ({ name, color, shape })),
     // Each item Scout bought, from the basket's checkout (one payment to the store holds them all).
     flickPurchases: (state.scout?.purchases ?? [])
       .filter((p) => p.from === 'scout')

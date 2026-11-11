@@ -207,7 +207,7 @@ export function ReportsSidebar({
         <p className="mt-3 text-center text-xs text-secondary">
           Reports are saved in this browser.{' '}
           <button type="button" onClick={onReset} disabled={!ready} className="font-semibold text-ink hover:underline">
-            Reset demo
+            Reset reports
           </button>
         </p>
       </div>

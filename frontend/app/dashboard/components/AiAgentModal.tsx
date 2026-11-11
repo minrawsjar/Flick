@@ -1,150 +1,168 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, Bot, User } from 'lucide-react';
+import type { ChatMessage } from '@backend/ai';
+import { ArrowUp, Check, LoaderCircle, Sparkles, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Logo } from '@/components/ui';
+import { act, approveOnPayPal } from '@/lib/live';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
+// "Ask Flick" in Money Studio: a chat in the corner with Flick's agent (backend/src/agent.ts), the
+// same one as the Ask Flick page. It reads your own Flick (your week, bills, friends, requests,
+// payments) to answer, and asks before it does anything: each action it proposes waits for Approve,
+// and anything that pays goes through Flick to pay. AG Studio's own assistant (studio/ai.ts) is the
+// one that builds and changes the dashboard's pages.
+
+type Pending = { id: string; summary: string };
+type Link = { label: string; url: string };
+type Turn = { messages: ChatMessage[]; reply?: string; pending?: Pending[]; links: Link[]; steps: string[] };
+type Line = { from: 'you' | 'flick' | 'step'; text: string };
+
+const STARTERS = ['Who owes me the most?', "What's Autopilot paying this week?", 'Anything out of the ordinary?'];
 
 export function AiAgentModal() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
-  const [threadId, setThreadId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: '⚡ Hey! I am Flick, running on OpenAI Assistants API. Ask me anything about your ledger or actions!',
-    },
-  ]);
-  const [loading, setLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  // The conversation as the agent keeps it (tool calls included), and what's shown of it.
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [pending, setPending] = useState<Pending[]>([]);
+  const [links, setLinks] = useState<Link[]>([]);
+  const [busy, setBusy] = useState(false);
+  const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+    end.current?.scrollIntoView({ block: 'nearest' });
+  }, [lines, pending, busy]);
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!prompt.trim() || loading) return;
-
-    const userMsg = prompt.trim();
-    setPrompt('');
-    setMessages((prev) => [...prev, { role: 'user', content: userMsg }]);
-    setLoading(true);
-
+  const take = (turn: Turn) => {
+    setMessages(turn.messages);
+    setLines((l) => [...l, ...turn.steps.map((text) => ({ from: 'step' as const, text })), ...(turn.reply ? [{ from: 'flick' as const, text: turn.reply }] : [])]);
+    setPending(turn.pending ?? []);
+    setLinks(turn.links);
+  };
+  const run = async (work: () => Promise<Turn>) => {
+    setBusy(true);
     try {
-      // Safely fetch local household state
-      let stateData = {};
-      try {
-        const stateRes = await fetch('/api/state');
-        if (stateRes.ok) {
-          stateData = await stateRes.json();
-        }
-      } catch (e) {
-        // Fall back to empty context if state endpoint is offline
-      }
-
-      const chatRes = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userMsg,
-          threadId: threadId,
-          context: stateData,
-        }),
-      });
-
-      const data = await chatRes.json();
-      if (data.threadId) setThreadId(data.threadId);
-
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: data.reply || data.error || 'No response returned.' },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: '❌ Assistants API connection error.' },
-      ]);
+      take(await work());
+    } catch (err) {
+      setLines((l) => [...l, { from: 'flick', text: err instanceof Error ? err.message : String(err) }]);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
+  const send = (text: string) => {
+    const said = text.trim();
+    if (!said || busy) return;
+    setPrompt('');
+    setLines((l) => [...l, { from: 'you', text: said }]);
+    setPending([]);
+    setLinks([]);
+    void run(() => act<Turn>('agent', { messages: [...messages, { role: 'user', content: said }] }));
+  };
+  const decide = (yes: boolean) =>
+    run(() => act<Turn>('agent/decide', { messages, decisions: Object.fromEntries(pending.map((p) => [p.id, yes])) }));
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="pressable fixed bottom-5 right-5 z-50 flex h-11 cursor-pointer items-center gap-2 rounded-full bg-ink px-4 text-[14px] text-on-ink shadow-[0_10px_30px_-8px_rgba(0,0,0,0.45)]"
+      >
+        <Sparkles size={16} aria-hidden /> Ask Flick
+      </button>
+    );
+  }
+
   return (
-    <div className="fixed bottom-6 right-6 z-50 font-sans">
-      {!isOpen ? (
-        <button
-          onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-5 py-3.5 rounded-full shadow-2xl transition-all transform hover:scale-105"
-        >
-          <Sparkles className="w-5 h-5 text-black" />
-          <span>Ask Flick AI</span>
+    <div
+      role="dialog"
+      aria-label="Ask Flick"
+      className="fixed bottom-5 right-5 z-50 flex h-[min(560px,calc(100dvh-2.5rem))] w-[min(400px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-[24px] bg-card text-ink shadow-2xl ring-1 ring-separator/60"
+    >
+      <div className="flex items-center gap-2.5 border-b border-separator/60 px-4 py-3">
+        <Logo size={26} />
+        <span className="flex-1">
+          <span className="block text-[15px] font-semibold leading-5">Ask Flick</span>
+          <span className="block text-[12px] text-secondary">About your own money. It asks before it does anything.</span>
+        </span>
+        <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="pressable cursor-pointer rounded-full p-1.5 text-secondary hover:bg-fill">
+          <X size={18} />
         </button>
-      ) : (
-        <div className="w-[420px] h-[560px] bg-neutral-900 border border-neutral-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
-          <div className="p-4 bg-neutral-950 border-b border-neutral-800 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <Sparkles className="w-5 h-5 text-emerald-400" />
-              <div>
-                <h3 className="text-white font-bold text-sm">Flick Assistants Agent</h3>
-                <p className="text-neutral-400 text-xs">
-                  {threadId ? `Thread: ${threadId.slice(-6)}` : 'Managed OpenAI Agent'}
-                </p>
-              </div>
-            </div>
-            <button onClick={() => setIsOpen(false)} className="text-neutral-400 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      </div>
 
-          <div className="flex-1 p-4 overflow-y-auto space-y-4">
-            {messages.map((m, i) => (
-              <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {m.role === 'assistant' && (
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                    <Bot className="w-4 h-4" />
-                  </div>
-                )}
-                <div
-                  className={`p-3.5 rounded-2xl text-sm ${
-                    m.role === 'user' ? 'bg-emerald-500 text-black font-medium' : 'bg-neutral-800 text-neutral-100'
-                  }`}
-                >
-                  {m.content}
-                </div>
-                {m.role === 'user' && (
-                  <div className="w-7 h-7 rounded-lg bg-neutral-800 border border-neutral-700 flex items-center justify-center text-neutral-300 shrink-0">
-                    <User className="w-4 h-4" />
-                  </div>
-                )}
-              </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
+        {!lines.length && (
+          <div className="my-auto grid gap-2">
+            <p className="text-center text-[13px] text-secondary">Ask about your bills, payments, friends or week.</p>
+            {STARTERS.map((s) => (
+              <button key={s} type="button" onClick={() => send(s)} className="pressable cursor-pointer rounded-full bg-fill px-3.5 py-2 text-left text-[13px]">
+                {s}
+              </button>
             ))}
-            {loading && (
-              <div className="flex gap-2 items-center text-emerald-400 text-xs animate-pulse">
-                <Bot className="w-4 h-4" />
-                <span>Assistant run active...</span>
-              </div>
-            )}
-            <div ref={chatEndRef} />
           </div>
+        )}
+        {lines.map((line, i) =>
+          line.from === 'step' ? (
+            <p key={i} className="mx-auto w-fit rounded-full bg-fill/60 px-2.5 py-0.5 text-[11px] text-secondary">
+              {line.text}
+            </p>
+          ) : (
+            <p
+              key={i}
+              className={`max-w-[85%] whitespace-pre-wrap rounded-[18px] px-3 py-2 text-[14px] leading-5 ${line.from === 'you' ? 'ml-auto bg-ink text-on-ink' : 'mr-auto bg-fill'}`}
+            >
+              {line.text}
+            </p>
+          ),
+        )}
+        {pending.length > 0 && (
+          <div className="rounded-2xl bg-tile p-3">
+            <p className="text-[12px] text-secondary">Flick would like to:</p>
+            <ul className="mt-1 grid gap-1 text-[14px]">
+              {pending.map((p) => (
+                <li key={p.id}>{p.summary}</li>
+              ))}
+            </ul>
+            <div className="mt-2.5 flex gap-2">
+              <button type="button" disabled={busy} onClick={() => void decide(true)} className="pressable flex h-8 cursor-pointer items-center gap-1 rounded-full bg-ink px-3.5 text-[13px] text-on-ink disabled:opacity-50">
+                <Check size={14} /> Approve
+              </button>
+              <button type="button" disabled={busy} onClick={() => void decide(false)} className="pressable h-8 cursor-pointer rounded-full bg-fill px-3.5 text-[13px] disabled:opacity-50">
+                No
+              </button>
+            </div>
+          </div>
+        )}
+        {links.map((link) => (
+          <button key={link.url} type="button" onClick={() => void approveOnPayPal(link.url)} className="pressable mr-auto h-9 cursor-pointer rounded-full bg-[#0070e0] px-4 text-[13px] font-medium text-white">
+            {link.label}
+          </button>
+        ))}
+        {busy && (
+          <p className="flex items-center gap-1.5 text-[12px] text-secondary">
+            <LoaderCircle size={13} className="spinner" /> Flick is looking…
+          </p>
+        )}
+        <div ref={end} />
+      </div>
 
-          <form onSubmit={handleSend} className="p-3 bg-neutral-950 border-t border-neutral-800 flex gap-2">
-            <input
-              type="text"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Ask Assistant or schedule a bill..."
-              className="flex-1 bg-neutral-900 border border-neutral-800 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500"
-            />
-            <button type="submit" disabled={loading || !prompt.trim()} className="bg-emerald-500 text-black p-2.5 rounded-xl font-bold">
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
-        </div>
-      )}
+      <form
+        onSubmit={(e) => (e.preventDefault(), send(prompt))}
+        className="flex items-center gap-2 border-t border-separator/60 p-3"
+      >
+        <input
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Ask Flick"
+          aria-label="Ask Flick"
+          className="h-10 min-w-0 flex-1 rounded-full bg-fill px-4 text-[14px] outline-none focus:ring-2 focus:ring-ink/20"
+        />
+        <button type="submit" disabled={busy || !prompt.trim()} aria-label="Send" className="pressable flex size-10 cursor-pointer items-center justify-center rounded-full bg-ink text-on-ink disabled:opacity-40">
+          <ArrowUp size={18} />
+        </button>
+      </form>
     </div>
   );
 }

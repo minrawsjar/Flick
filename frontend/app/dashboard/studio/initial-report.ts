@@ -116,14 +116,14 @@ const week: AgPageState = {
       sort: [{ field: { id: 'flickPurchases.date' }, direction: 'desc' }],
       format: title('Groceries bought, item by item'),
     },
-    // --- Custom Widgets Added Here ---
+    // Money Studio's own widgets (studio/custom-widgets.tsx): they read Flick's data themselves.
     'who-owes-you-widget': {
-      type: 'who-owes-you' as any,
+      type: 'flick-who-owes-you' as never,
       dataMapping: {},
       format: title('Who owes you'),
     },
     'week-timeline-widget': {
-      type: 'week-timeline' as any,
+      type: 'flick-week-timeline' as never,
       dataMapping: {},
       format: title('Week timeline'),
     },
@@ -138,9 +138,9 @@ const week: AgPageState = {
     plan: at(0, 24, 24, 22),
     'bought-by-product': at(0, 46, 8, 18),
     bought: at(8, 46, 16, 18),
-    // --- Custom Widget Layouts Added Here ---
-    'who-owes-you-widget': at(0, 64, 12, 18),
-    'week-timeline-widget': at(12, 64, 12, 18),
+    // Below the groceries: who owes you, and the week day by day.
+    'who-owes-you-widget': at(0, 64, 8, 18),
+    'week-timeline-widget': at(8, 64, 16, 18),
   },
 };
 

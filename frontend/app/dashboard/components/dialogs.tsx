@@ -148,7 +148,7 @@ export function ResetDemoDialog({
   return (
     <Dialog
       open={open}
-      title="Reset the demo?"
+      title="Reset your reports?"
       onClose={onCancel}
       actions={
         <>
@@ -156,13 +156,14 @@ export function ResetDemoDialog({
             Cancel
           </Button>
           <Button variant="danger" onClick={onConfirm}>
-            Reset demo
+            Reset reports
           </Button>
         </>
       }
     >
-      All reports you&apos;ve created will be deleted and “{builtInName}” will go back to its original state,
-      including any unsaved changes. This can&apos;t be undone.
+      The reports you&apos;ve made in this browser will be deleted and “{builtInName}” will go back to how it
+      started, including any unsaved changes. Only the reports&apos; pages and widgets: your payments, bills
+      and friends aren&apos;t touched. This can&apos;t be undone.
     </Dialog>
   );
 }

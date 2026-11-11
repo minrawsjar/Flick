@@ -9,8 +9,7 @@
 //
 // Nothing tracks edits as they happen. Save reads the report from Studio with getState(), and
 // leaving a report compares Studio's state with the saved one there and then.
-import { WhoOwesYouWidget } from './studio/WhoOwesYouWidget';
-import { WeekTimelineWidget } from './studio/WeekTimelineWidget';
+
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   AgStudioAiModule,
@@ -47,6 +46,7 @@ import { ReportsSidebar } from './components/sidebar';
 import { DashboardSkeleton } from './components/skeleton';
 import * as reportState from './report-state';
 import { buildAi } from './studio/ai';
+import { withFlickWidgets } from './studio/custom-widgets';
 import { buildStudioData, hasData } from './studio/data';
 import { agStudioTheme } from './studio/theme';
 import { useReports } from './use-reports';
@@ -266,24 +266,10 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
           <AgStudioProvider licenseKey={licenseKey} modules={ai ? [AgStudioAiModule] : undefined}>
             <AgStudio
               style={{ height: '100%', width: '100%' }}
-              additionalTypes={{
-              'who-owes-you': {
-              component: WhoOwesYouWidget,
-              dataSources: ['flickRequests'], // Maps flickRequests data array into widget props
-              menu: {
-              label: 'Who Owes You',
-              category: 'Custom',
-            },
-            },
-    'week-timeline': {
-      component: WeekTimelineWidget,
-      dataSources: ['flickPayments'], // Maps flickPayments data array into widget props
-      menu: {
-        label: 'Week Timeline',
-        category: 'Custom',
-      },
-    },
-  }}
+              // Money Studio's own widgets (Who owes you, Week timeline) beside the built-in ones,
+              // reading the data through `context`.
+              widgets={withFlickWidgets}
+              context={{ data }}
               theme={agStudioTheme}
               layout={{ widgetBorderEnabled: true }}
               data={studioData}

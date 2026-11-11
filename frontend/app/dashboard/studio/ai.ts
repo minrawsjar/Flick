@@ -1,64 +1,34 @@
-import { createAiHarness } from 'ag-studio';
+// The AG Studio AI assistant. The adapter calls `${endpoint}/responses`, i.e. this app's proxy at
+// the backend (backend/src/ai-proxy.ts, via the /api rewrite), which holds the OpenAI key, so nothing secret is sent from the browser.
+
+import { createAiHarness, type AgAiHarnessSetup, type AgAiPromptStarter } from 'ag-studio';
 import { openaiAdapter } from './openai-adapter';
 
-/**
- * Read-only tool that fetches current household state from Flick's backend.
- */
-export const readHouseholdStateTool = {
-  name: 'readHouseholdState',
-  description:
-    'Fetches current household state, including flickPayments, flickRequests, autopilot settings, and balance breakdowns from Flick.',
-  parameters: {
-    type: 'object',
-    properties: {},
+// Suggestions shown in a new AI conversation, before anything has been typed.
+const PROMPT_STARTERS: AgAiPromptStarter[] = [
+  {
+    label: 'Summarise this page',
+    prompt: 'Summarise what this page shows: every widget, the fields it reads, and what stands out.',
   },
-  execute: async () => {
-    try {
-      const res = await fetch('/api/state');
-      if (!res.ok) {
-        throw new Error(`Failed to fetch state: ${res.statusText}`);
-      }
-      return await res.json();
-    } catch (err: any) {
-      return {
-        error: true,
-        message: err?.message || 'Unable to fetch household state.',
-      };
-    }
+  {
+    label: 'Sunday recap',
+    prompt: "Build a Sunday recap page: what Autopilot paid this week by payee, what's still to pay, and who still owes me.",
   },
-};
+  {
+    label: 'Who owes me',
+    prompt: 'Which friends owe me the most, and for how long?',
+  },
+];
 
-/**
- * Configures the Flick AI Agent harness with built-in delegation and tools.
- */
-export function buildAi(api: any) {
-  return createAiHarness(api, {
-    adapter: openaiAdapter,
-    builder: ({ builtIn, tools }) => {
-      return {
-        agents: [
-          {
-            id: 'flick-agent',
-            name: 'Flick',
-            systemPrompt: `You are Flick, an expert AI financial co-pilot and household assistant for Money Studio.
+// `models` are the ids allowed by OPENAI_MODELS on the server; the first is the default, and the
+// picker only shows for two or more.
+export function buildAi(models: string[]): AgAiHarnessSetup {
+  const adapter = openaiAdapter({ endpoint: '/api/ai', model: models[0] });
 
-Core Rules & Behavior:
-1. Always keep all tools strictly read-only. Never modify state directly without explicit confirmation flows.
-2. When users ask to generate or layout dashboard views/reports (e.g. "Build my Sunday recap" or "Create a spending summary"):
-   - Call readHouseholdState first to gather full contextual data (flickRequests, flickPayments, etc.).
-   - Delegate the page layout, grid arrangement, and widget composition directly to AG Studio's lead agent (builtIn.lead).
-3. When users ask specific payment questions (e.g. "Why is City Power scheduled on Wednesday?"):
-   - Call readHouseholdState, find the relevant entry in flickPayments or flickRequests, and give a concise, clear answer drawing directly from the item's 'reason' or schedule field.`,
-            tools: [readHouseholdStateTool, ...tools],
-            delegates: [builtIn.lead],
-          },
-          ...Object.values(builtIn),
-        ],
-        defaultAgentId: 'flick-agent',
-      };
-    },
-  });
+  return ({ api }) =>
+    createAiHarness(api, {
+      adapter,
+      promptStarters: PROMPT_STARTERS,
+      models: models.length > 1 ? models.map((id) => ({ id, label: id })) : undefined,
+    });
 }
-
-// Alias export for backward compatibility
-export const setupAiHarness = buildAi;
