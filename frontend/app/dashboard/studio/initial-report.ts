@@ -116,6 +116,17 @@ const week: AgPageState = {
       sort: [{ field: { id: 'flickPurchases.date' }, direction: 'desc' }],
       format: title('Groceries bought, item by item'),
     },
+    // --- Custom Widgets Added Here ---
+    'who-owes-you-widget': {
+      type: 'who-owes-you' as any,
+      dataMapping: {},
+      format: title('Who owes you'),
+    },
+    'week-timeline-widget': {
+      type: 'week-timeline' as any,
+      dataMapping: {},
+      format: title('Week timeline'),
+    },
   },
   widgetLayout: {
     'kpi-planned': at(0, 0, 6, 7),
@@ -127,6 +138,9 @@ const week: AgPageState = {
     plan: at(0, 24, 24, 22),
     'bought-by-product': at(0, 46, 8, 18),
     bought: at(8, 46, 16, 18),
+    // --- Custom Widget Layouts Added Here ---
+    'who-owes-you-widget': at(0, 64, 12, 18),
+    'week-timeline-widget': at(12, 64, 12, 18),
   },
 };
 

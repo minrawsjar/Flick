@@ -9,7 +9,8 @@
 //
 // Nothing tracks edits as they happen. Save reads the report from Studio with getState(), and
 // leaving a report compares Studio's state with the saved one there and then.
-
+import { WhoOwesYouWidget } from './studio/WhoOwesYouWidget';
+import { WeekTimelineWidget } from './studio/WeekTimelineWidget';
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   AgStudioAiModule,
@@ -265,6 +266,24 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
           <AgStudioProvider licenseKey={licenseKey} modules={ai ? [AgStudioAiModule] : undefined}>
             <AgStudio
               style={{ height: '100%', width: '100%' }}
+              additionalTypes={{
+              'who-owes-you': {
+              component: WhoOwesYouWidget,
+              dataSources: ['flickRequests'], // Maps flickRequests data array into widget props
+              menu: {
+              label: 'Who Owes You',
+              category: 'Custom',
+            },
+            },
+    'week-timeline': {
+      component: WeekTimelineWidget,
+      dataSources: ['flickPayments'], // Maps flickPayments data array into widget props
+      menu: {
+        label: 'Week Timeline',
+        category: 'Custom',
+      },
+    },
+  }}
               theme={agStudioTheme}
               layout={{ widgetBorderEnabled: true }}
               data={studioData}

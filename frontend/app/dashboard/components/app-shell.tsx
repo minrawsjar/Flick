@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Logo } from '@/components/ui';
+import { AiAgentModal } from './AiAgentModal';
 
 // Money Studio's frame: a top bar, the reports sidebar and the canvas, in Flick's tokens so it
 // follows the page into dark mode. Shared by the dashboard, its loading skeleton and its error page.
@@ -36,7 +37,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-dvh flex-col bg-grouped font-sans text-ink">
+    <div className="relative flex h-dvh flex-col bg-grouped font-sans text-ink">
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <nav className="flex w-64 shrink-0 flex-col border-r border-separator bg-card" aria-label="Reports">
@@ -44,6 +45,7 @@ export function AppShell({
         </nav>
         <main className="flex min-w-0 flex-1 flex-col">{children}</main>
       </div>
+      <AiAgentModal />
     </div>
   );
 }
