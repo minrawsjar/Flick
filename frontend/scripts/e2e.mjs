@@ -449,7 +449,8 @@ await step("Splitter: with your own friends, a sentence ticks the grid (AI), the
   const fresh = s.debts.filter((d) => !before.has(d.id));
   const owes = Object.fromEntries(fresh.map((d) => [s.friends.find((f) => f.id === d.friendId)?.name, d.amount]));
   check(fresh.length === 2 && fresh.every((d) => d.invoiceId && d.payerUrl), `${fresh.length} new requests, ${fresh.filter((d) => !d.invoiceId).length} without an invoice`);
-  check(!owes.Priya && owes.Leo < owes.Maya, `owes ${JSON.stringify(owes)}`);
+  // Maya halves the salmon and the miso with you ($21), and Leo had the tea ($16); no tax or tip.
+  check(!owes.Priya && Math.abs(owes.Maya - 10.5) < 0.01 && Math.abs(owes.Leo - 16) < 0.01, `owes ${JSON.stringify(owes)}`);
   return fresh.map((d) => `${s.friends.find((f) => f.id === d.friendId)?.name} $${d.amount.toFixed(2)}`).join(", ");
 });
 
