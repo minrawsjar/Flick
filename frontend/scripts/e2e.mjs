@@ -486,6 +486,7 @@ await step("Money Studio: your own payments, each at its stage, not the sample",
   check(await js("document.querySelectorAll('[class*=ag-]').length > 20"), "no AG Studio");
   check(!(await textOf()).includes("This is sample data"), "still the sample, after paying and splitting");
   const data = await js("fetch('/api/dashboard').then((r) => r.json())");
+  check(Array.isArray(data?.flickCheckouts), `/api/dashboard: ${data?.error?.message ?? JSON.stringify(data).slice(0, 200)}`);
   const stages = data.flickCheckouts.map((c) => `${c.agent}: ${c.stage}`);
   // The rupee bill's first checkout, backed out of at "Flick to pay"; its second; and the week's.
   const want = ["Autopilot: Waiting for your approval", "Lens: Cancelled on PayPal", "Lens: Waiting for your approval"];

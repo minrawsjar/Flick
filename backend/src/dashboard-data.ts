@@ -15,6 +15,7 @@ import {
   type Product,
   type Transaction,
 } from './paypal.ts';
+import { HttpError } from './http.ts';
 import { addDays, cents, DAYS, type Checkout } from './model.ts';
 import { PRODUCTS } from './scout-rules.ts';
 import { friend, inSample, payee, state, workspaceId } from './store.ts';
@@ -373,17 +374,26 @@ async function dashboard(asOf: Date, own = true) {
   // Transaction search is a separate app feature, off by default and slow to activate. Without it
   // the dashboard still works: those two tables are empty, and it says why.
   const warnings: string[] = [];
-  const unlessForbidden = <T>(fallback: T) => (err: unknown): T => {
-    if (!(err instanceof PayPalApiError && err.status === 403)) throw err;
-    if (!warnings.length) warnings.push('Transactions and balances are empty: turn on Transaction search for your PayPal sandbox app (it can take a few hours to start working).');
+  const unlessForbidden = <T>(what: string, fallback: T) => (err: unknown): T => {
+    if (!(err instanceof PayPalApiError && err.status === 403)) return orEmpty(what, fallback)(err);
+    const off = 'Transactions and balances are empty: turn on Transaction search for your PayPal sandbox app (it can take a few hours to start working).';
+    if (!warnings.includes(off)) warnings.push(off);
+    return fallback;
+  };
+  // One PayPal list failing (the sandbox has its moments) leaves just its tables empty, saying so,
+  // so the rest, Flick's own tables included, still shows. PayPal being off (no keys) still fails.
+  const orEmpty = <T>(what: string, fallback: T) => (err: unknown): T => {
+    if (err instanceof HttpError || (err instanceof PayPalApiError && err.status === 401)) throw err;
+    console.error(`Money Studio: PayPal's ${what}:`, err instanceof Error ? err.message.slice(0, 300) : err);
+    warnings.push(`PayPal's ${what} didn't load just now, so ${what === 'balances' ? 'that table is' : 'those tables are'} empty. Reload to try again.`);
     return fallback;
   };
   const [products, plans, allInvoices, allTransactions, balances] = await Promise.all([
-    listProducts(),
-    listPlans(),
-    listInvoices(),
-    searchTransactions(new Date(asOf.getTime() - TRANSACTION_WINDOW_MS), asOf).catch(unlessForbidden<Transaction[]>([])),
-    getBalances().catch(unlessForbidden<Balances>({})),
+    listProducts().catch(orEmpty<Product[]>('products', [])),
+    listPlans().catch(orEmpty<Plan[]>('plans', [])),
+    listInvoices().catch(orEmpty<Invoice[]>('invoices', [])),
+    searchTransactions(new Date(asOf.getTime() - TRANSACTION_WINDOW_MS), asOf).catch(unlessForbidden<Transaction[]>('transactions', [])),
+    getBalances().catch(unlessForbidden<Balances>('balances', {})),
   ]);
   const today = asOf.toISOString().slice(0, 10);
   const { invoices, transactions } = own ? ownOnly(allInvoices, allTransactions) : { invoices: allInvoices, transactions: allTransactions };
