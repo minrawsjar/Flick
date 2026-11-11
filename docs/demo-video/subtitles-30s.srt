@@ -1,0 +1,43 @@
+1
+00:00:00,200 --> 00:00:02,900
+Bills follow you everywhere.
+
+2
+00:00:03,200 --> 00:00:04,800
+A bill to pay?
+
+3
+00:00:04,900 --> 00:00:06,900
+Lens reads it. One flick pays it.
+
+4
+00:00:07,200 --> 00:00:08,800
+Groceries cost too much?
+
+5
+00:00:08,900 --> 00:00:10,900
+Scout finds your usuals, cheapest.
+
+6
+00:00:11,200 --> 00:00:12,800
+Splitting dinner?
+
+7
+00:00:12,900 --> 00:00:14,900
+Splitter sends everyone their share.
+
+8
+00:00:15,200 --> 00:00:16,800
+A friend owes you?
+
+9
+00:00:16,900 --> 00:00:18,900
+Nudge gets you paid back.
+
+10
+00:00:19,200 --> 00:00:20,900
+Bills every week?
+
+11
+00:00:21,000 --> 00:00:23,900
+Autopilot pays them all in one flick.

@@ -11,6 +11,9 @@ edit them together and end on `cards/install-now.mp4`, the real Flick logo anima
 
 | File | What it's for |
 |---|---|
+| `wan.md` | **The 30-second cut, made in Wan.** Every feature as a problem, then its fix: start frames, end frames and video prompts, with what to upload for each |
+| `placards/` | Every placard with its text spelled exactly. Upload them with the start frames, so the words come out right |
+| `subtitles-30s.srt` | The 30-second cut's on-screen lines |
 | `higgsfield.md` | **Using Higgsfield? Start here.** Every prompt written out to paste as it is: start frames in Nano Banana Pro, Veo for the shots with sound, Kling start and end frames for the vanishes |
 | `ai-studio.md` | **Using Google AI Studio? Start here.** Every prompt written out to paste as it is: a start frame for Gemini's image model, then a video prompt for Veo |
 | `prompts.md` | This: the one-paragraph prompt, then every shot, for any tool |
