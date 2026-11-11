@@ -215,6 +215,26 @@ body {
   48% { transform: translateY(-26px) rotate(-8deg); opacity: 1; }
   62%, 100% { transform: translateY(-40px) rotate(-10deg); opacity: 0; }
 }
+/* The logo (lib/mark.tsx), 3.6s a loop: the finger rests, pulls back and flicks up; trails streak
+   past and the sparks burst off its tip, then it settles. Still, each piece is at the top of the
+   flick, as drawn. The delay brings the first flick about a second after the page opens. */
+@keyframes mark-finger {
+  0%, 52% { transform: translateY(4px) rotate(4deg); animation-timing-function: ease-in-out; }
+  62% { transform: translateY(6px) rotate(-1deg); animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+  70%, 76% { transform: translateY(-1px) rotate(14deg); animation-timing-function: ease-in-out; }
+  100% { transform: translateY(4px) rotate(4deg); }
+}
+@keyframes mark-trail {
+  0%, 63% { opacity: 0; transform: translateY(-4px); }
+  70% { opacity: 0.55; transform: translateY(0); }
+  82%, 100% { opacity: 0; transform: translateY(5px); }
+}
+@keyframes mark-spark {
+  0%, 67% { opacity: 0; transform: translate(calc(var(--dx) * -5px), calc(var(--dy) * -5px)) scale(0.4); }
+  73% { opacity: 1; transform: none; }
+  86% { opacity: 0.9; transform: translate(calc(var(--dx) * 2.5px), calc(var(--dy) * 2.5px)); }
+  96%, 100% { opacity: 0; transform: translate(calc(var(--dx) * 4px), calc(var(--dy) * 4px)); }
+}
 @keyframes shimmer { to { background-position: 200% center; } }
 
 .text-gradient {
@@ -240,10 +260,13 @@ body {
 .fade-in { animation: fade-in 240ms ease-out; }
 .loop-flick-hint { animation: flick-hint 1.4s ease-out infinite; }
 .loop-finger-flick { animation: finger-flick 1.6s cubic-bezier(0.3, 0, 0.2, 1) infinite; transform-origin: 50% 90%; }
+.mark-finger { transform-box: view-box; transform-origin: 32px 64px; transform: rotate(14deg); animation: mark-finger 3.6s -1.2s infinite; }
+.mark-trail { animation: mark-trail 3.6s -1.2s ease-out infinite; }
+.mark-spark { transform-box: fill-box; transform-origin: center; animation: mark-spark 3.6s -1.2s ease-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .reveal { opacity: 1; transform: none; transition: none; }
   .loop-wave, .loop-scan, .loop-tick, .loop-part-left, .loop-part-right, .rise, .caret,
-  .loop-drift, .loop-bob, .loop-marquee, .text-gradient, .sheet-up, .fade-in, .loop-flick-hint, .loop-finger-flick { animation: none; }
+  .loop-drift, .loop-bob, .loop-marquee, .text-gradient, .sheet-up, .fade-in, .loop-flick-hint, .loop-finger-flick, .mark-finger, .mark-trail, .mark-spark { animation: none; }
 }

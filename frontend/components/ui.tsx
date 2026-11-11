@@ -1,8 +1,9 @@
 "use client";
 
-import { AudioLines, Mic, ScanLine } from "lucide-react";
+import { AudioLines, Mic } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { usd } from "@/lib/format";
+import { mark } from "@/lib/mark";
 import { Bot, botColors, type BotColor, type BotShape } from "./bot";
 
 // Building blocks ported from Air Agents (web/src/Screens.tsx, Payments.tsx and App.tsx, MIT).
@@ -10,12 +11,16 @@ import { Bot, botColors, type BotColor, type BotShape } from "./bot";
 
 export type Face = { color: BotColor; shape: BotShape };
 
-/** Flick's mark: a scan frame in an ink square. */
+/**
+ * Flick's logo: the app icon, small, its fingertip flicking every few seconds (lib/mark.tsx). Black
+ * in both themes, like an app icon; in dark, a hairline (ink is white there) keeps it off the page.
+ */
 export function Logo({ size = 24 }: { size?: number }) {
   return (
-    <span className="flex shrink-0 items-center justify-center bg-ink text-on-ink" style={{ width: size, height: size, borderRadius: size * 0.29 }}>
-      <ScanLine size={size * 0.58} strokeWidth={2.25} />
-    </span>
+    <svg width={size} height={size} viewBox="0 0 64 64" className="shrink-0 overflow-hidden rounded-[29%] ring-1 ring-ink/15" aria-hidden>
+      <rect width="64" height="64" fill="#000" />
+      {mark(true)}
+    </svg>
   );
 }
 
