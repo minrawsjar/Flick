@@ -12,14 +12,16 @@ import { checkProof, filePrint, inUsd, judge, receiptPrint, type SafeAnswer } fr
 import { inWorkspace, log, save, state } from './store.ts';
 
 // Flick Safe: money given for one purpose, spent only on it. In Flick Chat, a person gives a friend
-// money "for chocolates": it's charged from their saved PayPal into Flick's account (as paying a
-// request is) and waits there, in a Safe in both people's chat. To spend it, the friend snaps the
+// money "for chocolates", or pays a friend's request for chocolates into a Safe: it's charged from
+// their saved PayPal into Flick's account (as paying a request is) and waits there, in a Safe in both
+// people's chat. Whoever it's for can only spend it on that. To spend it, the friend snaps the
 // receipt or bill. Safe's reader (one AI call) says what each line is and whether it's for the
 // purpose, and anything that looks fake; the rules in safe-rules.ts decide what leaves the Safe:
 //
 // - A clear match pays at once, with PayPal Payouts: a receipt (already paid) back to the friend, a
 //   bill to the shop's PayPal (a business on Flick, or a PayPal email on the bill).
-// - A doubtful receipt, and the lines that aren't for the purpose, wait for the giver to allow.
+// - The lines that aren't for the purpose are never paid from the Safe: not at once, not if asked.
+// - A doubtful receipt waits for the giver to allow its lines for the purpose.
 // - A used, old or unrelated receipt is refused. Used receipts are kept for every Safe on Flick
 //   (receipts.json, beside the chats), by shop, date and total, and by the file itself.
 // - What's left goes back to the giver, refunded from their original payment, when either of them
@@ -198,6 +200,8 @@ const endIfOver = async (c: chat.Conversation, safe: Safe) => {
 
 // --- Giving, spending, deciding, closing ----------------------------------------------------------
 
+type Giving = { email: string; name: string; peer: chat.Peer; amount: number; purpose: string; days: number; note?: string };
+
 /** Gives a friend on Flick money for one purpose: charged from your saved PayPal now, held in a Safe. */
 export async function send(body: Record<string, unknown>) {
   const { email, name } = chat.me();
@@ -209,9 +213,53 @@ export async function send(body: Record<string, unknown>) {
   const days = body.days === undefined ? DAYS : Number(body.days);
   need(Number.isInteger(days) && days >= 1 && days <= 60, 'days must be a whole number from 1 to 60.');
   const note = body.note === undefined || body.note === '' ? undefined : words(body.note, 1, 300, 'note');
+  return chat.shown(await give({ email, name, peer, amount, purpose, days, note }));
+}
+
+/**
+ * Pays a friend's request into a Safe for what they asked it for: "$20 for chocolates" can then only
+ * be spent on chocolates. Their request is paid, in the chat and in their Flick.
+ */
+export async function fund(body: Record<string, unknown>) {
+  const { email, name } = chat.me();
+  const peer = chat.peerFor(body.with, email);
+  const c = chat.find(email, peer.email);
+  const m = chat.requestIn(c, body.id);
+  need(m.from === peer.email, "That's your own request: your friend pays it.", 409);
+  need(m.status === 'open', m.status === 'paid' ? 'This one is already paid.' : 'This request is closed.', 409);
+  const amount = m.amount ?? 0;
+  need(amount >= 1 && amount <= MAX_SAFE, `A Safe holds $1 to ${usd(MAX_SAFE)}: pay this one as it is.`, 409);
+  const purpose = (m.what ?? '').trim().slice(0, 60);
+  need(purpose.length >= 2, "This request doesn't say what it's for: pay it as it is.", 409);
+  // Taken before the first await, as paying a request is: a second tap can't pay it twice.
+  m.status = 'paying';
+  m.tries = (m.tries ?? 0) + 1;
+  chat.keep(c!);
+  let safe: Safe;
+  try {
+    safe = await give({ email, name, peer, amount, purpose, days: DAYS, note: `For ${peer.name}'s request: only for ${purpose}.` });
+  } catch (err) {
+    m.status = 'open';
+    chat.keep(c!);
+    throw err;
+  }
+  Object.assign(m, { status: 'paid', safeId: safe.id });
+  chat.keep(c!);
+  const asker = chat.directory()[peer.email];
+  if (asker) {
+    inWorkspace(asker.workspace, () => {
+      const debt = state.debts.find((d) => d.id === m.debtId);
+      if (debt?.status === 'requested') debt.status = 'paid';
+      save();
+    });
+  }
+  return { message: m, safe: chat.shown(safe) };
+}
+
+/** Charges the giver's saved PayPal into Flick's account, and opens the Safe in both people's chat. */
+async function give({ email, name, peer, amount, purpose, days, note }: Giving) {
   const savedId = state.profile?.savedId;
   need(savedId, 'Sign in with PayPal again to give from it.', 409);
-
   const safeId = id('safe');
   let paid: Awaited<ReturnType<typeof chargeSaved>>;
   try {
@@ -241,7 +289,7 @@ export async function send(body: Record<string, unknown>) {
   logFor(email, `Gave ${peer.name} ${usd(safe.amount)} for ${purpose}, in a Safe for ${days} days`, safe.amount);
   logFor(peer.email, `${name} gave you ${usd(safe.amount)} for ${purpose}, in a Safe`, safe.amount);
   chat.tell(peer.email, `${name} gave you ${usd(safe.amount)} for ${purpose}`, "It's in a Safe: snap the receipt when you spend it.", chat.chatUrl(email), `safe-${safeId}`);
-  return chat.shown(safe);
+  return safe;
 }
 
 /** Spends from a Safe given to you: Safe reads the receipt or bill, the rules decide, PayPal pays. */
@@ -301,6 +349,7 @@ export async function spend(body: Record<string, unknown>) {
     paid: 0,
     ...(refused ? { refused } : { to }),
     ...(!refused && ask > 0 && { ask: { amount: ask, why, status: 'open' as const } }),
+    ...(!refused && judged.notPaid && { notPaid: judged.notPaid }),
     ...(isPhoto(body.photo) && { photo: body.photo }),
     prints,
     ...(original && { original }),

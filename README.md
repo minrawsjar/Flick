@@ -42,7 +42,7 @@ The AI part of most money apps is a chat box beside the same forms.
 | **The same payments every week** | Blind autopay, or a chore each time. | Autopilot plans the week only from what it has seen, flags anything unusual, and takes one approval for the week, or pays by itself under a cap. |
 | **Getting paid back** | Maths on a receipt, then chasing people. | Splitter works out shares to the cent. Friends on Flick pay in Flick Chat with a flick, or by themselves under a limit; anyone else gets a PayPal invoice, and Nudge reminds them. |
 | **Groceries** | Prices move every week, store to store. | Scout learns your usuals, prices them at every store, sees prices coming, and buys the basket in one checkout. |
-| **Money for one thing** | You send money for chocolates, or school books, and it's spent on anything. A receipt proves nothing: it could be old, edited or already used. | Safe holds it. The friend snaps the receipt; only the lines for that purpose come out, each receipt only once, and anything doubtful waits for you. What's left is refunded to you. |
+| **Money for one thing** | A friend asks for money for chocolates, or school books, and it's spent on anything. A receipt proves nothing: it could be old, edited or already used. | Pay it into a Safe. The friend snaps the receipt; only the lines for that purpose are ever paid, each receipt only once, and anything doubtful waits for you. What's left is refunded to you. |
 | **Saying yes** | A password and a redirect for every payment. | One finger flicked up at the front camera, read on the phone. Signed in, it charges your saved PayPal with no page. |
 
 **Our position:** AI reads and proposes, rules check, a person approves, and PayPal moves the money.
@@ -243,13 +243,15 @@ flowchart LR
 
 [`safe.ts`](backend/src/safe.ts), rules in [`safe-rules.ts`](backend/src/safe-rules.ts) · `/safe`, and in Flick Chat
 
-Money given for one purpose, spent only on it. You give a friend on Flick "$20 for chocolates" in
-Flick Chat: a flick charges your saved PayPal into Flick's account, and it waits there, in a Safe in
-both your chats, for as long as you chose (14 days unless you say).
+Money given for one purpose, spent only on it. A friend on Flick asks you for "$20 for chocolates"
+and you tap *Pay into a Safe*, or you give it unasked from the lock in Flick Chat: a flick charges
+your saved PayPal into Flick's account, and it waits there, in a Safe in both your chats, for as long
+as you chose (14 days unless you say). Whoever it's for can only spend it on chocolates.
 
 - **Spending it:** your friend snaps the receipt, a PDF or the text of one. Safe's reader (one AI call, a strict schema) reports the shop, the date, every line and whether it's for the purpose, and anything that looks fake: a photo of a screen, edited digits, a template.
 - **The rules decide, not the model.** Only the lines for the purpose count, with their share of the tax and tip. A receipt dated before the Safe, in the future, with nothing for the purpose, or used before is turned down. Used means anywhere on Flick: by shop, date and total, or the very same file, kept in `receipts.json`.
-- **Doubts go to you:** no date, lines that don't add up to the total, or any sign of a fake pays nothing and asks you, with the photo. So do the lines that aren't for the purpose ("Phone charger isn't for chocolates"): *Allow* or *Don't allow*, in the chat or from Today.
+- **Only the purpose, ever:** lines that aren't for it ("Phone charger isn't for chocolates") are never paid from the Safe, not even with your say-so.
+- **Doubts go to you:** no date, lines that don't add up to the total, or any sign of a fake pays nothing and asks you, with the photo, about its lines for the purpose only: *Allow* or *Don't allow*, in the chat or from Today.
 - **Paid with PayPal:** a receipt is paid already, so a Payout pays your friend back; a bill is paid to the shop's PayPal (a business on Flick, or a PayPal email on the bill). A bill from a shop that isn't on PayPal proves nothing was bought, so it waits for you. Never more than is left.
 - **The rest comes back:** close it (either of you) or let it end, and what's left is refunded from your original payment.
 - Ask Flick sees every Safe and can propose giving one or closing it, as a card you approve.
@@ -454,7 +456,7 @@ The design language (bot faces, phone frame, colours and motion) is ported from
 | **App** | [www.flickit.site](https://www.flickit.site), on Vercel; [install it](https://www.flickit.site/install) on a phone |
 | **Backend** | [flick-backend-production.up.railway.app/api/health](https://flick-backend-production.up.railway.app/api/health), on Railway with a volume for the workspaces |
 | **Real payments** | The end-to-end test pays on the sandbox: a bill approved on PayPal's real page, a bill paid with a flick from a saved PayPal, a Flick Chat request paid with a flick, and one paid by itself (merchant-initiated), each paid out |
-| **Tests** | 63 backend unit tests, 8 frontend unit tests, 90 API steps against the real sandbox and model, and 78 steps of a browser run through every page and flow, real payments included (below) |
+| **Tests** | 63 backend unit tests, 8 frontend unit tests, 91 API steps against the real sandbox and model, and 79 steps of a browser run through every page and flow, real payments included (below) |
 
 ---
 
@@ -503,6 +505,7 @@ Flick are paid into Flick's account and marked paid, rather than forwarded.
 | `GET /api/scout`, `POST /api/scout/quote`, `/read`, `/online`, `/buy` | Scout: the week's prices, quotes, reading a photo, live online prices, buying |
 | `GET /api/safes` | Every Safe you gave or were given |
 | `POST /api/safe` `{ with, amount, purpose, days?, note? }` | Gives a friend on Flick money for one purpose, from your saved PayPal |
+| `POST /api/safe/fund` `{ with, id }` | Pays a friend's request into a Safe for what they asked it for |
 | `POST /api/safe/spend` `{ with, safe, image, photo? }` or `{ pdf }` or `{ text }` | Spends from a Safe given to you: Safe reads the receipt, the rules decide, PayPal pays |
 | `POST /api/safe/decide` `{ with, safe, spend, allow }`, `/safe/close` `{ with, safe }` | The giver allows what a receipt asked for, or not; closing refunds what's left |
 | `GET /api/inbox`, `POST /api/inbox/act` `{ id }` | What needs you, and doing it |

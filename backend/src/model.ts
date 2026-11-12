@@ -110,7 +110,7 @@ export type ChatMessage = {
   /** A paid message's or reminder's request. */
   about?: string;
   tries?: number;
-  /** A Safe's message: the Safe (in the chat's `safes`), and the receipt spent from it, if that's what it's about. */
+  /** A Safe's message: the Safe (in the chat's `safes`), and the receipt spent from it, if that's what it's about. A request paid into a Safe: that Safe. */
   safeId?: string;
   spendId?: string;
 };
@@ -138,6 +138,8 @@ export type SafeSpend = {
   ask?: { amount: number; why: string; status: 'open' | 'allowed' | 'declined' };
   /** Why nothing left the Safe for it. */
   refused?: string;
+  /** Its lines that aren't for the purpose, which the Safe never pays for, with their share of the tax. */
+  notPaid?: { amount: number; why: string };
   /** Where its money goes: the shop's PayPal (a bill), or back to the spender's (a receipt). */
   to?: { kind: 'shop' | 'back'; email: string; name: string; business?: string };
   /** Released, but Flick couldn't send it on to that PayPal (yet). */

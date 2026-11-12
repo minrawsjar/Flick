@@ -96,7 +96,7 @@ Every route is listed in the [main README's API section](../README.md#api). By a
 | **Autopilot** | `POST /api/week/edit`, `/approve`, `/tick`, `/retry`, `/next`; `/autopay/cap`, `/stop` |
 | **People** | `/api/friends/*`, `/api/split`, `/split/assign`, `/api/nudge/*`, `/api/debts/refresh`, `/api/chat/*` |
 | **Scout** | `GET /api/scout`; `POST /api/scout/quote`, `/read`, `/online`, `/buy` |
-| **Safe** | `GET /api/safes`; `POST /api/safe`, `/safe/spend`, `/safe/decide`, `/safe/close` |
+| **Safe** | `GET /api/safes`; `POST /api/safe`, `/safe/fund`, `/safe/spend`, `/safe/decide`, `/safe/close` |
 | **Ask Flick, Today** | `POST /api/agent`, `/agent/decide`; `GET /api/inbox`, `POST /api/inbox/act`; `/api/push/*` |
 | **PayPal** | `GET /api/paypal/return`, `/cancel`; `POST /api/paypal/flick`, `/paypal/webhook`; `/api/auth/paypal/*` |
 | **You** | `POST /api/profile`, `GET /api/profile/money`, `/api/business` |

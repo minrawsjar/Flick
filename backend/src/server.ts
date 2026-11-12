@@ -117,6 +117,7 @@ const routes: Record<string, Handler> = {
   // Flick Safe: money given for one purpose, spent only against a receipt that fits it (safe.ts)
   'GET /api/safes': () => safe.list(),
   'POST /api/safe': async ({ body }) => safe.send(await body()),
+  'POST /api/safe/fund': async ({ body }) => safe.fund(await body()),
   'POST /api/safe/spend': async ({ body }) => safe.spend(await body()),
   'POST /api/safe/decide': async ({ body }) => safe.decide(await body()),
   'POST /api/safe/close': async ({ body }) => safe.close(await body()),

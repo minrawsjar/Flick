@@ -581,24 +581,19 @@ await step('only Sam spends it, and what they send has to be a receipt to read',
   check((await samFlick('safe/spend', { with: ME, safe: 'safe_api' })).status === 400, 'spent nothing');
   check((await samFlick('safe/spend', { with: ME, safe: 'safe_api', image: 'https://example.com/r.jpg' })).status === 400, 'took a URL');
 });
-await step('a receipt with chocolates and a charger: the chocolates are paid to Sam at once, the charger waits for the giver', async () => {
+await step("a receipt with chocolates and a charger: the chocolates are paid to Sam at once; the charger never is, and nobody's asked", async () => {
   const { status, json } = await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: RECEIPT });
   check(status === 200, `${status}: ${json.error?.message}`);
   const spend = json.spend;
-  spendId = spend.id;
   const fits = spend.lines.filter((l: Json) => l.fits).map((l: Json) => l.name).join(', ');
   check(spend.lines.length === 3 && spend.lines.filter((l: Json) => l.fits).length === 2 && !spend.lines.find((l: Json) => /charger/i.test(l.name)).fits, `lines: ${JSON.stringify(spend.lines)}`);
   check(near(spend.paid, 9.08) && spend.to.kind === 'back' && spend.to.email === SAM && spend.payout !== 'failed', `paid ${spend.paid} to ${JSON.stringify(spend.to)}, payout ${spend.payout}`);
-  check(spend.ask?.status === 'open' && near(spend.ask.amount, 10.92) && /charger/i.test(spend.ask.why), JSON.stringify(spend.ask));
+  check(!spend.ask && near(spend.notPaid?.amount, 12.96) && /charger isn't for chocolates, so the Safe doesn't pay for it/.test(spend.notPaid.why), `ask ${JSON.stringify(spend.ask)}, not paid ${JSON.stringify(spend.notPaid)}`);
   check(near(json.safe.left, 10.92), `left ${json.safe.left}`);
   check(!spend.prints.length, 'the receipt\'s prints reached the browser');
   check((await thread(me, SAM)).messages.some((m: Json) => m.kind === 'safe' && m.spendId === spend.id), 'not in the chat');
-  return `fit: ${fits}; paid $${spend.paid}, asks $${spend.ask.amount}: ${spend.ask.why}`;
-});
-await step("the giver's Today asks them to allow the charger; Sam can't decide it", async () => {
-  const items = (await me('inbox')).json.items;
-  check(items.some((i: Json) => i.agent === 'safe' && i.action === 'Allow' && /Sam asks for \$10\.92/.test(i.title)), JSON.stringify(items.map((i: Json) => i.title)));
-  check((await samFlick('safe/decide', { with: ME, safe: 'safe_api', spend: spendId, allow: true })).status === 409, 'Sam allowed their own ask');
+  check(!(await me('inbox')).json.items.some((i: Json) => i.agent === 'safe' && i.action === 'Allow'), 'the giver was asked about the charger');
+  return `fit: ${fits}; paid $${spend.paid}; not paid $${spend.notPaid.amount}: ${spend.notPaid.why}`;
 });
 await step('the same receipt again is refused, sent as it was or typed out again', async () => {
   const again = (await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: RECEIPT })).json.spend;
@@ -617,21 +612,40 @@ await step('an old receipt, and one with nothing for chocolates, are refused', a
   check(none?.refused === 'Nothing on it is for chocolates.' && none.paid === 0, `pharmacy: ${JSON.stringify(none).slice(0, 200)}`);
   check(near((await samSafe()).left, 10.92), 'money left the Safe');
 });
+let billId = '';
 await step("a bill from a shop that isn't on PayPal pays nothing: it waits for the giver, chocolates only", async () => {
   const bill = `SWEET TOOTH CATERING\nINVOICE 2291, due on receipt\nDate: ${today}\nChocolate truffle box 6.00\nDelivery 2.00\nAMOUNT DUE 8.00\nPay by bank transfer to account 4471-2209.`;
   const spend = (await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: bill })).json.spend;
+  billId = spend?.id;
   check(spend?.kind === 'bill' && spend.paid === 0 && !spend.refused, `bill: ${JSON.stringify(spend).slice(0, 240)}`);
   check(spend.ask?.status === 'open' && (near(spend.ask.amount, 6) || near(spend.ask.amount, 8)) && /isn't on PayPal/.test(spend.ask.why) && spend.to.kind === 'back', JSON.stringify(spend.ask));
   check(near((await samSafe()).left, 10.92), 'money left the Safe');
-  // Not allowed: nothing was taken for it, so it isn't counted as used.
-  await me('safe/decide', { with: SAM, safe: 'safe_api', spend: spend.id, allow: false });
   return spend.ask.why;
 });
-await step("the giver doesn't allow the charger: nothing more leaves, and it can't be decided twice", async () => {
-  const { json } = await me('safe/decide', { with: SAM, safe: 'safe_api', spend: spendId, allow: false });
-  const spend = json.safe.spends.find((x: Json) => x.id === spendId);
+await step("the giver's Today asks them to allow the bill; Sam can't decide it", async () => {
+  const items = (await me('inbox')).json.items;
+  check(items.some((i: Json) => i.agent === 'safe' && i.action === 'Allow' && /Sam asks for \$[68]\.00 from the Safe/.test(i.title)), JSON.stringify(items.map((i: Json) => i.title)));
+  check((await samFlick('safe/decide', { with: ME, safe: 'safe_api', spend: billId, allow: true })).status === 409, 'Sam allowed their own ask');
+});
+await step("the giver doesn't allow it: nothing leaves, and it can't be decided twice", async () => {
+  const { json } = await me('safe/decide', { with: SAM, safe: 'safe_api', spend: billId, allow: false });
+  const spend = json.safe.spends.find((x: Json) => x.id === billId);
   check(spend.ask.status === 'declined' && near(json.safe.left, 10.92), JSON.stringify(spend.ask));
-  check((await me('safe/decide', { with: SAM, safe: 'safe_api', spend: spendId, allow: true })).status === 409, 'decided twice');
+  check((await me('safe/decide', { with: SAM, safe: 'safe_api', spend: billId, allow: true })).status === 409, 'decided twice');
+});
+await step("a friend's request can be paid into a Safe for what it asked for; PayPal saying no leaves it open, with no Safe", async () => {
+  const asked = (await samFlick('chat/request', { with: ME, amount: 12, what: 'chocolates' })).json.message;
+  check((await samFlick('safe/fund', { with: ME, id: asked.id })).status === 409, 'Sam paid their own request into a Safe');
+  const small = (await samFlick('chat/request', { with: ME, amount: 0.5, what: 'gum' })).json.message;
+  const tooSmall = await me('safe/fund', { with: SAM, id: small.id });
+  check(tooSmall.status === 409 && /A Safe holds \$1/.test(tooSmall.json.error?.message), `${tooSmall.status}`);
+  const before = (await thread(me, SAM)).safes.length;
+  const res = await me('safe/fund', { with: SAM, id: asked.id });
+  check(res.status === 402 && /PayPal turned it down/.test(res.json.error?.message), `${res.status}: ${res.json.error?.message}`);
+  const t = await thread(me, SAM);
+  check(t.messages.find((m: Json) => m.id === asked.id)?.status === 'open' && t.safes.length === before, 'not left open, or a Safe was made');
+  await me('chat/decline', { with: SAM, id: asked.id });
+  await me('chat/decline', { with: SAM, id: small.id });
 });
 await step('closing gives what is left back from the payment; if PayPal says no, the Safe stays as it was', async () => {
   const res = await me('safe/close', { with: SAM, safe: 'safe_api' });

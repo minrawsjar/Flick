@@ -268,7 +268,7 @@ export function SpendCard({ safe, spend, me, peer, run }: { safe: Safe; spend: S
               {spend.ask.status === "open"
                 ? `${usd(spend.ask.amount)} waits for ${giver ? "you" : peer.name}: ${spend.ask.why}`
                 : spend.ask.status === "allowed"
-                  ? `${giver ? "You" : peer.name} allowed ${usd(spend.ask.amount)} more. ${spend.ask.why}`
+                  ? `${giver ? "You" : peer.name} allowed ${usd(spend.ask.amount)}. ${spend.ask.why}`
                   : `Not allowed: ${usd(spend.ask.amount)}. ${spend.ask.why}`}
             </p>
             {spend.ask.status === "open" && giver && safe.status === "open" && (
@@ -282,6 +282,11 @@ export function SpendCard({ safe, spend, me, peer, run }: { safe: Safe; spend: S
               </div>
             )}
           </div>
+        )}
+        {spend.notPaid && (
+          <p className="flex items-start gap-1.5 text-secondary">
+            <X size={14} className="mt-px shrink-0" /> {spend.notPaid.why} ({usd(spend.notPaid.amount)})
+          </p>
         )}
         {spend.signs.length > 0 && !spend.refused && <p className="text-secondary">Safe noticed: {spend.signs.join(" ")}</p>}
         <p className="text-[11px] text-secondary">Left in the Safe now: {usd(safe.left)}</p>

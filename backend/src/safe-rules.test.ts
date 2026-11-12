@@ -49,28 +49,27 @@ test("the reader's answer is cleaned: unknown kinds, bad dates, blank lines and 
   assert.equal(checkProof({ kind: 'bill', paypal: 'Shop@Example.com' }).paypal, 'shop@example.com');
 });
 
-test('the lines that fit are paid with their share of the tax, and the rest is asked of the giver', () => {
+test('only the lines that fit are paid, with their share of the tax; the rest is never paid, and nobody is asked', () => {
   assert.deepEqual(shares(receipt()), { fits: 9.08, rest: 12.96 });
   const j = judge(receipt(), terms, { now });
   assert.equal(j.refused, undefined);
   assert.equal(j.pay, 9.08);
-  assert.equal(j.ask, 10.92); // all that's left of $20 once the chocolates are paid
-  assert.equal(j.why, "Phone charger isn't for chocolates.");
-  assert.equal(judge(receipt(), { ...terms, left: 50 }, { now }).ask, 12.96);
+  assert.equal(j.ask, 0);
+  assert.deepEqual(j.notPaid, { amount: 12.96, why: "Phone charger isn't for chocolates, so the Safe doesn't pay for it." });
+  // However much is left: the charger still isn't chocolates.
+  assert.equal(judge(receipt(), { ...terms, left: 500 }, { now }).ask, 0);
 });
 
 test('a receipt that is all for the purpose is paid in full, with nothing to ask', () => {
   const j = judge(receipt({ total: 8.4, tax: 0, lines: receipt().lines.slice(0, 2) }), terms, { now });
-  assert.deepEqual(j, { pay: 8.4, ask: 0, why: '' });
+  assert.deepEqual(j, { pay: 8.4, ask: 0, why: '' }); // nothing that isn't for the purpose
 });
 
-test("never more than what's left: the pay, then the ask, are capped", () => {
+test("never more than what's left", () => {
   const j = judge(receipt(), { ...terms, left: 5 }, { now });
   assert.equal(j.pay, 5);
   assert.equal(j.ask, 0);
-  const k = judge(receipt(), { ...terms, left: 10 }, { now });
-  assert.equal(k.pay, 9.08);
-  assert.equal(k.ask, 0.92);
+  assert.equal(judge(receipt({ date: null }), { ...terms, left: 5 }, { now }).ask, 5);
 });
 
 test('a used receipt, an old one and one from the future are refused', () => {
@@ -98,8 +97,9 @@ test("a closed, ended or empty Safe pays nothing", () => {
 test('doubts pay nothing and ask the giver: no date, lines that do not add up, signs of a fake', () => {
   const noDate = judge(receipt({ date: null }), terms, { now });
   assert.equal(noDate.pay, 0);
-  assert.equal(noDate.ask, 9.08);
+  assert.equal(noDate.ask, 9.08); // the chocolates only: the charger can't be allowed either
   assert.equal(noDate.why, 'It has no date on it.');
+  assert.equal(noDate.notPaid?.amount, 12.96);
 
   const off = judge(receipt({ total: 30 }), terms, { now });
   assert.equal(off.pay, 0);

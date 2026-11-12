@@ -10,8 +10,8 @@ import { addDays, cents, type SafeLine, type SafeSpend } from './model.ts';
 //   the Safe was made, or in the future; one with nothing on it for the purpose.
 // - Asked of the giver, with nothing paid: a receipt with no date, lines that don't add up to its
 //   total, or anything the reader thought looked edited or fake.
-// - Otherwise paid at once (the giver said yes when they named the purpose), and the lines that
-//   aren't for it are asked of the giver.
+// - Otherwise paid at once (the giver said yes when they named the purpose). The lines that aren't
+//   for it are never paid from the Safe, by anyone: money given for chocolates only buys chocolates.
 
 /** What Safe's reader reports about a receipt or bill (safe.ts asks for exactly this). */
 export type SafeAnswer = {
@@ -110,6 +110,8 @@ export type Judgement = {
   why: string;
   /** Why nothing leaves the Safe for it. */
   refused?: string;
+  /** What the Safe won't pay for at all: the lines that aren't for its purpose, with their share of the tax. */
+  notPaid?: { amount: number; why: string };
 };
 
 const shortDate = (date: string) => new Date(`${date.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -143,10 +145,8 @@ export function judge(proof: Proof, terms: Terms, { now, usedOn }: { now: string
     ...(addsUp(proof) ? [] : ["Its lines don't add up to its total."]),
     ...proof.signs.map((s) => (/[.!?]$/.test(s) ? s : `${s}.`)),
   ];
-  if (doubts.length) return { pay: 0, ask: Math.min(fits, terms.left), why: doubts.join(' ') };
-
-  const pay = Math.min(fits, terms.left);
   const others = proof.lines.filter((l) => !l.fits);
-  const ask = others.length ? cents(Math.min(rest, terms.left - pay)) : 0;
-  return { pay, ask, why: ask > 0 ? `${names(others)} ${others.length === 1 ? "isn't" : "aren't"} for ${terms.purpose}.` : '' };
+  const notPaid = others.length ? { notPaid: { amount: rest, why: `${names(others)} ${others.length === 1 ? "isn't" : "aren't"} for ${terms.purpose}, so the Safe doesn't pay for ${others.length === 1 ? 'it' : 'them'}.` } } : {};
+  if (doubts.length) return { pay: 0, ask: Math.min(fits, terms.left), why: doubts.join(' '), ...notPaid };
+  return { pay: Math.min(fits, terms.left), ask: 0, why: '', ...notPaid };
 }

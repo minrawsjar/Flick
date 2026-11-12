@@ -83,7 +83,7 @@ every call that moves money, so nothing is paid twice.
 | **Scout** | Learns your usuals, prices them at every store, sees prices rising | Buying the basket | An order priced by the server, a capture, a Payout to the store |
 | **Splitter** | Works out who had what, to the cent | Sending the requests | An invoice to each friend not on Flick, or a request in Flick Chat |
 | **Nudge** | Drafts a reminder in the tone you pick | Sending it | PayPal's own invoice reminder |
-| **Safe** | Reads each receipt; pays out only the lines for the Safe's purpose; turns down a used, old or unrelated receipt | Giving it (a flick); anything doubtful, and lines that aren't for the purpose (the giver) | A Vault charge (payer-initiated), a Payout per receipt, a partial refund of what's left |
+| **Safe** | Reads each receipt; pays out only the lines for the Safe's purpose, never anything else; turns down a used, old or unrelated receipt | Giving it, or paying a friend's request into it (a flick); a doubtful receipt (the giver) | A Vault charge (payer-initiated), a Payout per receipt, a partial refund of what's left |
 | **Flick Chat** | Pays a friend's request under the limit you allowed them | Any other request | A Vault charge, then a Payout to the friend |
 | **Ask Flick** | Reads your week, bills, friends and groceries | Each of its eleven actions, as a card | Through the agents above |
 
@@ -96,7 +96,7 @@ browser. Who's paid comes from your payees or a registered business, never from 
 **Technological implementation.** Eight PayPal APIs, both kinds of Vault charge (payer-initiated on a
 flick, merchant-initiated for Autopilot and Flick Chat), and webhooks that are verified with PayPal,
 routed to the right person's Flick with no cookie, and applied once. Proven by 63 backend and 8
-frontend unit tests, 90 API steps against the real sandbox and model, and 78 browser steps that pay
+frontend unit tests, 91 API steps against the real sandbox and model, and 79 browser steps that pay
 on PayPal's real approval page, with a flick, and by themselves.
 
 **Design.** A whole product: it installs on a phone from a QR code, works phone-first in light and

@@ -771,8 +771,8 @@ if (!email || !password) {
   });
   // Flick Safe (backend/src/safe.ts): this browser's real sandbox buyer gives Robin $1.00 for
   // chocolates with a flick. Robin's receipt (read by the real AI) pays back only the chocolates; the
-  // gum waits for you, and you don't allow it; the same receipt again is refused; closing the Safe
-  // refunds what's left from your real payment.
+  // gum is never paid from it; the same receipt again is refused; closing the Safe refunds what's left
+  // from your real payment.
   await step("Flick Safe: $1.00 for chocolates with a flick; the receipt pays only the chocolates, once; closing refunds the rest", async () => {
     const me = (await state()).profile.email;
     const ROBIN = "robin.e2e@flick.example.com";
@@ -797,10 +797,9 @@ if (!email || !password) {
     const { json } = await robin("safe/spend", { with: me, safe: safe.id, text: receipt });
     const spend = json.spend;
     check(spend?.paid === 0.4 && spend.to?.email === ROBIN && spend.payout !== "failed", `the receipt: ${JSON.stringify(json).slice(0, 300)}`);
-    check(spend.ask?.status === "open" && spend.ask.amount === 0.3, `the gum: ${JSON.stringify(spend.ask)}`);
+    check(!spend.ask && spend.notPaid?.amount === 0.3, `the gum: ask ${JSON.stringify(spend.ask)}, not paid ${JSON.stringify(spend.notPaid)}`);
     await waitFor("document.body.innerText.includes('Safe paid Robin back $0.40')", 15_000, "the receipt, in your chat");
-    await click("Don't allow");
-    await waitFor("document.body.innerText.includes('Not allowed: $0.30')", 15_000, "the gum, not allowed");
+    await waitFor("document.body.innerText.includes(\"so the Safe doesn't pay for it\")", 5_000, "the gum, not paid");
     const again = (await robin("safe/spend", { with: me, safe: safe.id, text: receipt })).json.spend;
     check(again?.refused?.includes("already used") && again.paid === 0, `the same receipt again: ${JSON.stringify(again).slice(0, 200)}`);
 
@@ -809,7 +808,33 @@ if (!email || !password) {
     problems.length = 0;
     const closed = await safeOf(safe.id);
     check(closed?.status === "closed" && closed.closed?.returned === 0.6, `closed: ${JSON.stringify(closed?.closed)}`);
-    return "gave $1.00; $0.40 back to Robin; $0.30 not allowed; the reused receipt refused; $0.60 refunded";
+    return "gave $1.00; $0.40 back to Robin; the $0.30 of gum never paid; the reused receipt refused; $0.60 refunded";
+  });
+  // Robin asks for $1.00 for chocolates; you pay it into a Safe with a flick, so Robin can only spend
+  // it on chocolates. Robin gives it back, and the whole $1.00 is refunded to your PayPal.
+  await step("Flick Safe: a friend's request for chocolates, paid into a Safe with a flick; given back, it's refunded", async () => {
+    const me = (await state()).profile.email;
+    const ROBIN = "robin.e2e@flick.example.com";
+    const robinWs = "e2e-robin-00000000001";
+    const robin = (path, body) =>
+      fetch(`http://localhost:${BACK}/api/${path}`, { method: body ? "POST" : "GET", headers: { cookie: `flick=${robinWs}`, ...(body && { "Content-Type": "application/json" }) }, body: body && JSON.stringify(body) }).then(async (r) => ({ status: r.status, json: await r.json() }));
+    const asked = (await robin("chat/request", { with: me, amount: 1, what: "chocolates" })).json.message;
+    check(asked?.status === "open", `Robin couldn't ask: ${JSON.stringify(asked)}`);
+    await open(`/chat?with=${encodeURIComponent(ROBIN)}`);
+    await waitFor("document.body.innerText.includes('Pay into a Safe: only for chocolates')", 20_000, "the request, with Pay into a Safe");
+    await click("Pay into a Safe: only for chocolates");
+    await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('To Robin, in a Safe for chocolates')", 10_000, "the sheet paying into a Safe");
+    await tapToPay();
+    await waitFor("document.body.innerText.includes('Paid into a Safe')", 30_000, "the request, paid into a Safe");
+    problems.length = 0;
+    const t = (await robin(`chat/thread?with=${encodeURIComponent(me)}`)).json;
+    const m = t.messages.find((x) => x.id === asked.id);
+    const safe = t.safes.find((x) => x.id === m?.safeId);
+    check(m?.status === "paid" && safe?.to === ROBIN && safe.amount === 1 && safe.purpose === "chocolates" && safe.captureId, `request ${JSON.stringify(m)}, Safe ${JSON.stringify(safe)}`);
+    check((await robin("state")).json.debts.find((d) => d.chat?.message === asked.id)?.status === "paid", "not paid in Robin's Flick");
+    const back = await robin("safe/close", { with: me, safe: safe.id });
+    check(back.status === 200 && back.json.returned === 1 && back.json.safe.closed?.by === "spender", `giving it back: ${JSON.stringify(back.json).slice(0, 200)}`);
+    return "Robin's $1.00 request paid into a Safe for chocolates; given back, $1.00 refunded";
   });
   await step("Signing out: a new guest Flick; signing in again brings yours back", async () => {
     const mine = await session();

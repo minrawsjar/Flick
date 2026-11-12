@@ -394,7 +394,7 @@ function Request({ m, mine, peer, run }: { m: ChatMessage; mine: boolean; peer: 
   const amount = m.amount ?? 0;
   const status =
     m.status === "paid"
-      ? ["Paid" + (m.auto ? ", by itself" : ""), "bg-paid/15 text-paid"]
+      ? [m.safeId ? "Paid into a Safe" : "Paid" + (m.auto ? ", by itself" : ""), "bg-paid/15 text-paid"]
       : m.status === "paying"
         ? ["Paying…", "bg-fill text-secondary"]
         : m.status === "declined"
@@ -403,6 +403,11 @@ function Request({ m, mine, peer, run }: { m: ChatMessage; mine: boolean; peer: 
   const pay = () =>
     run(async () => {
       await flickToPay(() => act("chat/pay", { with: peer.email, id: m.id }), { amount, to: peer.name });
+    });
+  // Into a Safe for what they asked it for: they can only spend it on that (components/safe.tsx).
+  const lock = () =>
+    run(async () => {
+      await flickToPay(() => act("safe/fund", { with: peer.email, id: m.id }), { amount, to: `${peer.name}, in a Safe for ${m.what}` });
     });
   const perform = (kind: "remind" | "decline", path: string, body: object) => {
     setBusy(kind);
@@ -441,6 +446,16 @@ function Request({ m, mine, peer, run }: { m: ChatMessage; mine: boolean; peer: 
               >
                 {busy === "decline" ? <LoaderCircle size={14} className="spinner" /> : "Turn down"}
               </button>
+              {amount >= 1 && amount <= 500 && (
+                <button
+                  type="button"
+                  onClick={() => void lock()}
+                  title={`It waits in a Safe: ${peer.name} can only spend it on ${m.what}`}
+                  className="pressable col-span-2 flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-sky/15 text-[13px]"
+                >
+                  <LockKeyhole size={13} /> Pay into a Safe: only for {m.what}
+                </button>
+              )}
             </div>
           )}
           {m.status === "open" && mine && (

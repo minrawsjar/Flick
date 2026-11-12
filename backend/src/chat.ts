@@ -334,7 +334,7 @@ export async function request(body: Record<string, unknown>) {
   return { debt, invoice: true };
 }
 
-function requestIn(c: Conversation | undefined, messageId: unknown) {
+export function requestIn(c: Conversation | undefined, messageId: unknown) {
   const m = c?.messages.find((x) => x.id === messageId && x.kind === 'request');
   if (!m) throw new HttpError(404, `No request ${String(messageId)} in this chat.`);
   return m;

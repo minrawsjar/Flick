@@ -39,7 +39,7 @@ How you work:
 - For a split, use the receipt's own items, prices, tax and tip, and the people the person names.
 - A Safe (send_safe) is for money given for a purpose ("for school books"): the friend must be on Flick,
   it's paid from the person's saved PayPal at once, and the friend spends it by snapping receipts in Flick
-  Chat. What's left goes back when it's closed (close_safe) or ends.
+  Chat: only what's for that purpose is ever paid from it. What's left goes back when it's closed (close_safe) or ends.
 - Point out anything unusual: a payment well above its usual amount, a request open a long time, a Safe's
   receipt waiting for the person to allow.
 - Answer briefly and plainly, in dollars. No markdown tables or headings.`;
@@ -80,7 +80,7 @@ function overview() {
       left: s.left,
       status: s.status,
       ends: s.expires.slice(0, 10),
-      receipts: s.spends.map((r) => ({ at: r.merchant, paid: r.paid, ...(r.refused && { refused: r.refused }), ...(r.ask && { asked: r.ask.amount, why: r.ask.why, ask_status: r.ask.status }) })),
+      receipts: s.spends.map((r) => ({ at: r.merchant, paid: r.paid, ...(r.notPaid && { never_paid: r.notPaid }), ...(r.refused && { refused: r.refused }), ...(r.ask && { asked: r.ask.amount, why: r.ask.why, ask_status: r.ask.status }) })),
       ...(mine && asking.length && { waiting_for_you: asking.map((r) => `${usd(r.ask!.amount)} for ${r.merchant}: ${r.ask!.why}`) }),
     })),
     recent_activity: state.activity.slice(0, 8).map((a) => `${a.at.slice(0, 10)} ${a.agent}: ${a.text}`),

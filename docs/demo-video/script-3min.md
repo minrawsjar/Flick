@@ -8,8 +8,8 @@
 |---|---|---|---|
 | 1. Introduction and the problem | 0:00–0:20 | 20 | 40 |
 | 2. Architecture | 0:20–1:20 | 60 | 135 |
-| 3. Demo | 1:20–3:00 | 100 | 217 |
-| **Total** | **0:00–3:00** | **180** | **392** (about 130 a minute) |
+| 3. Demo | 1:20–3:00 | 100 | 215 |
+| **Total** | **0:00–3:00** | **180** | **390** (about 130 a minute) |
 
 At 150 words a minute, a beat holds 2.5 words a second. Every beat below is at or under that, and
 most leave a second or two for the screen to land.
@@ -23,7 +23,7 @@ most leave a second or two for the screen to land.
 | Autopilot | 1:38–1:48 | 10 | 24 |
 | Splitter and Nudge | 1:48–1:58 | 10 | 22 |
 | Flick Chat | 1:58–2:07 | 9 | 22 |
-| Safe | 2:07–2:29 | 22 | 51 |
+| Safe | 2:07–2:29 | 22 | 49 |
 | Scout | 2:29–2:38 | 9 | 20 |
 | Ask Flick | 2:38–2:43 | 5 | 11 |
 | Businesses on Flick | 2:43–2:47 | 4 | 9 |
@@ -91,7 +91,7 @@ named.
 
 ---
 
-## 3. Demo (1:20–3:00) · 217 words
+## 3. Demo (1:20–3:00) · 215 words
 
 Real screen recordings of www.flickit.site on the PayPal sandbox. Speed up waits (PayPal's page, a
 model reading) in the edit; never fake a result.
@@ -121,15 +121,15 @@ model reading) in the edit; never fake a result.
 - **Voiceover:** "Friends ask for money in Flick Chat. I get a notification, and pay with a flick, or let it pay by itself."
 - **Caption:** Pays by itself, up to the limit you set
 
-**2:07–2:13 · Safe: send it** (6 s · 14 words)
-- **On screen:** Swarnim's chat with Maya: tap the lock button beside the $ button, type $20 and "chocolates" ("For what?"), tap the **14 days** chip, then **Give $20.00 for chocolates**. Flick at the camera; the sheet says "To Maya, in a Safe, from your PayPal". Split screen: both chats show the card "Safe · for chocolates", with Safe's blue hexagon face, "14 days left", "$20.00 left of $20.00" and a blue bar.
-- **Voiceover:** "Safe is new. I give Maya twenty dollars for chocolates, locked to that purpose."
-- **Caption:** Safe · $20 for chocolates · 14 days
+**2:07–2:13 · Safe: asked for, paid into a Safe** (6 s · 14 words)
+- **On screen:** Maya, on her phone, asks Swarnim for $20 "chocolates" in Flick Chat. On Swarnim's request card, tap **Pay into a Safe: only for chocolates**; the sheet says "To Maya, in a Safe for chocolates, from your PayPal"; flick at the camera. The request turns "Paid into a Safe", and both chats show the card "Safe · for chocolates" with Safe's blue hexagon face, "14 days left", "$20.00 left of $20.00" and a blue bar.
+- **Voiceover:** "Maya asks me for twenty dollars for chocolates. I pay it into a Safe."
+- **Caption:** Safe · $20, only for chocolates
 
-**2:13–2:22 · Safe: spend it** (9 s · 20 words)
-- **On screen:** Maya taps **Snap the receipt** (the card says "Only what's for chocolates comes out. Each receipt counts once.") and snaps the printed receipt: Chocolates $8.40, Phone charger $6.00, total $14.40. "Safe is checking it…", then the receipt card, "Maya spent from the Safe for chocolates": "A receipt · [the day] · $14.40", ✓ Chocolates, ✗ Phone charger struck through, "Safe paid Maya back $8.40". Cut to Swarnim's phone: the notification, then his chat: "$6.00 waits for you: Phone charger isn't for chocolates." He taps **Don't allow**: "Not allowed: $6.00."
-- **Voiceover:** "She snaps the receipt. AI reads it. Rules decide. She's paid back for the chocolates. The charger waits for me."
-- **Caption:** Chocolates $8.40: paid back to Maya · Phone charger $6.00: waits for Swarnim
+**2:13–2:22 · Safe: spend it** (9 s · 18 words)
+- **On screen:** Maya taps **Snap the receipt** (the card says "Only what's for chocolates comes out. Each receipt counts once.") and snaps the printed receipt: Chocolates $8.40, Phone charger $6.00, total $14.40. "Safe is checking it…", then the receipt card, "Maya spent from the Safe for chocolates": "A receipt · [the day] · $14.40", ✓ Chocolates, ✗ Phone charger struck through, "Safe paid Maya back $8.40", and "Phone charger isn't for chocolates, so the Safe doesn't pay for it ($6.00)". Cut to Swarnim's phone: the notification "Maya spent $8.40 on chocolates".
+- **Voiceover:** "She snaps the receipt. AI reads it. Rules decide. Only the chocolates are paid. The charger never is."
+- **Caption:** Chocolates $8.40: paid back to Maya · Phone charger: never paid from the Safe
 
 **2:22–2:29 · Safe: reused, then closed** (7 s · 17 words)
 - **On screen:** Maya snaps the same receipt again: "Not taken: This receipt was already used, on [the day]." Swarnim taps **Close it and get $11.60 back**: the card reads "$11.60 went back to your PayPal".
@@ -174,7 +174,7 @@ model reading) in the edit; never fake a result.
   - **City Power**, business: signed in on `/business` with the name "City Power".
 - History: a new sign-in starts empty. A day ahead, give Swarnim's Flick enough past payments for Autopilot to plan a week with one flagged payment, and enough grocery receipts for Scout's usuals.
 - Props, printed on paper: `props/city-power-bill.png`, `props/mama-lus-receipt.png`, and the Safe receipt. Have `props/northwind-mobile-ebill.pdf` on the phone. Make a bill in rupees for the currency shot.
-- The Safe receipt: a shop not on Flick (so Safe pays Maya back), dated the recording day, Chocolates $8.40, Phone charger $6.00, total $14.40, no tax line. Keep the charger under $11.60: Safe never asks for more than is left. Print it: Safe treats a photo of a screen as a sign of a fake.
+- The Safe receipt: a shop not on Flick (so Safe pays Maya back), dated the recording day, Chocolates $8.40, Phone charger $6.00, total $14.40, no tax line. The charger is never paid from the Safe, so closing it refunds $11.60. Print it: Safe treats a photo of a screen as a sign of a fake.
 - Both phones, Swarnim's and Maya's: Flick installed from `/install`, notifications on (Safe notifies both ways), Do Not Disturb for everything else.
 - Screens at 1920×1080, 30 fps, one theme throughout, no other tabs or bookmarks showing.
 
@@ -185,7 +185,7 @@ model reading) in the edit; never fake a result.
 4. `/autopilot`.
 5. `/split`, then `/nudge`.
 6. `/chat`: Maya's request, the notification, the flick, Pays by itself.
-7. Safe: send, Maya's receipt, decline the charger, the same receipt again, close.
+7. Safe: Maya asks for $20 for chocolates and Swarnim pays it into a Safe; her receipt; the same receipt again; close.
 8. `/scout`.
 9. `/ask`, by voice.
 10. `/business` as City Power, now showing the $64.20.

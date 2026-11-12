@@ -13,8 +13,8 @@ import { useLive } from "@/lib/live";
 type Listed = Safe & { peer: ChatPeer };
 
 const STEPS = [
-  [LockKeyhole, "Give it for one thing", "In Flick Chat, give a friend on Flick money for a purpose. A flick pays it from your PayPal, and Flick holds it."],
-  [Camera, "They snap the receipt", "Safe reads every line. Only what's for the purpose comes out, with its share of the tax. A used, old or unrelated receipt is turned down."],
+  [LockKeyhole, "Give it for one thing", "In Flick Chat, give a friend on Flick money for a purpose, or pay what they asked for into a Safe. A flick pays it from your PayPal, and Flick holds it."],
+  [Camera, "They snap the receipt", "Safe reads every line. Only what's for the purpose is ever paid, with its share of the tax; nothing else, ever. A used, old or unrelated receipt is turned down."],
   [Undo2, "Paid, or back to you", "PayPal pays them back, or pays the shop's bill. Anything doubtful waits for you. Close it, and what's left is refunded to you."],
 ] as const;
 
