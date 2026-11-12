@@ -279,6 +279,9 @@ for (const [name, d] of devices) {
       await waitFor(`document.body.innerText.includes(${JSON.stringify(says)})`, 15_000, `"${says}"`);
       const { sw, iw, title } = await js("({ sw: document.documentElement.scrollWidth, iw: innerWidth, title: document.title })");
       check(sw <= iw + 1, `${sw - iw}px wider than the screen`);
+      // Sections clip what overflows them, so a card too wide for the screen never shows in scrollWidth.
+      const cut = await js(`[...document.querySelectorAll('[data-phone], [class*="bg-[var(--tile)]"]')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1).length`);
+      check(!cut, `${cut} card(s) run off the side of the screen`);
       check(title && title.includes("Flick"), `title "${title}"`);
       if (d.dark) check(await js("getComputedStyle(document.body).backgroundColor !== 'rgb(255, 255, 255)'"), "not dark");
     });

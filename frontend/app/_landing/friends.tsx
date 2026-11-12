@@ -66,7 +66,7 @@ export function FriendsBook() {
   };
 
   return (
-    <div className="grid w-full gap-3 lg:grid-cols-[1.5fr_1fr]">
+    <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
       <Tile>
         <p className="text-[13px] text-secondary">Your friends</p>
         <div className="mt-2 divide-y divide-separator/50">

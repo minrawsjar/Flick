@@ -283,8 +283,8 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
   const totals = useMemo(() => [{ id: "total", name: "Each pays", price: total, ...each }] as Item[], [total, each]);
 
   return (
-    <div className="grid items-center justify-items-center gap-6 lg:grid-cols-[1fr_auto] lg:justify-items-stretch">
-      <div className="order-2 grid w-full min-w-0 gap-3 lg:order-1">
+    <div className="grid grid-cols-1 items-center justify-items-center gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:justify-items-stretch">
+      <div className="order-2 grid w-full min-w-0 grid-cols-1 gap-3 lg:order-1">
         <Tile>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[13px] text-secondary">
@@ -415,7 +415,7 @@ function SplitBill({ bill, live, people }: { bill: Bill; live: boolean; people: 
           ))}
         </Tile>
       </div>
-      <div className="order-1 lg:order-2">
+      <div className="order-1 flex w-full justify-center lg:order-2">
         <Phone width={262} background="var(--color-page)">
           <SplitScreen merchant={live ? (bill.merchant || what.trim()) : bill.merchant} people={people} each={each} total={total} nobody={nobody} status={status} onSend={() => void send()} busy={assigning} empty={!items.length} />
         </Phone>

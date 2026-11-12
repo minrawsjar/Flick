@@ -536,7 +536,7 @@ export function Snap() {
   const recent = live.mode === "live" ? (live.state?.scans ?? []).filter((s) => s.kind !== "unknown").slice(0, RECENT) : [];
 
   return (
-    <div ref={box} className="grid items-center justify-items-center gap-6 lg:grid-cols-[auto_1fr] lg:justify-items-stretch">
+    <div ref={box} className="grid grid-cols-1 items-center justify-items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:justify-items-stretch">
       <Phone width={262} background="#0b0b0c" dark>
         <LensScreen
           sample={sample}
@@ -552,7 +552,7 @@ export function Snap() {
         />
       </Phone>
 
-      <div className="grid w-full min-w-0 gap-3 md:grid-cols-2">
+      <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <Tile>
           <label
             aria-disabled={!canRead || (currentStage === "scanning" && Boolean(view?.live))}
@@ -619,7 +619,7 @@ export function Snap() {
                   transitionDelay: view?.live ? `${i * 110}ms` : undefined,
                 }}
               >
-                <dt className="text-secondary">{k}</dt>
+                <dt className="shrink-0 text-secondary">{k}</dt>
                 <dd className="truncate text-right">{v}</dd>
               </div>
             ))}

@@ -214,7 +214,7 @@ export function ScoutDemo() {
       <Phone width={262} background="var(--color-phone)">
         <ScoutScreen screen={demoScreen} />
       </Phone>
-      <ul className="grid w-full gap-3 sm:grid-cols-2">
+      <ul className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
         {tour.map(([title, text]) => (
           <li key={title}>
             <Tile className="h-full">

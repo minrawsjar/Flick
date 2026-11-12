@@ -324,12 +324,12 @@ export function Autopilot() {
   const failed = w.rows.some((p) => p.status === "failed");
 
   return (
-    <div className="grid items-center justify-items-center gap-6 lg:grid-cols-[auto_1fr] lg:justify-items-stretch">
+    <div className="grid grid-cols-1 items-center justify-items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:justify-items-stretch">
       <Phone width={262}>
         <WeekScreen rows={w.rows} approved={w.approved} today={w.today} approving={w.busy} onApprove={w.approve} />
       </Phone>
 
-      <div className="grid w-full min-w-0 gap-3 md:grid-cols-2">
+      <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <Tile className="md:col-span-2">
           <p className="mb-3 text-[13px] text-secondary">The plan, in AG Grid. Tap an amount or a day to change it, until you approve.</p>
           {w.live && !rows.length ? (

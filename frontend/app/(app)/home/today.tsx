@@ -78,7 +78,7 @@ export function Today() {
 
       <InboxCard />
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <WeekCard view={view} />
         <OwedCard owed={view.owed} />
         <Actions />

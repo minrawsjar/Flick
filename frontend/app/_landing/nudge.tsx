@@ -185,12 +185,12 @@ export function Nudge() {
     );
 
   return (
-    <div ref={box} className="grid items-center justify-items-center gap-6 lg:grid-cols-[auto_1fr] lg:justify-items-stretch">
+    <div ref={box} className="grid grid-cols-1 items-center justify-items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:justify-items-stretch">
       <Phone width={262} background="var(--color-page)">
         <NudgeScreen name={who.name} amount={who.amount} what={who.what} days={who.days} tone={tone} text={text} typed={typed} sent={sent} />
       </Phone>
 
-      <div className="grid w-full min-w-0 gap-3 md:grid-cols-2">
+      <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <Tile>
           <p className="flex items-center justify-between text-[13px] text-secondary">
             Who owes you

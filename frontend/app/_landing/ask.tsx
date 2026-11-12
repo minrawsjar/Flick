@@ -586,7 +586,7 @@ export function AskDemo() {
   useOnScreen(box, () => script.forEach((step, i) => setTimeout(() => setShown(i + 1), step.at + 300)));
 
   return (
-    <div ref={box} className="grid items-center justify-items-center gap-6 lg:grid-cols-[auto_1fr] lg:justify-items-stretch">
+    <div ref={box} className="grid grid-cols-1 items-center justify-items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:justify-items-stretch">
       <Phone width={262} background="var(--color-page)">
         <div className="flex h-full flex-col bg-page">
           <div className="flex flex-col items-center gap-1 pb-2">
@@ -602,7 +602,7 @@ export function AskDemo() {
           </div>
         </div>
       </Phone>
-      <div className="grid w-full min-w-0 gap-3 md:grid-cols-3">
+      <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
         {[
           ["Reads your real data", "Your week, what Lens read, who owes you and your usual amounts, so it can spot what's odd."],
           ["Plans across agents", "One sentence becomes a split, invoices and a reminder: all six agents, from Lens to Safe, working together."],

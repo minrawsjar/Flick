@@ -111,7 +111,7 @@ function List({ title, empty, safes, me, run }: { title: string; empty: string; 
       {!safes.length ? (
         <p className="mt-1 text-[13px] text-secondary">{empty}</p>
       ) : (
-        <ul className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {safes.map((s) => (
             <li key={s.id} className="flex flex-col items-start gap-1.5 [&>div]:w-full">
               <SafeCard safe={s} me={me} peer={s.peer} run={run} />
