@@ -279,6 +279,8 @@ for (const [name, d] of devices) {
       await waitFor(`document.body.innerText.includes(${JSON.stringify(says)})`, 15_000, `"${says}"`);
       const { sw, iw, title } = await js("({ sw: document.documentElement.scrollWidth, iw: innerWidth, title: document.title })");
       check(sw <= iw + 1, `${sw - iw}px wider than the screen`);
+      // A page too wide for a phone widens innerWidth with it (Money Studio did, to 857px), so check that too.
+      check(iw <= d.width + 1, `lays out ${iw}px wide on a ${d.width}px screen`);
       // Sections clip what overflows them, so a card too wide for the screen never shows in scrollWidth.
       const cut = await js(`[...document.querySelectorAll('[data-phone], [class*="bg-[var(--tile)]"]')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1).length`);
       check(!cut, `${cut} card(s) run off the side of the screen`);

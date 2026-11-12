@@ -14,6 +14,7 @@ import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   AgStudioAiModule,
   enableStudioDevValidations,
+  type AgPanelConfig,
   type AgReportState,
   type AgStudioApi,
   type AgStudioMode,
@@ -68,6 +69,16 @@ const NO_HISTORY: StudioHistory = { canUndo: false, canRedo: false };
 
 const noSubscription = () => () => {};
 
+// A phone has no room beside the report for the filters panel, so there it's in edit mode only
+// (edit mode keeps AG Studio's own default panels). The same width as app/globals.css's phone rules.
+const PHONE = '(max-width: 767px)';
+const PHONE_PANELS: AgPanelConfig = { view: { right: [] }, edit: { left: ['ai'], right: ['filters', 'edit', 'data'] } };
+const onWidthChange = (changed: () => void) => {
+  const query = matchMedia(PHONE);
+  query.addEventListener('change', changed);
+  return () => query.removeEventListener('change', changed);
+};
+
 export function Dashboard(props: DashboardProps) {
   // Saved reports live in localStorage, which only exists in the browser.
   const inBrowser = useSyncExternalStore(
@@ -81,6 +92,7 @@ export function Dashboard(props: DashboardProps) {
 function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
   const { store, latest, update, editReport } = useReports();
   const apiRef = useRef<AgStudioApi | null>(null);
+  const phone = useSyncExternalStore(onWidthChange, () => matchMedia(PHONE).matches, () => false);
 
   // The open report as it is in Studio now, unsaved edits included, for drawing the shell.
   // Null until Studio is ready.
@@ -214,6 +226,7 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
 
   return (
     <AppShell
+      navKey={`${saved.id}:${state.selectedPageId}`}
       sidebar={
         <ReportsSidebar
           reports={reports}
@@ -272,6 +285,7 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
               context={{ data }}
               theme={agStudioTheme}
               layout={{ widgetBorderEnabled: true }}
+              panels={phone ? PHONE_PANELS : undefined}
               data={studioData}
               ai={ai}
               initialState={initialState}

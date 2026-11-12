@@ -281,3 +281,10 @@ html:has([data-studio]) * {
 html:has([data-studio]) *::-webkit-scrollbar {
   display: none;
 }
+
+/* On a phone, Studio fills the screen instead of its own 600px minimum, and its 720px canvas
+   scrolls sideways inside it (dashboard.tsx drops the filters panel there to make room).
+   !important: AG Studio sets this variable from its theme at run time. */
+@media (max-width: 767px) {
+  [data-studio] .ag-studio-root { --ag-studio-min-width: 100% !important; }
+}
