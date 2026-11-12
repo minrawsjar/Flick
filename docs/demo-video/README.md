@@ -1,6 +1,6 @@
 # Demo Video: "Gone in a Flick"
 
-> **Flick's intro video, ready to make with an AI video tool: the story, every prompt, and every image to upload.**
+> **Flick's videos: the 3-minute submission script, and the intro, ready to make with an AI video tool, with every prompt and every image to upload.**
 
 Nina's money problems follow her everywhere as silent people in grey suits holding placards. For
 each one, a Flick agent sorts it out, she flicks a finger at her phone, and the problem vanishes.
@@ -10,6 +10,7 @@ It ends on Flick's real logo animation and "Install Flick now".
 
 | Guide | Length | Made with |
 |---|---|---|
+| [script-3min.md](script-3min.md) | **3 minutes**: the submission video. 20 s on the problem, 1 min on the architecture, then every feature live, Safe included | Screen recordings of the real app, the two diagrams, and clips from the intro |
 | [wan.md](wan.md) | **30 seconds**: each feature as a problem, then its fix | Wan: image model for frames, then Image to Video and First & Last Frame |
 | [higgsfield.md](higgsfield.md) | 55 seconds | Higgsfield: Nano Banana Pro, Veo, Kling start and end frames, DoP |
 | [ai-studio.md](ai-studio.md) | 55 seconds | Google AI Studio: Gemini's image model, then Veo |
