@@ -17,6 +17,7 @@ import * as nudge from './nudge.ts';
 import * as scout from './scout.ts';
 import { PayPalApiError, type Saved } from './paypal.ts';
 import * as push from './push.ts';
+import * as safe from './safe.ts';
 import { assign, split } from './split.ts';
 import { hasWorkspace, inWorkspace, isWorkspaceId, reset, save, state } from './store.ts';
 import { handleWebhookRequest } from './webhooks.ts';
@@ -104,7 +105,7 @@ const routes: Record<string, Handler> = {
 
   // Flick Chat: friends signed in with PayPal talk, ask for money, and pay in a tap (chat.ts)
   'GET /api/chat': () => chat.list(),
-  'GET /api/chat/thread': ({ url }) => chat.thread(url.searchParams),
+  'GET /api/chat/thread': ({ url }) => (safe.endExpired(url.searchParams.get('with')), chat.thread(url.searchParams)),
   'GET /api/chat/unread': () => chat.unread(),
   'POST /api/chat/send': async ({ body }) => chat.send(await body()),
   'POST /api/chat/request': async ({ body }) => chat.request(await body()),
@@ -112,6 +113,13 @@ const routes: Record<string, Handler> = {
   'POST /api/chat/decline': async ({ body }) => chat.decline(await body()),
   'POST /api/chat/remind': async ({ body }) => chat.remind(await body()),
   'POST /api/chat/allow': async ({ body }) => chat.allow(await body()),
+
+  // Flick Safe: money given for one purpose, spent only against a receipt that fits it (safe.ts)
+  'GET /api/safes': () => safe.list(),
+  'POST /api/safe': async ({ body }) => safe.send(await body()),
+  'POST /api/safe/spend': async ({ body }) => safe.spend(await body()),
+  'POST /api/safe/decide': async ({ body }) => safe.decide(await body()),
+  'POST /api/safe/close': async ({ body }) => safe.close(await body()),
 
   // Scout: what you buy again and again, priced at every store; buying it through PayPal
   'GET /api/scout': () => scout.view(),

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1320" height="790" viewBox="0 0 1320 790" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <title id="t">Flick's architecture</title>
-<desc id="d">The installed app talks to a Next.js site on Vercel, which forwards /api/* to a dependency-free Node backend on Railway. The backend runs Flick's agents, keeps each person's workspace as JSON on a volume, and calls PayPal's REST APIs, an AI model, Channel3, Frankfurter and the browsers' push services.</desc>
+<desc id="d">The installed app talks to a Next.js site on Vercel, which forwards /api/* to a dependency-free Node backend on Railway. The backend runs Flick's six agents (Lens, Autopilot, Splitter, Nudge, Scout and Safe), Flick Chat and Ask Flick, keeps each person's workspace as JSON on a volume, and calls PayPal's REST APIs, an AI model, Channel3, Frankfurter and the browsers' push services.</desc>
 <defs>
 <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8e8e93"/></marker>
 <marker id="s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8e8e93"/></marker>
@@ -78,46 +78,50 @@
 <text x="683" y="391" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Scout</text>
 <text x="683" y="407" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">usuals priced everywhere</text>
 <rect x="838" y="372" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#60A5FA55" stroke-width="1"/>
-<circle cx="855" cy="394" r="6" fill="#60A5FA"/>
-<text x="869" y="391" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Flick Chat</text>
-<text x="869" y="407" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">talk, ask, pay friends</text>
-<rect x="652" y="424" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#A78BFA55" stroke-width="1"/>
-<circle cx="669" cy="446" r="6" fill="#A78BFA"/>
-<text x="683" y="443" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Ask Flick</text>
-<text x="683" y="459" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">an agent over them all</text>
-<rect x="838" y="424" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#F8717155" stroke-width="1"/>
-<circle cx="855" cy="446" r="6" fill="#F87171"/>
-<text x="869" y="443" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Inbox + Push</text>
-<text x="869" y="459" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">what needs you next</text>
-<rect x="652" y="482" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
-<text x="664" y="505" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">rules.ts</text>
-<text x="664" y="523" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">pure, tested</text>
-<rect x="776" y="482" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
-<text x="788" y="505" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">paypal.ts</text>
-<text x="788" y="523" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">fetch, no SDK</text>
-<rect x="900" y="482" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
-<text x="912" y="505" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">store.ts</text>
-<text x="912" y="523" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">JSON per person</text>
-<rect x="652" y="580" width="360" height="90" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
-<text x="668" y="604" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Railway volume</text>
-<text x="668" y="624" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">state.json · workspaces/&lt;id&gt;.json · push.json</text>
-<text x="668" y="642" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">people.json · businesses.json · chats/&lt;pair&gt;.json</text>
-<text x="668" y="660" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">JSON, written atomically: a .tmp, then rename</text>
-<line x1="956" y1="540" x2="956" y2="576" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#s)"/>
+<polygon points="855,387 861,390.5 861,397.5 855,401 849,397.5 849,390.5" fill="#60A5FA"/>
+<text x="869" y="391" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Safe</text>
+<text x="869" y="407" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">money for one purpose</text>
+<rect x="652" y="424" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#60A5FA55" stroke-width="1"/>
+<circle cx="669" cy="446" r="6" fill="#60A5FA"/>
+<text x="683" y="443" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Flick Chat</text>
+<text x="683" y="459" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">talk, ask, pay friends</text>
+<rect x="838" y="424" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#A78BFA55" stroke-width="1"/>
+<circle cx="855" cy="446" r="6" fill="#A78BFA"/>
+<text x="869" y="443" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Ask Flick</text>
+<text x="869" y="459" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">an agent over them all</text>
+<rect x="652" y="476" width="174" height="44" rx="12" fill="#1c1c1e" stroke="#F8717155" stroke-width="1"/>
+<circle cx="669" cy="498" r="6" fill="#F87171"/>
+<text x="683" y="495" font-size="13" font-weight="650" fill="#f5f5f7" text-anchor="start">Inbox + Push</text>
+<text x="683" y="511" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">what needs you next</text>
+<rect x="652" y="534" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="664" y="557" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">rules.ts</text>
+<text x="664" y="575" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">pure, tested</text>
+<rect x="776" y="534" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="788" y="557" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">paypal.ts</text>
+<text x="788" y="575" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">fetch, no SDK</text>
+<rect x="900" y="534" width="112" height="54" rx="12" fill="#2c2c2e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="912" y="557" font-size="12.5" font-weight="650" fill="#f5f5f7" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">store.ts</text>
+<text x="912" y="575" font-size="11" font-weight="400" fill="#c7c7cc" text-anchor="start">JSON per person</text>
+<rect x="652" y="632" width="360" height="90" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
+<text x="668" y="656" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">Railway volume</text>
+<text x="668" y="676" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">state.json · workspaces/&lt;id&gt;.json · push.json</text>
+<text x="668" y="694" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">people.json · businesses.json · chats/&lt;pair&gt;.json</text>
+<text x="668" y="712" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">JSON, written atomically: a .tmp, then rename</text>
+<line x1="956" y1="592" x2="956" y2="628" stroke="#8e8e93" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#s)"/>
 <rect x="1072" y="140" width="216" height="162" rx="14" fill="#1c1c1e" stroke="#0A84FF66" stroke-width="1"/>
 <circle cx="1091" cy="160" r="5" fill="#0A84FF"/>
 <text x="1102" y="164" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">PayPal REST, sandbox</text>
 <text x="1088" y="184" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Orders v2: checkout, capture</text>
 <text x="1088" y="202" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Vault v3: saved PayPal</text>
-<text x="1088" y="220" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Payouts v1: billers, friends</text>
+<text x="1088" y="220" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Payouts v1: billers, friends, Safes</text>
 <text x="1088" y="238" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Invoicing v2: asks, reminders</text>
-<text x="1088" y="256" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Refunds: skipped payments</text>
+<text x="1088" y="256" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Refunds: skipped, Safes</text>
 <text x="1088" y="274" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Webhooks, signature-checked</text>
 <text x="1088" y="292" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Reporting, Catalog, Plans</text>
 <rect x="1072" y="316" width="216" height="90" rx="14" fill="#1c1c1e" stroke="#A78BFA66" stroke-width="1"/>
 <circle cx="1091" cy="336" r="5" fill="#A78BFA"/>
 <text x="1102" y="340" font-size="14" font-weight="650" fill="#f5f5f7" text-anchor="start">AI model, OpenRouter</text>
-<text x="1088" y="360" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Vision + JSON: Lens, Scout</text>
+<text x="1088" y="360" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Vision + JSON: Lens, Scout, Safe</text>
 <text x="1088" y="378" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Tool calls: Ask Flick</text>
 <text x="1088" y="396" font-size="12" font-weight="400" fill="#c7c7cc" text-anchor="start">Responses API: Studio</text>
 <rect x="1072" y="420" width="216" height="54" rx="14" fill="#1c1c1e" stroke="#3a3a3c" stroke-width="1"/>
@@ -147,5 +151,5 @@
 <rect x="1017" y="279" width="50" height="14" fill="#0b0b0d"/>
 <text x="1042" y="290" font-size="10.5" font-weight="400" fill="#8e8e93" text-anchor="middle">webhooks</text>
 <path d="M1180 632 V746 H152 V530" fill="none" stroke="#8e8e93" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#a)"/>
-<text x="660" y="768" font-size="12" font-weight="400" fill="#8e8e93" text-anchor="middle">Web Push to the installed app: a friend asked you for money, the week needs approval, a payment failed</text>
+<text x="660" y="820" font-size="12" font-weight="400" fill="#8e8e93" text-anchor="middle">Web Push to the installed app: a friend asked you for money, the week needs approval, a payment failed</text>
 </svg>

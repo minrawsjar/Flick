@@ -23,10 +23,11 @@ const links = [
   ["/scout", "Scout"],
   ["/split", "Split"],
   ["/nudge", "Nudge"],
+  ["/safe", "Safe"],
   ["/friends", "Friends"],
 ] as const;
 
-const people = ["/chat", "/split", "/nudge", "/friends"];
+const people = ["/chat", "/split", "/nudge", "/safe", "/friends"];
 const week = ["/autopilot", "/scout"];
 
 function Links({ className = "" }: { className?: string }) {
@@ -97,7 +98,7 @@ export function Nav({ app = false }: { app?: boolean }) {
       </nav>
       {/* On phones the one-pager's links get their own row, which scrolls sideways if it must. */}
       {!app && <Links className="flex overflow-x-auto px-3 pb-2 lg:hidden" />}
-      {app && <Switch paths={people} labels={["Chat", "Split", "Nudge", "Friends"]} />}
+      {app && <Switch paths={people} labels={["Chat", "Split", "Nudge", "Safe", "Friends"]} />}
       {app && <Switch paths={week} labels={["Payments", "Groceries"]} />}
     </header>
   );
@@ -164,7 +165,7 @@ function useWaiting() {
 }
 
 /**
- * Pages that share a tab, switched under the bar: Chat, Split, Nudge and Friends (People); Autopilot's
+ * Pages that share a tab, switched under the bar: Chat, Split, Nudge, Safe and Friends (People); Autopilot's
  * payments and Scout's groceries (Week).
  */
 function Switch({ paths, labels }: { paths: string[]; labels: string[] }) {

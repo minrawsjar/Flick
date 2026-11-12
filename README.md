@@ -17,7 +17,8 @@
 receipt, a price tag or a tip jar, or share it an e-bill, and Lens reads it. Flick a finger at the
 front camera and it's paid from your saved PayPal. Autopilot learns what you pay and runs each week
 on one approval; Splitter and Flick Chat get friends to pay you back; Scout buys your usual
-groceries where they're cheapest; and Ask Flick plans across all of them, typed or spoken.**
+groceries where they're cheapest; Safe keeps money given for one thing spent on that thing; and Ask
+Flick plans across all of them, typed or spoken.**
 
 [Open Flick](https://www.flickit.site) · [Install it](https://www.flickit.site/install) · [Architecture](#architecture) · [How the money moves](#how-the-money-moves) · [Partner evidence](partner-docs/) · [Run it](#run-and-verify)
 
@@ -41,6 +42,7 @@ The AI part of most money apps is a chat box beside the same forms.
 | **The same payments every week** | Blind autopay, or a chore each time. | Autopilot plans the week only from what it has seen, flags anything unusual, and takes one approval for the week, or pays by itself under a cap. |
 | **Getting paid back** | Maths on a receipt, then chasing people. | Splitter works out shares to the cent. Friends on Flick pay in Flick Chat with a flick, or by themselves under a limit; anyone else gets a PayPal invoice, and Nudge reminds them. |
 | **Groceries** | Prices move every week, store to store. | Scout learns your usuals, prices them at every store, sees prices coming, and buys the basket in one checkout. |
+| **Money for one thing** | You send money for chocolates, or school books, and it's spent on anything. A receipt proves nothing: it could be old, edited or already used. | Safe holds it. The friend snaps the receipt; only the lines for that purpose come out, each receipt only once, and anything doubtful waits for you. What's left is refunded to you. |
 | **Saying yes** | A password and a redirect for every payment. | One finger flicked up at the front camera, read on the phone. Signed in, it charges your saved PayPal with no page. |
 
 **Our position:** AI reads and proposes, rules check, a person approves, and PayPal moves the money.
@@ -93,10 +95,10 @@ a photo, PDF or e-mail of a bill → Lens reads it (vision model, strict JSON sc
 | **Client** | A phone app without an app store. | Next.js 16 pages as an installable PWA: a manifest with shortcuts and a share target (photos, PDFs, an e-mail's text), a service worker per build (offline pages, shared bills, Web Push), and the flick gesture from front-camera frame differencing. |
 | **Edge** | The browser never holds a secret or calls another origin. | Vercel. [`proxy.ts`](frontend/proxy.ts) gives each new browser a random workspace id in an HttpOnly cookie; `/api/*` is rewritten to the backend, so it's same-origin with no CORS; server components fetch with the cookie. Backend types come in as type-only imports. |
 | **API** | Many people, one process, no payment twice. | Node 22 running TypeScript directly (type stripping): no build, zero runtime dependencies. One route table; `AsyncLocalStorage` runs each request in its workspace; each workspace's writes run one at a time. Typed JSON errors. |
-| **Agents** | AI that can't move money on its own. | Lens, Autopilot, Splitter, Nudge, Scout, Flick Chat and Ask Flick, over pure, tested rules ([`rules.ts`](backend/src/rules.ts), [`scout-rules.ts`](backend/src/scout-rules.ts)). Model output is untrusted until checked. |
+| **Agents** | AI that can't move money on its own. | Lens, Autopilot, Splitter, Nudge, Scout, Safe, Flick Chat and Ask Flick, over pure, tested rules ([`rules.ts`](backend/src/rules.ts), [`scout-rules.ts`](backend/src/scout-rules.ts), [`safe-rules.ts`](backend/src/safe-rules.ts)). Model output is untrusted until checked. |
 | **Money** | Every payment is a real PayPal call, safe to retry. | [`paypal.ts`](backend/src/paypal.ts): plain `fetch`, OAuth client credentials cached until a minute before expiry, a `PayPal-Request-Id` on every write, retries with backoff on 401, 429 and 5xx only for writes that carry one. Orders v2, Vault v3, Payouts v1, Invoicing v2, refunds, verified webhooks. |
 | **Identity** | Signing in without a password of Flick's own. | PayPal's vault is the login: a setup token approved on PayPal's page proves the account, and the workspace id is an HMAC of PayPal's payer id. |
-| **Storage** | Simple and crash-safe at a hackathon's scale. | A JSON file per workspace, plus shared `people.json`, `businesses.json`, `chats/<pair>.json` and `push.json`, on a Railway volume, each written atomically (a `.tmp`, then rename). |
+| **Storage** | Simple and crash-safe at a hackathon's scale. | A JSON file per workspace, plus shared `people.json`, `businesses.json`, `chats/<pair>.json` (with their Safes), `receipts.json` and `push.json`, on a Railway volume, each written atomically (a `.tmp`, then rename). |
 | **Notifications** | Tell people what needs them, without a library. | Web Push with VAPID (RFC 8292) and aes128gcm encryption (RFC 8291, tested against the RFC's own example); in-app banners and unread counts from a 5-second poll. |
 
 ### A request, end to end
@@ -176,7 +178,7 @@ sequenceDiagram
 ## The agents
 
 Each agent is a module over the same workspace. Their colours and faces are the app's: Lens cyan,
-Autopilot green, Splitter yellow, Nudge pink, Scout orange, Ask Flick violet. The working pages show
+Autopilot green, Splitter yellow, Nudge pink, Scout orange, Safe blue, Ask Flick violet. The working pages show
 only your own things, or an empty state that says how to start; the one-pager at `/` is the demo.
 
 ### Lens
@@ -237,6 +239,21 @@ flowchart LR
 - **Reads a photo** of a shelf, a fridge, a cart or a list: every product and any shelf price ("Here $9.49: $2.20 less at BulkBox").
 - **Buys** in one checkout, priced on the server, never by the browser (up to $500), then pays the store. Real online offers come from [Channel3](https://channel3.ai)'s product search. The stores are sandbox stores, like PayPal's sandbox accounts: their prices are generated each week from real-world trends.
 
+### Safe
+
+[`safe.ts`](backend/src/safe.ts), rules in [`safe-rules.ts`](backend/src/safe-rules.ts) · `/safe`, and in Flick Chat
+
+Money given for one purpose, spent only on it. You give a friend on Flick "$20 for chocolates" in
+Flick Chat: a flick charges your saved PayPal into Flick's account, and it waits there, in a Safe in
+both your chats, for as long as you chose (14 days unless you say).
+
+- **Spending it:** your friend snaps the receipt, a PDF or the text of one. Safe's reader (one AI call, a strict schema) reports the shop, the date, every line and whether it's for the purpose, and anything that looks fake: a photo of a screen, edited digits, a template.
+- **The rules decide, not the model.** Only the lines for the purpose count, with their share of the tax and tip. A receipt dated before the Safe, in the future, with nothing for the purpose, or used before is turned down. Used means anywhere on Flick: by shop, date and total, or the very same file, kept in `receipts.json`.
+- **Doubts go to you:** no date, lines that don't add up to the total, or any sign of a fake pays nothing and asks you, with the photo. So do the lines that aren't for the purpose ("Phone charger isn't for chocolates"): *Allow* or *Don't allow*, in the chat or from Today.
+- **Paid with PayPal:** a receipt is paid already, so a Payout pays your friend back; a bill is paid to the shop's PayPal (a business on Flick, or a PayPal email on the bill). A bill from a shop that isn't on PayPal proves nothing was bought, so it waits for you. Never more than is left.
+- **The rest comes back:** close it (either of you) or let it end, and what's left is refunded from your original payment.
+- Ask Flick sees every Safe and can propose giving one or closing it, as a card you approve.
+
 ### Flick Chat
 
 [`chat.ts`](backend/src/chat.ts) · `/chat`
@@ -288,7 +305,7 @@ flowchart LR
 ```
 
 - **Two reads** run on their own: your week, scans with their items, friends, who owes what and usual amounts per payee; and your groceries priced at every store.
-- **Nine actions** come back as cards and run only once you approve: pay a scan, approve the week, buy groceries, change or skip a payment, move the week on a day, split a bill, remind a friend, add a friend. Each card shows which agent it belongs to; afterwards it stays as a receipt, ✓ or ✗ a line, with its *Approve on PayPal* button inside. Money still goes through Flick to pay or PayPal's page.
+- **Eleven actions** come back as cards and run only once you approve: pay a scan, approve the week, buy groceries, change or skip a payment, move the week on a day, split a bill, remind a friend, add a friend, give a friend money in a Safe, close a Safe. Each card shows which agent it belongs to; afterwards it stays as a receipt, ✓ or ✗ a line, with its *Approve on PayPal* button inside. Money still goes through Flick to pay or PayPal's page.
 - Up to six model rounds a turn. The conversation lives in the browser and comes back with each request, in OpenAI's chat format.
 - **Talk to Flick:** a mic button using the browser's own speech recognition (`SpeechRecognition`, `webkitSpeechRecognition`); your words fill the input as you speak and send when you stop. *Read replies aloud* uses `speechSynthesis`. Both hide where the browser can't, and a denied microphone says how to allow it.
 
@@ -354,6 +371,7 @@ on to whoever is owed with a [Payout](https://developer.paypal.com/docs/api/paym
 | Scout's basket | You, on PayPal's page or with a flick | An order priced by the server → capture → payout to the store | The payout batch is the order's |
 | A share for someone not on Flick | The friend, on PayPal's invoice | `POST /v2/invoicing/invoices` → `…/send`; `…/remind` | The invoice's request id is the request's |
 | A request in Flick Chat | The payer's flick, or nobody under their limit | A vault charge into Flick's account → a payout to the asker's PayPal | Marked paying first; the payout batch is the message's |
+| A Safe | Your flick to give it; the rules for each receipt; you, for anything doubtful | A vault charge into Flick's account → a payout per receipt (back to your friend, or to a bill's shop) → a partial refund of what's left | Taken out of the Safe before each payout; a payout batch per receipt; one refund per Safe; each receipt used once, anywhere |
 | A payment skipped after approval | You | `POST /v2/payments/captures/{id}/refund` | The refund's request id is the payment's |
 
 ---
@@ -401,6 +419,7 @@ many models, with fallbacks when the first is rate-limited or down. The key neve
 |---|---|---|---|
 | **Lens** | A photo, a PDF or a bill's text | Strict JSON: kind, payee, amount, currency, due date, items | `checkLens` drops malformed values; unreadable amounts are 0 and can't be paid; who's paid is chosen by rules, not the model |
 | **Scout** | A photo of a shelf, fridge, cart or list | Products, quantities, shelf prices | Matched to Scout's catalog; prices come from the server |
+| **Safe** | A receipt, bill or PDF, and the Safe's purpose | Strict JSON: shop, date, lines with whether each is for the purpose, signs of a fake | `checkProof` cleans it; `judge()` decides from the lines, the date, the totals and receipts used before; the model never sets an amount or a payee |
 | **Splitter** | A sentence about who had what | Who had each item | Shares are worked out by `shares()`, not the model |
 | **Nudge** | A request and a tone | A reminder, 600 characters at most | Sent only when you press Send |
 | **Ask Flick** | Your question, with tools | Reads, proposed actions, a reply | Actions wait for your approval; payments go through Flick to pay or PayPal |
@@ -435,7 +454,7 @@ The design language (bot faces, phone frame, colours and motion) is ported from
 | **App** | [www.flickit.site](https://www.flickit.site), on Vercel; [install it](https://www.flickit.site/install) on a phone |
 | **Backend** | [flick-backend-production.up.railway.app/api/health](https://flick-backend-production.up.railway.app/api/health), on Railway with a volume for the workspaces |
 | **Real payments** | The end-to-end test pays on the sandbox: a bill approved on PayPal's real page, a bill paid with a flick from a saved PayPal, a Flick Chat request paid with a flick, and one paid by itself (merchant-initiated), each paid out |
-| **Tests** | 49 backend unit tests, 8 frontend unit tests, 77 API steps against the real sandbox and model, and 74 steps of a browser run through every page and flow, real payments included (below) |
+| **Tests** | 63 backend unit tests, 8 frontend unit tests, 90 API steps against the real sandbox and model, and 78 steps of a browser run through every page and flow, real payments included (below) |
 
 ---
 
@@ -482,6 +501,10 @@ Flick are paid into Flick's account and marked paid, rather than forwarded.
 | `POST /api/nudge/draft` `{ debtId, tone }`, `/send` `{ debtId, text }` | A reminder in a tone; sent through PayPal or into the chat |
 | `POST /api/debts/refresh` | Asks PayPal which invoices are paid |
 | `GET /api/scout`, `POST /api/scout/quote`, `/read`, `/online`, `/buy` | Scout: the week's prices, quotes, reading a photo, live online prices, buying |
+| `GET /api/safes` | Every Safe you gave or were given |
+| `POST /api/safe` `{ with, amount, purpose, days?, note? }` | Gives a friend on Flick money for one purpose, from your saved PayPal |
+| `POST /api/safe/spend` `{ with, safe, image, photo? }` or `{ pdf }` or `{ text }` | Spends from a Safe given to you: Safe reads the receipt, the rules decide, PayPal pays |
+| `POST /api/safe/decide` `{ with, safe, spend, allow }`, `/safe/close` `{ with, safe }` | The giver allows what a receipt asked for, or not; closing refunds what's left |
 | `GET /api/inbox`, `POST /api/inbox/act` `{ id }` | What needs you, and doing it |
 | `GET /api/push/key`, `POST /api/push/subscribe`, `/unsubscribe` | Notifications for the installed app |
 | `POST /api/agent` `{ messages }`, `/agent/decide` `{ messages, decisions }` | Ask Flick, and running the actions you approved |
@@ -509,6 +532,7 @@ backend/src/split.ts         Splitter
 backend/src/nudge.ts         Nudge
 backend/src/scout.ts         Scout, with scout-rules.ts (tested)
 backend/src/chat.ts          Flick Chat: people.json, chats/, paying each other
+backend/src/safe.ts          Safe: money for one purpose, with safe-rules.ts (tested)
 backend/src/agent.ts         Ask Flick: tools, and plan-then-approve
 backend/src/business.ts      businesses on Flick, paid at their own PayPal
 backend/src/webhooks.ts      PayPal webhooks: verified, routed, applied once
@@ -517,7 +541,7 @@ backend/src/inbox.ts         what needs you next; push.ts sends it (RFC 8291, te
 backend/src/store.ts         a JSON workspace per person; seed.ts the empty start and the demo
 backend/scripts/             check, api and loop: the tests that use the real sandbox
 frontend/app/(app)/          the working pages: Today, Chat, Ask Flick, Lens, Autopilot, Scout,
-                             Split, Nudge, Friends, Business, Profile
+                             Split, Nudge, Safe, Friends, Business, Profile
 frontend/app/_landing/       the one-pager's interactive sections, and the agents' screens
 frontend/app/dashboard/      Money Studio (AG Studio)
 frontend/components/         flick-confirm (Flick to pay), chat-alerts, nav, pwa, the themed AG Grid
@@ -573,11 +597,11 @@ To try Flick Chat or a business, make a second sandbox personal or business acco
 
 | Command | Where | What it proves |
 |---|---|---|
-| `npm test` | `backend/` | The rules money depends on, Scout's, businesses' names, webhooks (each event, routed to the right workspace), Web Push encryption against RFC 8291 |
+| `npm test` | `backend/` | The rules money depends on, Scout's, Safe's (what a receipt gets, and what's refused), businesses' names, webhooks (each event, routed to the right workspace), Web Push encryption against RFC 8291 |
 | `npm test` | `frontend/` | The flick gesture: flicks, and what isn't one |
 | `npm run check` | `backend/` | Each PayPal sandbox feature and the AI are switched on |
-| `npm run api` | `backend/` | Every route, used right and wrong, on its own backend: real sandbox orders, invoices and reminders, real model reads of photos, PDFs and e-mails, Flick Chat between two people, businesses, forged webhooks turned away |
-| `npm run e2e` | `frontend/` | The built site in headless Chrome: every page on phone and desktop, light and dark, with no console errors, failed requests or sideways scroll; every flow clicked through; bills shared through the service worker; and real payments on PayPal's page, with a flick, and by themselves |
+| `npm run api` | `backend/` | Every route, used right and wrong, on its own backend: real sandbox orders, invoices and reminders, real model reads of photos, PDFs and e-mails, Flick Chat between two people, Safe (real receipts read, the chocolates paid out, the charger asked, a reused, old or unrelated receipt refused), businesses, forged webhooks turned away |
+| `npm run e2e` | `frontend/` | The built site in headless Chrome: every page on phone and desktop, light and dark, with no console errors, failed requests or sideways scroll; every flow clicked through; bills shared through the service worker; and real payments on PayPal's page, with a flick, and by themselves, and a Safe given with a flick, spent, and refunded |
 | `npm run loop` | `backend/` | The whole money loop on the sandbox, through PayPal's real approval page |
 
 Each end-to-end script starts its own backend on a throwaway state folder, so your data is untouched.
@@ -586,7 +610,7 @@ Each end-to-end script starts its own backend on a throwaway state folder, so yo
 
 | | Built |
 |---|---|
-| [Swarnim Raj](https://github.com/minrawsjar) | Flick's architecture, backend and frontend, the PayPal integration, Flick to pay, Flick Chat, Scout, businesses, the tests |
+| [Swarnim Raj](https://github.com/minrawsjar) | Flick's architecture, backend and frontend, the PayPal integration, Flick to pay, Flick Chat, Scout, Safe, businesses, the tests |
 | [Manya Madaan](https://github.com/manyaaaa28) | Autopilot's unusual-payment flags, monthly bills learned from history, Lens's recent scans |
 | [Umang](https://github.com/umangjj) | PayPal webhooks, talking to Ask Flick, and its approval cards |
 | [Utkarsh](https://github.com/Utkarsh-sharma131) | Money Studio's Flick widgets, and Ask Flick in its corner |

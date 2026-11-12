@@ -5,6 +5,7 @@ import { HttpError, need } from './http.ts';
 import * as lens from './lens.ts';
 import { cents, DAYS, usd, ymd, type Agent } from './model.ts';
 import * as nudge from './nudge.ts';
+import * as safe from './safe.ts';
 import * as scout from './scout.ts';
 import { shares, unapproved, type SplitItem } from './rules.ts';
 import { split } from './split.ts';
@@ -23,7 +24,8 @@ const PROMPT = () => `You are Flick, a payments assistant inside the Flick app. 
 Flick's agents: Lens reads photos of bills, receipts, price tags and tip jars; Autopilot plans the week's
 payments and pays each on its day after one PayPal approval (or by itself, with PayPal saved for it);
 Splitter splits receipts and sends friends PayPal invoices; Nudge reminds friends who owe money; Scout
-knows the groceries the person buys again and again, prices them at every store and buys them.
+knows the groceries the person buys again and again, prices them at every store and buys them; Safe
+holds money given to a friend on Flick for one purpose, and lets it out only against a receipt for it.
 
 How you work:
 - Call get_overview first, and again after changes, to see the person's real data. Never invent payees,
@@ -35,7 +37,11 @@ How you work:
 - For groceries, call get_groceries: buy at the cheapest store that has everything, unless the person
   names one, and say what it saves against where they usually shop and what's getting dearer.
 - For a split, use the receipt's own items, prices, tax and tip, and the people the person names.
-- Point out anything unusual: a payment well above its usual amount, a request open a long time.
+- A Safe (send_safe) is for money given for a purpose ("for school books"): the friend must be on Flick,
+  it's paid from the person's saved PayPal at once, and the friend spends it by snapping receipts in Flick
+  Chat. What's left goes back when it's closed (close_safe) or ends.
+- Point out anything unusual: a payment well above its usual amount, a request open a long time, a Safe's
+  receipt waiting for the person to allow.
 - Answer briefly and plainly, in dollars. No markdown tables or headings.`;
 
 // --- What the agent can see ----------------------------------------------------------------
@@ -64,6 +70,18 @@ function overview() {
       due: s.due,
       status: s.status,
       ...(s.kind === 'receipt' && { items: s.items, tax: s.tax, tip: s.tip }),
+    })),
+    safes: safe.summary().map(({ safe: s, peer, mine, asking }) => ({
+      safe_id: s.id,
+      friend_email: peer.email,
+      [mine ? 'you_gave' : 'given_to_you_by']: peer.name,
+      for: s.purpose,
+      amount: s.amount,
+      left: s.left,
+      status: s.status,
+      ends: s.expires.slice(0, 10),
+      receipts: s.spends.map((r) => ({ at: r.merchant, paid: r.paid, ...(r.refused && { refused: r.refused }), ...(r.ask && { asked: r.ask.amount, why: r.ask.why, ask_status: r.ask.status }) })),
+      ...(mine && asking.length && { waiting_for_you: asking.map((r) => `${usd(r.ask!.amount)} for ${r.merchant}: ${r.ask!.why}`) }),
     })),
     recent_activity: state.activity.slice(0, 8).map((a) => `${a.at.slice(0, 10)} ${a.agent}: ${a.text}`),
   };
@@ -203,6 +221,27 @@ const ACTIONS: Record<string, Action> = {
       return { result: { sent: text } };
     },
   },
+  send_safe: {
+    agent: 'safe',
+    summary: ({ friend_email, amount, purpose, days }) =>
+      `Give ${safe.nameOf(String(friend_email))} ${usd(Number(amount) || 0)} for ${String(purpose)}, in a Safe for ${Number(days) || 14} days, from your saved PayPal`,
+    run: async ({ friend_email, amount, purpose, days }) => {
+      const s = await safe.send({ with: friend_email, amount, purpose, ...(days !== undefined && { days }) });
+      return { result: { safe_id: s.id, given: s.amount, for: s.purpose, ends: s.expires.slice(0, 10) }, link: { label: 'Open the Safe in Flick Chat', url: `/chat?with=${encodeURIComponent(s.to)}` } };
+    },
+  },
+  close_safe: {
+    agent: 'safe',
+    summary: ({ safe_id }) => {
+      const found = safe.summary().find((x) => x.safe.id === safe_id) ?? fail(`No Safe ${String(safe_id)}`);
+      return `Close the Safe for ${found.safe.purpose}: ${usd(found.safe.left)} goes back to ${found.mine ? 'your' : `${found.peer.name}'s`} PayPal`;
+    },
+    run: async ({ safe_id }) => {
+      const found = safe.summary().find((x) => x.safe.id === safe_id) ?? fail(`No Safe ${String(safe_id)}`);
+      const { returned } = await safe.close({ with: found.peer.email, safe: safe_id });
+      return { result: { closed: true, returned } };
+    },
+  },
   add_friend: {
     agent: 'splitter',
     summary: ({ name, email }) => `Add ${String(name)} as a friend, PayPal ${String(email)}`,
@@ -238,6 +277,20 @@ const TOOLS: Tool[] = [
   ),
   fn('remind_friend', 'Send a friend who owes money a reminder, written in the chosen tone, through PayPal.', object({ request_id: { type: 'string' }, tone: { type: 'string', enum: [...nudge.TONES] } }, ['request_id', 'tone'])),
   fn('add_friend', 'Add a friend by the email of their PayPal account.', object({ name: { type: 'string' }, email: { type: 'string' } }, ['name', 'email'])),
+  fn(
+    'send_safe',
+    "Give a friend on Flick money for one purpose, in a Safe: paid now from the person's saved PayPal, spent only against receipts for that purpose.",
+    object(
+      {
+        friend_email: { type: 'string', description: "The friend's PayPal email, from get_overview." },
+        amount: { type: 'number', description: 'Dollars, 1 to 500.' },
+        purpose: { type: 'string', description: 'What it is for, in a few words: "chocolates", "school books".' },
+        days: { type: 'integer', description: 'How long it lasts, 1 to 60 days; 14 if not said.' },
+      },
+      ['friend_email', 'amount', 'purpose'],
+    ),
+  ),
+  fn('close_safe', "Close a Safe: what's left goes back to whoever gave it.", object({ safe_id: { type: 'string' } }, ['safe_id'])),
   fn('get_groceries', "Scout's view: the person's usual groceries (what, how often, what they paid), the next shop priced at every store with delivery, and which prices are rising.", object({})),
   fn(
     'buy_groceries',

@@ -1,13 +1,14 @@
 "use client";
 
-import type { ChatMessage, ChatPeer, Debt, Scan } from "@backend/model";
-import { ArrowLeft, ArrowUpRight, BellRing, Camera, CircleCheck, DollarSign, LoaderCircle, SendHorizontal, UserPlus, X, Zap } from "lucide-react";
+import type { ChatMessage, ChatPeer, Debt, Safe, Scan } from "@backend/model";
+import { ArrowLeft, ArrowUpRight, BellRing, Camera, CircleCheck, DollarSign, LoaderCircle, LockKeyhole, SendHorizontal, UserPlus, X, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Bot, type BotColor, type BotShape } from "@/components/bot";
 import { checkChats } from "@/components/chat-alerts";
 import { Notify } from "@/components/pwa";
+import { GiveSafe, SafeCard, SpendCard } from "@/components/safe";
 import { Logo } from "@/components/ui";
 import { usd } from "@/lib/format";
 import { act, flickToPay, useLive } from "@/lib/live";
@@ -16,11 +17,12 @@ import { forLens } from "@/app/_landing/lens";
 // Flick Chat: you and your friends, signed in with PayPal. Talk, ask for money (with a bill's photo,
 // read by Lens), and pay a request with a flick, from the PayPal you signed in with. A friend can
 // let your requests pay by themselves, up to an amount. Friends not on Flick yet still get requests,
-// as PayPal invoices by email. The backend is backend/src/chat.ts; the page polls it while open.
+// as PayPal invoices by email. Money given for one purpose waits in a Safe, spent against receipts
+// (components/safe.tsx). The backend is backend/src/chat.ts and safe.ts; the page polls it while open.
 
 type Me = { email: string; name: string };
 type Chat = { peer: ChatPeer; last?: ChatMessage; unread: number; youOwe: number; owedToYou: number };
-type Thread = { v: number; same?: true; me: Me; peer: ChatPeer; messages: ChatMessage[]; autopay: { mine: number; theirs: number } };
+type Thread = { v: number; same?: true; me: Me; peer: ChatPeer; messages: ChatMessage[]; autopay: { mine: number; theirs: number }; safes: Safe[] };
 
 const CAPS = [0, 10, 25, 50, 100];
 
@@ -53,6 +55,7 @@ function preview(m: ChatMessage, me: string, peer: ChatPeer) {
   if (m.kind === "request") return `${who} asked for ${usd(m.amount ?? 0)}: ${m.what}`;
   if (m.kind === "paid") return `${who} paid ${usd(m.amount ?? 0)}${m.auto ? ", by itself" : ""}`;
   if (m.kind === "reminder") return `Reminder: ${m.text}`;
+  if (m.kind === "safe") return m.spendId ? `${who} spent from the Safe for ${m.what}` : `${who} gave ${usd(m.amount ?? 0)} for ${m.what}, in a Safe`;
   return m.from === me && m.kind === "text" ? `You: ${m.text}` : (m.text ?? "");
 }
 
@@ -233,7 +236,7 @@ function Conversation({ email, me, back, changed }: { email: string; me: Me; bac
       </div>
     );
   }
-  const { peer, messages, autopay } = thread;
+  const { peer, messages, autopay, safes } = thread;
 
   return (
     <>
@@ -258,7 +261,7 @@ function Conversation({ email, me, back, changed }: { email: string; me: Me; bac
         )}
         {!peer.onFlick && <NotOnFlick peer={peer} />}
         {messages.map((m) => (
-          <Line key={m.id} m={m} me={me.email} peer={peer} run={run} />
+          <Line key={m.id} m={m} me={me.email} peer={peer} safes={safes} run={run} />
         ))}
         {peer.onFlick && !messages.length && <p className="pt-8 text-center text-[13px] text-secondary">Say hi, or ask {peer.name} for money: they can pay it with a flick.</p>}
       </div>
@@ -348,8 +351,18 @@ function Invoice({ debt }: { debt: Debt }) {
   );
 }
 
-function Line({ m, me, peer, run }: { m: ChatMessage; me: string; peer: ChatPeer; run: (work: () => Promise<unknown>) => Promise<void> }) {
+function Line({ m, me, peer, safes, run }: { m: ChatMessage; me: string; peer: ChatPeer; safes: Safe[]; run: (work: () => Promise<unknown>) => Promise<void> }) {
   const mine = m.from === me;
+  if (m.kind === "safe") {
+    const safe = safes.find((s) => s.id === m.safeId);
+    const spend = m.spendId ? safe?.spends.find((s) => s.id === m.spendId) : undefined;
+    if (!safe || (m.spendId && !spend)) return null;
+    return (
+      <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+        {spend ? <SpendCard safe={safe} spend={spend} me={me} peer={peer} run={run} /> : <SafeCard safe={safe} me={me} peer={peer} run={run} />}
+      </div>
+    );
+  }
   if (m.kind === "paid") {
     return (
       <p className="mx-auto flex w-fit items-center gap-1.5 rounded-full bg-paid/15 px-3 py-1 text-[12px] text-paid">
@@ -452,6 +465,7 @@ type Asking = { amount: string; what: string; photo?: string; total?: number; no
 function Composer({ peer, run }: { peer: ChatPeer; run: (work: () => Promise<unknown>) => Promise<void> }) {
   const [text, setText] = useState("");
   const [asking, setAsking] = useState<Asking | null>(null);
+  const [giving, setGiving] = useState(false);
   const [reading, setReading] = useState(false);
   const [sending, setSending] = useState(false);
   const file = useRef<HTMLInputElement>(null);
@@ -506,6 +520,7 @@ function Composer({ peer, run }: { peer: ChatPeer; run: (work: () => Promise<unk
 
   return (
     <div className="border-t border-separator/60 p-2.5 sm:p-3">
+      {giving && <GiveSafe peer={peer} run={run} close={() => setGiving(false)} />}
       {asking && (
         <form
           onSubmit={(e) => {
@@ -588,13 +603,25 @@ function Composer({ peer, run }: { peer: ChatPeer; run: (work: () => Promise<unk
         </button>
         <button
           type="button"
-          onClick={() => setAsking(asking ?? { amount: "", what: "" })}
+          onClick={() => (setAsking(asking ?? { amount: "", what: "" }), setGiving(false))}
           aria-label="Ask for money"
           title="Ask for money"
           className="pressable flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-fill"
         >
           <DollarSign size={18} />
         </button>
+        {peer.onFlick && (
+          <button
+            type="button"
+            onClick={() => (setGiving((g) => !g), setAsking(null))}
+            aria-label="Give money for one thing, in a Safe"
+            aria-expanded={giving}
+            title="Give money for one thing: it waits in a Safe"
+            className={`pressable flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full ${giving ? "bg-ink text-on-ink" : "bg-fill"}`}
+          >
+            <LockKeyhole size={17} />
+          </button>
+        )}
         {peer.onFlick ? (
           <form
             onSubmit={(e) => {

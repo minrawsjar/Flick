@@ -11,6 +11,7 @@ export const agents = {
   splitter: { name: "Splitter", color: "yellow", shape: "squircle" },
   nudge: { name: "Nudge", color: "pink", shape: "capsule" },
   scout: { name: "Scout", color: "orange", shape: "circle" },
+  safe: { name: "Safe", color: "blue", shape: "hexagon" },
 } as const satisfies Record<string, Face & { name: string }>;
 
 export type Friend = Face & { id: string; name: string };

@@ -257,6 +257,7 @@ const pages = [
   ["/chat", "Flick Chat"],
   ["/business", "Get paid when Flick pays your bills."],
   ["/nudge", "Get paid back."],
+  ["/safe", "Money for one thing."],
   ["/friends", "Your people, by their PayPal."],
   ["/ask", "Say what you need."],
   ["/install", "Flick, on your home screen."],
@@ -767,6 +768,48 @@ if (!email || !password) {
     await waitFor("document.body.innerText.includes('You paid $0.23 for Gum, by itself')", 15_000, "paid by itself, in the chat");
     check((await asMe("chat/allow", { with: ROBIN, cap: 0 })).mine === 0, "couldn't turn it off");
     return "paid $0.37 with a flick, and $0.23 by itself";
+  });
+  // Flick Safe (backend/src/safe.ts): this browser's real sandbox buyer gives Robin $1.00 for
+  // chocolates with a flick. Robin's receipt (read by the real AI) pays back only the chocolates; the
+  // gum waits for you, and you don't allow it; the same receipt again is refused; closing the Safe
+  // refunds what's left from your real payment.
+  await step("Flick Safe: $1.00 for chocolates with a flick; the receipt pays only the chocolates, once; closing refunds the rest", async () => {
+    const me = (await state()).profile.email;
+    const ROBIN = "robin.e2e@flick.example.com";
+    const robinWs = "e2e-robin-00000000001";
+    const robin = (path, body) =>
+      fetch(`http://localhost:${BACK}/api/${path}`, { method: body ? "POST" : "GET", headers: { cookie: `flick=${robinWs}`, ...(body && { "Content-Type": "application/json" }) }, body: body && JSON.stringify(body) }).then(async (r) => ({ status: r.status, json: await r.json() }));
+    const safeOf = async (id) => (await robin(`chat/thread?with=${encodeURIComponent(me)}`)).json.safes.find((s) => (id ? s.id === id : s.purpose === "chocolates" && s.status === "open"));
+
+    await open(`/chat?with=${encodeURIComponent(ROBIN)}`);
+    await click("Give money for one thing, in a Safe");
+    await fill('input[placeholder="20.00"]', "1.00");
+    await fill(`input[aria-label="What it's for"]`, "chocolates");
+    await click("Give $1.00 for chocolates");
+    await waitFor("document.querySelector('[role=dialog]')?.innerText.includes('To Robin, in a Safe')", 10_000, "the sheet giving Robin a Safe");
+    await tapToPay();
+    await waitFor("document.body.innerText.includes('Safe · for chocolates')", 30_000, "the Safe, in the chat");
+    problems.length = 0;
+    const safe = await safeOf();
+    check(safe?.left === 1 && safe.captureId, `no Safe in Robin's chat: ${JSON.stringify(safe)}`);
+
+    const receipt = `CORNER SWEETS\nRECEIPT\nDate: ${new Date().toISOString().slice(0, 10)}\nMilk chocolate bar 0.40\nChewing gum 0.30\nTOTAL 0.70\nPaid by card. Thank you!`;
+    const { json } = await robin("safe/spend", { with: me, safe: safe.id, text: receipt });
+    const spend = json.spend;
+    check(spend?.paid === 0.4 && spend.to?.email === ROBIN && spend.payout !== "failed", `the receipt: ${JSON.stringify(json).slice(0, 300)}`);
+    check(spend.ask?.status === "open" && spend.ask.amount === 0.3, `the gum: ${JSON.stringify(spend.ask)}`);
+    await waitFor("document.body.innerText.includes('Safe paid Robin back $0.40')", 15_000, "the receipt, in your chat");
+    await click("Don't allow");
+    await waitFor("document.body.innerText.includes('Not allowed: $0.30')", 15_000, "the gum, not allowed");
+    const again = (await robin("safe/spend", { with: me, safe: safe.id, text: receipt })).json.spend;
+    check(again?.refused?.includes("already used") && again.paid === 0, `the same receipt again: ${JSON.stringify(again).slice(0, 200)}`);
+
+    await click("Close it and get $0.60 back");
+    await waitFor("document.body.innerText.includes('$0.60 went back to your PayPal')", 30_000, "the rest, refunded");
+    problems.length = 0;
+    const closed = await safeOf(safe.id);
+    check(closed?.status === "closed" && closed.closed?.returned === 0.6, `closed: ${JSON.stringify(closed?.closed)}`);
+    return "gave $1.00; $0.40 back to Robin; $0.30 not allowed; the reused receipt refused; $0.60 refunded";
   });
   await step("Signing out: a new guest Flick; signing in again brings yours back", async () => {
     const mine = await session();

@@ -19,21 +19,22 @@ yes with a flick of a finger; PayPal moves the money.**
 
 > **Tracks:** Best Overall · Best Use of PayPal + AI · Best Use of Agentic Commerce · Most Creative · Most Impactful · Best Demo Delivery
 
-Flick is a payments app run by five AI agents. Lens reads a bill from a photo, a PDF or an e-mail.
+Flick is a payments app run by six AI agents. Lens reads a bill from a photo, a PDF or an e-mail.
 Autopilot runs the week's payments on one approval. Splitter and Flick Chat get friends to pay you
-back, and Nudge reminds them. Scout buys your usual groceries where they're cheapest. Ask Flick
-plans across all of them, typed or spoken. Every one of those ends in a real PayPal call on the
+back, and Nudge reminds them. Scout buys your usual groceries where they're cheapest. Safe holds money
+given for one purpose and lets it out only against a receipt for it. Ask Flick plans across all of
+them, typed or spoken. Every one of those ends in a real PayPal call on the
 sandbox: eight PayPal APIs, called with plain `fetch` from a backend with no dependencies.
 
 ## Why Flick Wins Each PayPal Prize
 
 | Prize | Why Flick |
 |---|---|
-| **Best Overall** | A complete product, not a proof of concept: installable on a phone, five agents and a chat, eight PayPal APIs, verified webhooks, and every flow tested with real sandbox payments. |
+| **Best Overall** | A complete product, not a proof of concept: installable on a phone, six agents and a chat, eight PayPal APIs, verified webhooks, and every flow tested with real sandbox payments. |
 | **Best Use of PayPal + AI** | AI and PayPal each do the part they're good at. A vision model turns a bill into strict JSON; rules check it; PayPal's Orders, Vault and Payouts pay the right account. AI never sets an amount or a payee. |
-| **Best Use of Agentic Commerce** | The agents act, within limits a person sets. Autopilot pays the week by itself under a weekly cap, with merchant-initiated Vault charges. Scout prices and buys a basket. Ask Flick plans across every agent, and each action waits for approval. |
+| **Best Use of Agentic Commerce** | The agents act, within limits a person sets. Autopilot pays the week by itself under a weekly cap, with merchant-initiated Vault charges. Scout prices and buys a basket. Safe holds money given for a purpose and pays out only against receipts for it, with the rules, not the model, deciding. Ask Flick plans across every agent, and each action waits for approval. |
 | **Most Creative** | Paying is a gesture: one finger flicked up at the front camera, detected on the phone, charges your saved PayPal. A bill names a business, and Flick pays that business's own PayPal. |
-| **Most Impactful** | It removes the typing from paying: retyping bills, chasing friends, watching grocery prices, remembering the same payments every week. It's built for households, flatmates and friends, and for the small businesses they pay. |
+| **Most Impactful** | It removes the typing from paying: retyping bills, chasing friends, watching grocery prices, remembering the same payments every week. Safe makes sure money sent for one thing (a child's school books, a parent's medicine) is spent on it, and catches a receipt used twice. It's built for households, flatmates and friends, and for the small businesses they pay. |
 | **Best Demo Delivery** | The live site needs no sign-up (each browser gets its own Flick), installs from a QR code, and the video shows each problem, then the agent that fixes it. |
 
 A project can win one PayPal prize and one sponsor prize. Flick's sponsor entries are
@@ -66,9 +67,9 @@ every call that moves money, so nothing is paid twice.
 |---|---|---|
 | **Orders v2** | `POST /v2/checkout/orders`, `…/{id}/capture` | Every checkout: bills, the week, baskets. A charge to a saved PayPal is an order with a `vault_id` |
 | **Vault v3** | `POST /v3/vault/setup-tokens`, `/payment-tokens`, `DELETE …/payment-tokens/{id}` | Signing in with PayPal, flicks that pay at once, Autopilot and Flick Chat paying by themselves |
-| **Payouts v1** | `POST /v1/payments/payouts` | Paying billers, businesses, stores and friends from Flick's account |
+| **Payouts v1** | `POST /v1/payments/payouts` | Paying billers, businesses, stores and friends from Flick's account; paying out a Safe's receipts |
 | **Invoicing v2** | `POST /v2/invoicing/invoices`, `…/send`, `…/remind`, `GET …/{id}`, list | Asking friends who aren't on Flick, PayPal's own reminders, and who has paid |
-| **Payments v2** | `POST /v2/payments/captures/{id}/refund` | A payment skipped after the week was approved |
+| **Payments v2** | `POST /v2/payments/captures/{id}/refund` | A payment skipped after the week was approved; what's left of a Safe, back to whoever gave it |
 | **Webhooks** | `POST /v1/notifications/verify-webhook-signature` | Checking each event really came from PayPal |
 | **Reporting v1** | `GET /v1/reporting/transactions`, `/balances` | Money Studio |
 | **Catalog and Billing** | `GET /v1/catalogs/products`, `GET /v1/billing/plans` | Money Studio |
@@ -82,8 +83,9 @@ every call that moves money, so nothing is paid twice.
 | **Scout** | Learns your usuals, prices them at every store, sees prices rising | Buying the basket | An order priced by the server, a capture, a Payout to the store |
 | **Splitter** | Works out who had what, to the cent | Sending the requests | An invoice to each friend not on Flick, or a request in Flick Chat |
 | **Nudge** | Drafts a reminder in the tone you pick | Sending it | PayPal's own invoice reminder |
+| **Safe** | Reads each receipt; pays out only the lines for the Safe's purpose; turns down a used, old or unrelated receipt | Giving it (a flick); anything doubtful, and lines that aren't for the purpose (the giver) | A Vault charge (payer-initiated), a Payout per receipt, a partial refund of what's left |
 | **Flick Chat** | Pays a friend's request under the limit you allowed them | Any other request | A Vault charge, then a Payout to the friend |
-| **Ask Flick** | Reads your week, bills, friends and groceries | Each of its nine actions, as a card | Through the agents above |
+| **Ask Flick** | Reads your week, bills, friends and groceries | Each of its eleven actions, as a card | Through the agents above |
 
 **What no agent ever does:** set an amount, choose who's paid, or move money without a person's
 yes or a limit that person set. Amounts come from rules on the server, never from the model or the
@@ -93,8 +95,8 @@ browser. Who's paid comes from your payees or a registered business, never from 
 
 **Technological implementation.** Eight PayPal APIs, both kinds of Vault charge (payer-initiated on a
 flick, merchant-initiated for Autopilot and Flick Chat), and webhooks that are verified with PayPal,
-routed to the right person's Flick with no cookie, and applied once. Proven by 49 backend and 8
-frontend unit tests, 77 API steps against the real sandbox and model, and 74 browser steps that pay
+routed to the right person's Flick with no cookie, and applied once. Proven by 63 backend and 8
+frontend unit tests, 90 API steps against the real sandbox and model, and 78 browser steps that pay
 on PayPal's real approval page, with a flick, and by themselves.
 
 **Design.** A whole product: it installs on a phone from a QR code, works phone-first in light and
@@ -131,6 +133,7 @@ up.
 | [`backend/src/autopilot.ts`](../backend/src/autopilot.ts) | One approval a week, a Payout batch each day, refunds |
 | [`backend/src/split.ts`](../backend/src/split.ts), [`nudge.ts`](../backend/src/nudge.ts) | Invoices to friends, and PayPal's own reminders |
 | [`backend/src/chat.ts`](../backend/src/chat.ts) | Friends paying each other: a Vault charge, then a Payout |
+| [`backend/src/safe.ts`](../backend/src/safe.ts), [`safe-rules.ts`](../backend/src/safe-rules.ts) | Money for one purpose: a Vault charge in, a Payout per receipt that fits, a partial refund of the rest (rules tested) |
 | [`backend/src/business.ts`](../backend/src/business.ts) | Businesses paid at the PayPal they signed in with |
 | [`backend/src/webhooks.ts`](../backend/src/webhooks.ts) | Verified, routed, applied once |
 | [`backend/src/rules.ts`](../backend/src/rules.ts) | The pure rules every payment depends on (tested) |
@@ -164,7 +167,8 @@ up.
 1. **Onboard businesses with PayPal's partner onboarding**, so a business on Flick is paid directly instead of through Flick's account.
 2. **Venmo** for friends in the US, inside Flick Chat.
 3. **PayPal's Agent Toolkit** behind Ask Flick's tools, so more of PayPal is one approval away.
-4. **Live, not sandbox**, once a payments partner reviews the money flow.
+4. **A Safe as a hold, not a payment:** authorize the giver's PayPal and capture only what each receipt lets out, so unspent money never leaves their account.
+5. **Live, not sandbox**, once a payments partner reviews the money flow.
 
 ## Why Flick and PayPal
 

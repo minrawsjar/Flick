@@ -6,7 +6,7 @@ import { declined } from './checkout.ts';
 import * as friends from './friends.ts';
 import { HttpError, need } from './http.ts';
 import { isPhoto } from './lens.ts';
-import { cents, id, usd, type ChatMessage, type ChatPeer, type Debt } from './model.ts';
+import { cents, id, usd, type ChatMessage, type ChatPeer, type Debt, type Safe } from './model.ts';
 import * as nudge from './nudge.ts';
 import { chargeSaved, createPayout, PayPalApiError, sendInvoice } from './paypal.ts';
 import * as push from './push.ts';
@@ -25,14 +25,14 @@ import { inWorkspace, log, save, state, workspaceId } from './store.ts';
 //   email, so the money goes to the right PayPal: no guessing from a bill.
 // - Pays by itself: each person can let a friend's requests pay without a tap, up to an amount each.
 
-const base = dirname(process.env.STATE_FILE || fileURLToPath(new URL('../.data/state.json', import.meta.url)));
+export const base = dirname(process.env.STATE_FILE || fileURLToPath(new URL('../.data/state.json', import.meta.url)));
 const peopleFile = join(base, 'people.json');
 const chatFile = (key: string) => join(base, 'chats', `${key}.json`);
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const norm = (email: string) => email.trim().toLowerCase();
 
-function write(file: string, data: unknown) {
+export function write(file: string, data: unknown) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(`${file}.tmp`, JSON.stringify(data));
   renameSync(`${file}.tmp`, file);
@@ -43,7 +43,7 @@ function write(file: string, data: unknown) {
 /** `peers`: whoever they have a chat with, so a chat someone else started shows in their list. */
 type Person = { workspace: string; name: string; since: string; peers: string[] };
 let people: Record<string, Person> | undefined;
-function directory() {
+export function directory() {
   if (!people) {
     try {
       people = JSON.parse(readFileSync(peopleFile, 'utf8')) as Record<string, Person>;
@@ -67,7 +67,7 @@ export function register() {
 }
 
 /** Who's signed in, for chatting: their PayPal email and name. */
-function me() {
+export function me() {
   const profile = state.profile;
   if (!profile?.email) throw new HttpError(401, 'Sign in with PayPal to chat: your friends find you by your PayPal email.');
   register();
@@ -77,7 +77,7 @@ function me() {
 export type Peer = ChatPeer;
 
 /** Someone to chat with: your friend by that email (their name and face), or whoever signed in with it. */
-function peerOf(email: string): Peer {
+export function peerOf(email: string): Peer {
   const friend = state.friends.find((f) => norm(f.email) === email);
   const there = directory()[email];
   return { email, name: friend?.name ?? there?.name ?? email.split('@')[0], onFlick: Boolean(there), friendId: friend?.id, color: friend?.color ?? 'blue', shape: friend?.shape ?? 'circle' };
@@ -89,7 +89,7 @@ export function onFlick(email: string) {
   return peer.onFlick && state.profile?.email && peer.email !== norm(state.profile.email) ? peer : undefined;
 }
 
-function peerFor(value: unknown, self: string) {
+export function peerFor(value: unknown, self: string) {
   need(typeof value === 'string' && value.length <= 120 && EMAIL.test(value.trim()), 'with must be a PayPal email address.');
   const email = norm(value);
   need(email !== self, "That's your own PayPal: chat with a friend.");
@@ -114,8 +114,11 @@ function friendFor(peer: Peer) {
 
 export type Message = ChatMessage;
 
-/** `autopay`: by payer email, the most one request from the other person may be to pay by itself. `v`: changes, for polling. */
-type Conversation = { key: string; members: string[]; messages: Message[]; autopay: Record<string, number>; read: Record<string, string>; v: number };
+/**
+ * `autopay`: by payer email, the most one request from the other person may be to pay by itself. `v`:
+ * changes, for polling. `safes`: money one of them gave the other for a purpose (safe.ts).
+ */
+export type Conversation = { key: string; members: string[]; messages: Message[]; autopay: Record<string, number>; read: Record<string, string>; v: number; safes?: Safe[] };
 
 const MESSAGES_KEPT = 300;
 const PHOTOS_KEPT = 10;
@@ -123,7 +126,7 @@ const PHOTOS_KEPT = 10;
 const keyOf = (a: string, b: string) => createHash('sha256').update([a, b].sort().join('\n')).digest('hex').slice(0, 32);
 const conversations = new Map<string, Conversation>();
 
-function find(a: string, b: string, create = false): Conversation | undefined {
+export function find(a: string, b: string, create = false): Conversation | undefined {
   const key = keyOf(a, b);
   let found = conversations.get(key);
   if (!found && existsSync(chatFile(key))) found = JSON.parse(readFileSync(chatFile(key), 'utf8')) as Conversation;
@@ -132,7 +135,7 @@ function find(a: string, b: string, create = false): Conversation | undefined {
   return found;
 }
 
-function keep(c: Conversation) {
+export function keep(c: Conversation) {
   c.v += 1;
   c.messages = c.messages.slice(-MESSAGES_KEPT);
   let photos = 0;
@@ -141,7 +144,7 @@ function keep(c: Conversation) {
 }
 
 /** Adds a message; the first one puts the chat in both people's lists. */
-function post(c: Conversation, message: Omit<Message, 'id' | 'at'>) {
+export function post(c: Conversation, message: Omit<Message, 'id' | 'at'>) {
   const m: Message = { id: id('msg'), at: new Date().toISOString(), ...message };
   c.messages.push(m);
   c.read[m.from] = m.at;
@@ -156,18 +159,18 @@ function post(c: Conversation, message: Omit<Message, 'id' | 'at'>) {
 }
 
 /** A notification on the other person's phone, if they turned them on (push.ts). */
-function tell(email: string, title: string, body: string, url: string, tag: string) {
+export function tell(email: string, title: string, body: string, url: string, tag: string) {
   const there = directory()[email];
   if (there) void push.notify(there.workspace, { title, body, url, tag }).catch((err) => console.error('chat push:', err));
 }
 
-const chatUrl = (email: string) => `/chat?with=${encodeURIComponent(email)}`;
+export const chatUrl = (email: string) => `/chat?with=${encodeURIComponent(email)}`;
 const total = (list: Message[]) => cents(list.reduce((sum, m) => sum + (m.amount ?? 0), 0));
 
 // --- Reading ---------------------------------------------------------------------------------
 
 /** Everyone you have a chat with, or could: your friends, and anyone who started one with you. */
-function others(email: string) {
+export function others(email: string) {
   const emails = new Set([...state.friends.map((f) => norm(f.email)), ...(directory()[email]?.peers ?? [])]);
   emails.delete(email);
   return [...emails];
@@ -219,9 +222,13 @@ export function unread() {
     m.kind === 'request' ? `Asked you for ${usd(m.amount ?? 0)}: ${m.what}`
     : m.kind === 'paid' ? `Paid you ${usd(m.amount ?? 0)}${m.auto ? ', by itself' : ''}`
     : m.kind === 'reminder' ? `A reminder: ${m.text}`
+    : m.kind === 'safe' ? (m.spendId ? `Spent from the Safe for ${m.what}` : `Gave you ${usd(m.amount ?? 0)} for ${m.what}, in a Safe`)
     : (m.text ?? '');
   return { count, latest: { id: m.id, at: m.at, kind: m.kind, peer: peerOf(other), text: text.slice(0, 160) } };
 }
+
+/** A Safe as the browser sees it: without what identifies its receipts. */
+export const shown = (safe: Safe) => ({ ...safe, spends: safe.spends.map((s) => ({ ...s, prints: [] })) });
 
 /** One chat. `v`: the version the page has; unchanged, only that comes back (the page polls). */
 export function thread(query: URLSearchParams) {
@@ -241,6 +248,7 @@ export function thread(query: URLSearchParams) {
     peer,
     messages: c?.messages ?? [],
     autopay: { mine: c?.autopay[email] ?? 0, theirs: c?.autopay[peer.email] ?? 0 },
+    safes: (c?.safes ?? []).map(shown),
   };
 }
 

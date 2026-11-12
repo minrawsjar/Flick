@@ -3,6 +3,7 @@
 // model; no money moves without a buyer's approval, so checkouts are created and then cancelled.
 // The approval page itself is `npm run loop`'s job.
 
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -521,6 +522,138 @@ await step("the profile's money adds up your Flick afresh: what you're owed, and
   check(near(theirs.youOwe.amount, youOwe), `Robin owes ${theirs.youOwe.amount}, the chat says ${youOwe}`);
   check((await guest('profile/money')).status === 409, 'a guest has money');
   return `owed to you ${mine.owedToYou.amount} (${mine.owedToYou.count}), Robin owes ${theirs.youOwe.amount}`;
+});
+
+section('Flick Safe');
+// Sam, signed in too, was given $20 for chocolates in a Safe: put there as Flick would after a real
+// payment (its capture is made up, so closing it fails safely here; npm run e2e refunds one for real).
+// Reading receipts is the real AI, and what's let out is a real PayPal payout to Sam.
+const SAM = 'api-sam@flick.example.com';
+const samWs = workspaceFor(SAM);
+writeFileSync(
+  join(dir, 'workspaces', `${samWs}.json`),
+  JSON.stringify({ ...seed(), friends: [{ id: 'you-api', name: 'Api', email: ME, color: 'green', shape: 'drop' }], debts: [], profile: { name: 'Sam', email: SAM, savedId: 'not-a-real-vault-id-3', since: new Date().toISOString(), named: true } }),
+);
+const samFlick = as(samWs);
+const madeAt = new Date(Date.now() - 3_600_000).toISOString();
+const seededSafe = (id: string, over: Json = {}) => ({ id, at: madeAt, from: ME, to: SAM, purpose: 'chocolates', amount: 20, left: 20, expires: new Date(Date.now() + 14 * 86_400_000).toISOString(), orderId: 'ORDER-NOT-REAL', captureId: 'CAPTURE-NOT-REAL', status: 'open', spends: [], ...over });
+{
+  const key = createHash('sha256').update([ME, SAM].sort().join('\n')).digest('hex').slice(0, 32);
+  const safes = [seededSafe('safe_api'), seededSafe('safe_spent', { amount: 5, left: 0, expires: new Date(Date.now() - 60_000).toISOString() })];
+  mkdirSync(join(dir, 'chats'), { recursive: true });
+  writeFileSync(
+    join(dir, 'chats', `${key}.json`),
+    JSON.stringify({ key, members: [ME, SAM].sort(), messages: safes.map((x) => ({ id: `msg_${x.id}`, at: madeAt, kind: 'safe', from: ME, safeId: x.id, amount: x.amount, what: x.purpose })), autopay: {}, read: {}, v: 1, safes }),
+  );
+}
+const today = new Date().toISOString().slice(0, 10);
+const RECEIPT = `COCOA CORNER\n12 Market Street\nDate: ${today}\nDairy Milk bar 4.20\nDark chocolate bar 4.20\nUSB-C phone charger 12.00\nSubtotal 20.40\nTax 1.64\nTOTAL 22.04\nPaid by card. Thank you!`;
+const samSafe = async () => (await thread(samFlick, ME)).safes.find((x: Json) => x.id === 'safe_api');
+let spendId = '';
+await step('giving needs signing in, a friend on Flick, and sensible amounts, purposes and days', async () => {
+  check((await guest('safe', { with: SAM, amount: 5, purpose: 'chocolates' })).status === 401, 'a guest gave a Safe');
+  await samFlick('state'); // Sam's visit puts them on Flick.
+  await me('friends/add', { name: 'Sam', email: SAM });
+  const maya = (await me('state')).json.friends.find((f: Json) => f.name === 'Maya');
+  const notOn = await me('safe', { with: maya.email, amount: 5, purpose: 'chocolates' });
+  check(notOn.status === 409 && /isn't on Flick yet/.test(notOn.json.error?.message), `${notOn.status}`);
+  for (const bad of [{ amount: 0.5 }, { amount: 600 }, { purpose: ' ' }, { days: 90 }, { days: 2.5 }]) {
+    const res = await me('safe', { with: SAM, amount: 5, purpose: 'chocolates', ...bad });
+    check(res.status === 400, `took ${JSON.stringify(bad)}: ${res.status}`);
+  }
+});
+await step('a Safe PayPal turns down is never made: nothing is held, nothing shows', async () => {
+  const res = await me('safe', { with: ROBIN, amount: 5, purpose: 'snacks' });
+  check(res.status === 402 && /PayPal turned it down/.test(res.json.error?.message), `${res.status}: ${res.json.error?.message}`);
+  check(!(await thread(me, ROBIN)).safes.length, 'a Safe was made anyway');
+});
+await step('the Safe shows in both chats and lists; Sam sees it waiting in Today', async () => {
+  check((await samSafe())?.left === 20, 'not in Sam\'s chat');
+  const { json } = await samFlick('safes');
+  check(json.forYou.some((x: Json) => x.id === 'safe_api' && x.peer.email === ME) && !json.youGave.length, JSON.stringify(json).slice(0, 200));
+  check((await me('safes')).json.youGave.some((x: Json) => x.id === 'safe_api'), 'not in my list');
+  const items = (await samFlick('inbox')).json.items;
+  check(items.some((i: Json) => i.agent === 'safe' && /^\$20\.00 for chocolates, from /.test(i.title)), JSON.stringify(items.map((i: Json) => i.title)));
+});
+await step('only Sam spends it, and what they send has to be a receipt to read', async () => {
+  check((await me('safe/spend', { with: SAM, safe: 'safe_api', text: RECEIPT })).status === 409, 'the giver spent it');
+  check((await samFlick('safe/spend', { with: ME, safe: 'safe_nope', text: RECEIPT })).status === 404, 'spent an unknown Safe');
+  check((await samFlick('safe/spend', { with: ME, safe: 'safe_api' })).status === 400, 'spent nothing');
+  check((await samFlick('safe/spend', { with: ME, safe: 'safe_api', image: 'https://example.com/r.jpg' })).status === 400, 'took a URL');
+});
+await step('a receipt with chocolates and a charger: the chocolates are paid to Sam at once, the charger waits for the giver', async () => {
+  const { status, json } = await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: RECEIPT });
+  check(status === 200, `${status}: ${json.error?.message}`);
+  const spend = json.spend;
+  spendId = spend.id;
+  const fits = spend.lines.filter((l: Json) => l.fits).map((l: Json) => l.name).join(', ');
+  check(spend.lines.length === 3 && spend.lines.filter((l: Json) => l.fits).length === 2 && !spend.lines.find((l: Json) => /charger/i.test(l.name)).fits, `lines: ${JSON.stringify(spend.lines)}`);
+  check(near(spend.paid, 9.08) && spend.to.kind === 'back' && spend.to.email === SAM && spend.payout !== 'failed', `paid ${spend.paid} to ${JSON.stringify(spend.to)}, payout ${spend.payout}`);
+  check(spend.ask?.status === 'open' && near(spend.ask.amount, 10.92) && /charger/i.test(spend.ask.why), JSON.stringify(spend.ask));
+  check(near(json.safe.left, 10.92), `left ${json.safe.left}`);
+  check(!spend.prints.length, 'the receipt\'s prints reached the browser');
+  check((await thread(me, SAM)).messages.some((m: Json) => m.kind === 'safe' && m.spendId === spend.id), 'not in the chat');
+  return `fit: ${fits}; paid $${spend.paid}, asks $${spend.ask.amount}: ${spend.ask.why}`;
+});
+await step("the giver's Today asks them to allow the charger; Sam can't decide it", async () => {
+  const items = (await me('inbox')).json.items;
+  check(items.some((i: Json) => i.agent === 'safe' && i.action === 'Allow' && /Sam asks for \$10\.92/.test(i.title)), JSON.stringify(items.map((i: Json) => i.title)));
+  check((await samFlick('safe/decide', { with: ME, safe: 'safe_api', spend: spendId, allow: true })).status === 409, 'Sam allowed their own ask');
+});
+await step('the same receipt again is refused, sent as it was or typed out again', async () => {
+  const again = (await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: RECEIPT })).json.spend;
+  check(again?.refused && /already used/.test(again.refused) && again.paid === 0, JSON.stringify(again).slice(0, 200));
+  const retyped = RECEIPT.replace('12 Market Street\n', '').replace('Paid by card. Thank you!', 'Card payment').replace('Dairy Milk bar', 'Milk chocolate bar (Dairy Milk)');
+  const second = (await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: retyped })).json.spend;
+  check(second?.refused && /already used/.test(second.refused), `retyped: ${JSON.stringify(second).slice(0, 200)}`);
+  check(near((await samSafe()).left, 10.92), 'money left the Safe');
+  return second.refused;
+});
+await step('an old receipt, and one with nothing for chocolates, are refused', async () => {
+  const old = (await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: RECEIPT.replace(`Date: ${today}`, 'Date: 2025-10-01').replace('TOTAL 22.04', 'TOTAL 22.04\nReceipt 0017') })).json.spend;
+  check(old?.refused && /before the Safe was made/.test(old.refused), `old: ${JSON.stringify(old).slice(0, 200)}`);
+  const pharmacy = `CITY PHARMACY\nDate: ${today}\nBandages 6.50\nCough syrup 8.00\nTOTAL 14.50`;
+  const none = (await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: pharmacy })).json.spend;
+  check(none?.refused === 'Nothing on it is for chocolates.' && none.paid === 0, `pharmacy: ${JSON.stringify(none).slice(0, 200)}`);
+  check(near((await samSafe()).left, 10.92), 'money left the Safe');
+});
+await step("a bill from a shop that isn't on PayPal pays nothing: it waits for the giver, chocolates only", async () => {
+  const bill = `SWEET TOOTH CATERING\nINVOICE 2291, due on receipt\nDate: ${today}\nChocolate truffle box 6.00\nDelivery 2.00\nAMOUNT DUE 8.00\nPay by bank transfer to account 4471-2209.`;
+  const spend = (await samFlick('safe/spend', { with: ME, safe: 'safe_api', text: bill })).json.spend;
+  check(spend?.kind === 'bill' && spend.paid === 0 && !spend.refused, `bill: ${JSON.stringify(spend).slice(0, 240)}`);
+  check(spend.ask?.status === 'open' && (near(spend.ask.amount, 6) || near(spend.ask.amount, 8)) && /isn't on PayPal/.test(spend.ask.why) && spend.to.kind === 'back', JSON.stringify(spend.ask));
+  check(near((await samSafe()).left, 10.92), 'money left the Safe');
+  // Not allowed: nothing was taken for it, so it isn't counted as used.
+  await me('safe/decide', { with: SAM, safe: 'safe_api', spend: spend.id, allow: false });
+  return spend.ask.why;
+});
+await step("the giver doesn't allow the charger: nothing more leaves, and it can't be decided twice", async () => {
+  const { json } = await me('safe/decide', { with: SAM, safe: 'safe_api', spend: spendId, allow: false });
+  const spend = json.safe.spends.find((x: Json) => x.id === spendId);
+  check(spend.ask.status === 'declined' && near(json.safe.left, 10.92), JSON.stringify(spend.ask));
+  check((await me('safe/decide', { with: SAM, safe: 'safe_api', spend: spendId, allow: true })).status === 409, 'decided twice');
+});
+await step('closing gives what is left back from the payment; if PayPal says no, the Safe stays as it was', async () => {
+  const res = await me('safe/close', { with: SAM, safe: 'safe_api' });
+  check(res.status === 502 && /PayPal couldn't give the rest back/.test(res.json.error?.message), `${res.status}: ${res.json.error?.message}`);
+  const after = await samSafe();
+  check(after.status === 'open' && near(after.left, 10.92) && !after.closed, JSON.stringify(after).slice(0, 200));
+  return res.json.error.message.slice(0, 90);
+});
+await step('a Safe past its day ends by itself: all spent, so nothing to refund', async () => {
+  const { json } = await samFlick('safes');
+  const ended = json.forYou.find((x: Json) => x.id === 'safe_spent');
+  check(ended?.status === 'closed' && ended.closed?.by === 'expiry' && ended.closed.returned === 0, JSON.stringify(ended).slice(0, 200));
+  check((await thread(samFlick, ME)).messages.some((m: Json) => m.kind === 'note' && /The Safe for chocolates ended, all spent/.test(m.text)), 'no note in the chat');
+  check((await samFlick('safe/spend', { with: ME, safe: 'safe_spent', text: RECEIPT })).status === 409, 'spent a closed Safe');
+});
+await step('Ask Flick proposes a Safe, and gives nothing when told no', async () => {
+  const turn = (await me('agent', { messages: [{ role: 'user', content: 'Give Sam $15 for school books, for a week.' }] })).json;
+  const card = turn.pending?.find((p: Json) => p.agent === 'safe');
+  check(card && /\$15\.00 for school books/.test(card.summary) && /7 days/.test(card.summary), `no card: ${turn.reply} ${JSON.stringify(turn.pending)}`);
+  await me('agent/decide', { messages: turn.messages, decisions: { [card.id]: false } });
+  check(!(await thread(me, SAM)).safes.some((x: Json) => x.purpose === 'school books'), 'it gave anyway');
+  return card.summary;
 });
 
 section('Businesses');

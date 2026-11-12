@@ -152,7 +152,7 @@ function Closing() {
           Point. Snap. <span className="text-gradient">Paid.</span>
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-[19px] leading-[1.45] text-white/65 text-pretty">
-          Five agents, one PayPal approval a week, and a money HQ that builds itself.
+          Six agents, one PayPal approval a week, and a money HQ that builds itself.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/lens" className="pressable flex h-12 items-center gap-1.5 rounded-full bg-white px-6 text-[17px] text-black">
@@ -184,7 +184,7 @@ export default function Home() {
           id="agents"
           tone="grey"
           label="Meet your agents"
-          title="Five agents. One for every way money moves."
+          title="Six agents. One for every way money moves."
           intro="Each one does a single job well, and they hand work to each other: Lens reads, Autopilot pays, Splitter shares, Nudge follows up, Scout shops."
         >
           <Agents />

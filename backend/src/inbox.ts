@@ -4,6 +4,7 @@ import { HttpError } from './http.ts';
 import * as lens from './lens.ts';
 import { addDays, cents, usd, type Agent } from './model.ts';
 import * as nudge from './nudge.ts';
+import * as safe from './safe.ts';
 import { unapproved } from './rules.ts';
 import * as scout from './scout.ts';
 import { shelf, weekOf } from './scout-rules.ts';
@@ -46,6 +47,35 @@ function entries(): Entry[] {
       href: `/chat?with=${encodeURIComponent(m.peer.email)}`,
       run: async () => (await chat.pay({ with: m.peer.email, id: m.id }), { done: `Paid ${m.peer.name}` }),
     });
+  }
+
+  // Safe: receipts asking you, the giver, to allow them; and money given to you, waiting to be spent.
+  for (const { safe: s, peer, mine, asking } of safe.summary()) {
+    if (s.status !== 'open') continue;
+    const href = `/chat?with=${encodeURIComponent(peer.email)}`;
+    for (const r of mine ? asking.slice(0, 2) : []) {
+      out.push({
+        id: `safe-ask-${r.id}`,
+        agent: 'safe',
+        title: `${peer.name} asks for ${usd(r.ask!.amount)} from the Safe`,
+        detail: `${r.merchant}'s receipt, for ${s.purpose}: ${r.ask!.why}`,
+        amount: r.ask!.amount,
+        action: 'Allow',
+        href,
+        run: async () => (await safe.decide({ with: peer.email, safe: s.id, spend: r.id, allow: true }), { done: `Allowed ${peer.name} ${usd(r.ask!.amount)}` }),
+      });
+    }
+    if (!mine && s.left > 0) {
+      out.push({
+        id: `safe-${s.id}`,
+        agent: 'safe',
+        title: `${usd(s.left)} for ${s.purpose}, from ${peer.name}`,
+        detail: `In a Safe until ${new Date(s.expires).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. Snap the receipt when you spend it.`,
+        amount: s.left,
+        action: null,
+        href,
+      });
+    }
   }
 
   const failed = week.payments.filter((p) => p.status === 'failed');

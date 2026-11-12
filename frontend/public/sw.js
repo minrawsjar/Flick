@@ -13,7 +13,7 @@
 // and activating it drops the caches of the builds before, pages and files alike.
 const VERSION = `flick-${new URL(self.location.href).searchParams.get("v") || "dev"}`;
 const SHARED = "flick-share";
-const PAGES = ["/home", "/lens", "/autopilot", "/scout", "/ask", "/split", "/nudge", "/friends", "/install"];
+const PAGES = ["/home", "/lens", "/autopilot", "/scout", "/ask", "/split", "/nudge", "/safe", "/friends", "/install"];
 
 self.addEventListener("install", (event) => {
   // Best effort: a page that fails to fetch is cached on its first visit instead.

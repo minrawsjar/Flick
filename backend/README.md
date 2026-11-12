@@ -2,7 +2,7 @@
 
 > **TypeScript on Node 22.18+, run directly: no build step and no runtime dependencies. Runs as one Railway service.**
 
-Everything that holds a secret or moves money. The five agents, Flick Chat and Ask Flick live here,
+Everything that holds a secret or moves money. The six agents, Flick Chat and Ask Flick live here,
 along with every PayPal call and every AI call. The [frontend](../frontend/) reaches it only
 through its `/api/*` rewrite, so the browser never holds a key or calls another origin.
 
@@ -15,8 +15,8 @@ with a volume that keeps each person's Flick.
 Browser → www.flickit.site/api/* (Vercel rewrite, cookie and all)
   → server.ts: the route table; the `flick` cookie picks the workspace
   → inWorkspace(): that person's JSON document, one write at a time
-  → an agent: lens.ts, autopilot.ts, split.ts, nudge.ts, scout.ts, chat.ts, agent.ts
-      → rules.ts / scout-rules.ts: pure rules decide amounts, shares and what's due
+  → an agent: lens.ts, autopilot.ts, split.ts, nudge.ts, scout.ts, safe.ts, chat.ts, agent.ts
+      → rules.ts / scout-rules.ts / safe-rules.ts: pure rules decide amounts, shares and what's due
       → ai.ts: a vision or chat model reads and drafts (never sets an amount)
       → paypal.ts: Orders, Vault, Payouts, Invoicing, refunds
   → store.ts writes the workspace atomically (.tmp, then rename)
@@ -49,6 +49,8 @@ backend/
 │   ├── nudge.ts              # Nudge: reminders through PayPal or the chat
 │   ├── scout.ts              # Scout: prices, photos, Channel3's live offers, buying
 │   ├── scout-rules.ts        # Scout's catalog, weekly prices, trends, forecasts (tested)
+│   ├── safe.ts               # Safe: money for one purpose, spent against receipts that fit it
+│   ├── safe-rules.ts         # What a receipt gets from a Safe, and what's refused (tested)
 │   ├── friends.ts            # Friends, by their PayPal e-mail
 │   ├── chat.ts               # Flick Chat: people.json, chats/, paying each other
 │   ├── business.ts           # Businesses on Flick, paid at their own PayPal
@@ -79,6 +81,7 @@ backend/
 | **Splitter** | [`split.ts`](src/split.ts) | "Maya and I shared the salmon", into who had what | An invoice to each friend not on Flick, or a request in Flick Chat |
 | **Nudge** | [`nudge.ts`](src/nudge.ts) | A reminder in the tone you pick | PayPal's own invoice reminder |
 | **Scout** | [`scout.ts`](src/scout.ts) | A shelf, fridge, cart or list, into products | An order priced on the server, then a payout to the store |
+| **Safe** | [`safe.ts`](src/safe.ts) | A receipt, into its lines, each for the purpose or not, and signs of a fake | A Vault charge to give it; a payout per receipt; a partial refund of what's left |
 | **Flick Chat** | [`chat.ts`](src/chat.ts) | Nothing | A Vault charge, then a payout to the friend |
 | **Ask Flick** | [`agent.ts`](src/agent.ts) | Plans across the others, with tools | Through the agents above, once you approve |
 
@@ -93,6 +96,7 @@ Every route is listed in the [main README's API section](../README.md#api). By a
 | **Autopilot** | `POST /api/week/edit`, `/approve`, `/tick`, `/retry`, `/next`; `/autopay/cap`, `/stop` |
 | **People** | `/api/friends/*`, `/api/split`, `/split/assign`, `/api/nudge/*`, `/api/debts/refresh`, `/api/chat/*` |
 | **Scout** | `GET /api/scout`; `POST /api/scout/quote`, `/read`, `/online`, `/buy` |
+| **Safe** | `GET /api/safes`; `POST /api/safe`, `/safe/spend`, `/safe/decide`, `/safe/close` |
 | **Ask Flick, Today** | `POST /api/agent`, `/agent/decide`; `GET /api/inbox`, `POST /api/inbox/act`; `/api/push/*` |
 | **PayPal** | `GET /api/paypal/return`, `/cancel`; `POST /api/paypal/flick`, `/paypal/webhook`; `/api/auth/paypal/*` |
 | **You** | `POST /api/profile`, `GET /api/profile/money`, `/api/business` |
@@ -131,7 +135,7 @@ npm run dev          # http://localhost:4000, restarts on save
 
 | Command | What it proves |
 |---|---|
-| `npm test` | The rules money depends on, Scout's rules, businesses' names, webhooks routed to the right workspace, Web Push encryption against RFC 8291 |
+| `npm test` | The rules money depends on, Scout's rules, Safe's rules, businesses' names, webhooks routed to the right workspace, Web Push encryption against RFC 8291 |
 | `npm run typecheck` | The types, with `tsc` |
 | `npm run api` | Every route, used right and wrong, on the real sandbox and model |
 | `npm run loop` | The whole money loop, through PayPal's real approval page in headless Chrome |

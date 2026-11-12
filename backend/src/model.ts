@@ -2,7 +2,7 @@
 
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 export type Day = (typeof DAYS)[number];
-export type Agent = 'lens' | 'autopilot' | 'splitter' | 'nudge' | 'scout';
+export type Agent = 'lens' | 'autopilot' | 'splitter' | 'nudge' | 'scout' | 'safe';
 
 /** Someone Flick pays: a biller, a shop, or a friend. Emails should be PayPal sandbox accounts. */
 /** `business`: a business registered on Flick (business.ts), paid at the PayPal it signed in with. */
@@ -93,8 +93,8 @@ export type ChatMessage = {
   at: string;
   /** The PayPal email of whoever sent it. */
   from: string;
-  /** text; request (for money); paid (a request was paid); reminder (Nudge's, about a request); note (a change, like pays by itself). */
-  kind: 'text' | 'request' | 'paid' | 'reminder' | 'note';
+  /** text; request (for money); paid (a request was paid); reminder (Nudge's, about a request); note (a change, like pays by itself); safe (money given for a purpose, or a receipt spent from it: safe.ts). */
+  kind: 'text' | 'request' | 'paid' | 'reminder' | 'note' | 'safe';
   text?: string;
   amount?: number;
   what?: string;
@@ -110,6 +110,67 @@ export type ChatMessage = {
   /** A paid message's or reminder's request. */
   about?: string;
   tries?: number;
+  /** A Safe's message: the Safe (in the chat's `safes`), and the receipt spent from it, if that's what it's about. */
+  safeId?: string;
+  spendId?: string;
+};
+
+/** A line on a receipt or bill, and whether Safe found it's for the Safe's purpose. */
+export type SafeLine = { name: string; price: number; fits: boolean; why: string };
+
+/** A receipt or bill spent from a Safe, as Safe read it and the rules judged it (safe-rules.ts). */
+export type SafeSpend = {
+  id: string;
+  at: string;
+  /** A receipt is paid already, so its money goes back to whoever spent it; a bill is paid to the shop. */
+  kind: 'receipt' | 'bill' | 'other';
+  merchant: string;
+  date: string | null;
+  total: number;
+  tax: number;
+  tip: number;
+  lines: SafeLine[];
+  /** What the reader saw that suggests it isn't a genuine receipt. */
+  signs: string[];
+  /** What left the Safe for it. */
+  paid: number;
+  /** What waits for the giver to allow: a doubtful receipt's share, or its lines that aren't for the purpose. */
+  ask?: { amount: number; why: string; status: 'open' | 'allowed' | 'declined' };
+  /** Why nothing left the Safe for it. */
+  refused?: string;
+  /** Where its money goes: the shop's PayPal (a bill), or back to the spender's (a receipt). */
+  to?: { kind: 'shop' | 'back'; email: string; name: string; business?: string };
+  /** Released, but Flick couldn't send it on to that PayPal (yet). */
+  payout?: 'failed';
+  /** A small copy of the photo (Lens's kind). Only a Safe's newest few keep theirs. */
+  photo?: string;
+  /** What makes it the same receipt if it comes again: its shop, date and total, and the file itself. */
+  prints: string[];
+  /** What it said, when it wasn't in USD; the amounts above are then in USD. */
+  original?: { currency: string; total: number; rate: number };
+};
+
+/**
+ * Money given for one purpose (safe.ts). Flick holds it, in its own PayPal account, and lets it out
+ * only against a receipt or bill for that purpose. What's left goes back to the giver at the end.
+ */
+export type Safe = {
+  id: string;
+  at: string;
+  /** The giver's and the spender's PayPal emails. */
+  from: string;
+  to: string;
+  purpose: string;
+  note?: string;
+  amount: number;
+  left: number;
+  expires: string;
+  orderId: string;
+  /** The giver's payment, which what's left is refunded from. */
+  captureId: string;
+  status: 'open' | 'closed';
+  closed?: { at: string; by: 'giver' | 'spender' | 'expiry'; returned: number };
+  spends: SafeSpend[];
 };
 
 /** Someone to chat with: a friend, or whoever started a chat with you; on Flick if they've signed in. */

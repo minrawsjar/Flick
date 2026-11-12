@@ -63,7 +63,7 @@ const SCHEMA = {
 // bill in another currency is converted when Lens reads it, at the day's ECB rate from Frankfurter,
 // and the scan keeps what the photo said to show it.
 const rates = new Map<string, { rate: number; at: number }>();
-async function usdRate(currency: string) {
+export async function usdRate(currency: string) {
   const hit = rates.get(currency);
   if (hit && Date.now() - hit.at < 6 * 3_600_000) return hit.rate;
   const res = await fetch(`https://api.frankfurter.dev/v1/latest?base=${currency}&symbols=USD`, { signal: AbortSignal.timeout(8000) });
@@ -123,7 +123,7 @@ export const isPhoto = (v: unknown): v is string => typeof v === 'string' && v.l
 const isPdf = (v: unknown): v is string => typeof v === 'string' && v.length <= 7_000_000 && /^data:application\/pdf;base64,[A-Za-z0-9+/]+=*$/.test(v);
 
 /** What Lens is given to read: a photo, an e-bill's PDF, or a bill's text. Exactly one. */
-function given({ image, pdf, text }: Record<string, unknown>): Part {
+export function given({ image, pdf, text }: Record<string, unknown>): Part {
   need([image, pdf, text].filter((v) => v !== undefined).length === 1, 'Send one thing to read: image or pdf as a data URL, or text.');
   if (pdf !== undefined) {
     need(isPdf(pdf), 'pdf must be a data URL of a PDF, 5 MB at most.');

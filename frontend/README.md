@@ -18,6 +18,7 @@ at `/dashboard` is AG Studio over PayPal's records and Flick's own. The frontend
 | [`/lens`](https://www.flickit.site/lens) | `app/(app)/lens/` | **Lens**: snap a bill, upload an e-bill, or open one shared to Flick |
 | [`/autopilot`](https://www.flickit.site/autopilot) | `app/(app)/autopilot/` | **Autopilot**: the week's editable grid, one approval, the weekly cap |
 | [`/scout`](https://www.flickit.site/scout) | `app/(app)/scout/` | **Scout**: your usuals priced everywhere, forecasts, Channel3's live offers, buying |
+| [`/safe`](https://www.flickit.site/safe) | `app/(app)/safe/` | **Safe**: money you gave or were given for one purpose; giving and spending happen in Flick Chat (`components/safe.tsx`) |
 | [`/split`](https://www.flickit.site/split) | `app/(app)/split/` | **Splitter**: the bill's items by friend, ticked by hand or by a sentence |
 | [`/nudge`](https://www.flickit.site/nudge) | `app/(app)/nudge/` | **Nudge**: who owes you, and a reminder in a tone |
 | [`/friends`](https://www.flickit.site/friends) | `app/(app)/friends/` | Friends, by their PayPal e-mail |
@@ -47,10 +48,10 @@ frontend/
 │   ├── _landing/               # Its sections, which are also the agents' screens
 │   │   ├── lens.tsx, autopilot.tsx, split.tsx, nudge.tsx, scout.tsx, ask.tsx, friends.tsx
 │   │   ├── studio.tsx          #   Money Studio's preview
-│   │   ├── agents.tsx          #   The five agents' faces and colours
+│   │   ├── agents.tsx          #   The six agents' faces and colours
 │   │   └── data.ts             #   Sample data, for the one-pager only
 │   ├── (app)/                  # The working pages, with the tab bar (layout.tsx)
-│   │   └── home, chat, ask, lens, autopilot, scout, split, nudge, friends,
+│   │   └── home, chat, ask, lens, autopilot, scout, split, nudge, safe, friends,
 │   │       business, profile, login, install
 │   ├── dashboard/              # Money Studio: AG Studio, its data, widgets, theme and AI
 │   ├── share/route.ts          # A bill shared before the service worker runs

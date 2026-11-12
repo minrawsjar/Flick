@@ -83,6 +83,19 @@ export function Agents() {
           ))}
         </div>
       </Stage>
+
+      <Stage tint={botColors.blue} className="sm:col-span-2 lg:col-span-6" title="Safe keeps money for its purpose" detail="Give a friend money for one thing. They snap the receipt to spend it, and only what's for that thing comes out, once. The rest comes back to you.">
+        <Bot {...agents.safe} size={64} mood="awake" />
+        <div className="flex w-[180px] flex-col gap-1.5 rounded-xl bg-[var(--color-raised)] p-3 text-[12px] shadow-sm" aria-hidden>
+          {[["Dairy Milk", "$4.20", true], ["Dark chocolate", "$4.20", true], ["Phone charger", "$12.00", false]].map(([name, price, fits]) => (
+            <span key={name as string} className={`flex justify-between gap-2 ${fits ? "" : "text-secondary line-through"}`}>
+              <span>{fits ? "✓" : "✗"} {name as string}</span>
+              <span className="tabular-nums">{price as string}</span>
+            </span>
+          ))}
+          <span className="loop-bob mt-1 rounded-full bg-ink px-2 py-0.5 text-center text-on-ink">Paid $8.40</span>
+        </div>
+      </Stage>
     </div>
   );
 }
