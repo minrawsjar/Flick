@@ -1,6 +1,6 @@
 "use client";
 
-import { History, Pointer, UserRound } from "lucide-react";
+import { History, Pointer, Store, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { Logo } from "@/components/ui";
@@ -9,7 +9,8 @@ import { useLive } from "@/lib/live";
 // Signing in to Flick, with a PayPal sandbox account (backend/src/account.ts). PayPal's page asks to
 // save PayPal with Flick; that one approval makes this Flick theirs, on every device, and lets a
 // flick pay with no PayPal page each time. Signing in is optional: a guest can do everything, and
-// approves each payment on PayPal's page.
+// approves each payment on PayPal's page. A business signs in the same way, with its own PayPal, then
+// registers its name on /business: bills Flick reads with that name pay that PayPal.
 
 const never = () => () => {};
 /** The page's query: why we're here (?signin=failed, ?signedout=1) and where to go after (?next=). */
@@ -21,6 +22,7 @@ export function SignIn() {
   const next = /^\/(?!\/)/.test(query.get("next") ?? "") ? query.get("next")! : "/home";
   const profile = live.state?.profile;
   const paypal = live.state?.config.paypal ?? true;
+  const business = next === "/business";
 
   const note = query.get("signin") === "failed"
     ? "PayPal didn't sign you in, so nothing was saved. Try again."
@@ -52,8 +54,12 @@ export function SignIn() {
           </>
         ) : (
           <>
-            <h1 className="mt-5 text-[32px] font-semibold leading-[1.05] tracking-tight">Sign in to Flick</h1>
-            <p className="mt-2 text-[15px] leading-[1.45] text-secondary">With your PayPal sandbox account. Approve once on PayPal, and this Flick is yours.</p>
+            <h1 className="mt-5 text-[32px] font-semibold leading-[1.05] tracking-tight">{business ? "Sign in as a business" : "Sign in to Flick"}</h1>
+            <p className="mt-2 text-[15px] leading-[1.45] text-secondary">
+              {business
+                ? "With your business's PayPal sandbox account: that's the one Flick pays. Then register your name, and bills Flick reads with it pay you."
+                : "With your PayPal sandbox account. Approve once on PayPal, and this Flick is yours."}
+            </p>
             <ul className="mt-5 grid gap-3.5">
               <Point icon={<UserRound size={18} />} title="Your own Flick">
                 Your bills, friends and payments, on every device you sign in on.
@@ -81,13 +87,22 @@ export function SignIn() {
               ) : (
                 <p className="rounded-2xl bg-wait/15 px-4 py-2.5 text-[14px] text-wait">PayPal isn&apos;t set up on this backend, so signing in is off. Flick works as a guest.</p>
               )}
-              <Link href={next} className="flex h-11 items-center justify-center text-[14px] text-secondary">
+              <Link href={business ? "/home" : next} className="flex h-11 items-center justify-center text-[14px] text-secondary">
                 Continue as a guest
               </Link>
             </div>
+            {!business && (
+              <Link href="/business" className="pressable mt-2 flex items-center gap-3 rounded-2xl bg-fill/60 px-4 py-3 text-[14px]">
+                <Store size={18} className="shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  Run a business?
+                  <span className="block text-[12px] leading-4 text-secondary">Register it on Flick, and bills Flick reads with its name pay your PayPal.</span>
+                </span>
+              </Link>
+            )}
             <p className="mt-2 text-[12px] leading-4 text-secondary">
-              Use a PayPal sandbox personal account: make one at developer.paypal.com, under Testing tools, Sandbox accounts. Sandbox money only; nothing
-              real is charged.
+              Use a PayPal sandbox {business ? "business" : "personal"} account: make one at developer.paypal.com, under Testing tools, Sandbox accounts.
+              Sandbox money only; nothing real is charged.
             </p>
           </>
         )}
