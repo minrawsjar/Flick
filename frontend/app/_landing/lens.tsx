@@ -342,7 +342,7 @@ export function pdfForLens(file: Blob) {
   });
 }
 
-const isPdf = (file: File) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+export const isPdf = (file: File) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
 
 type View = { sample: Sample; scan?: Scan; photo?: string; live?: boolean };
 
@@ -471,6 +471,23 @@ export function Snap() {
     await readLive(copies, { sample: { ...samples[0], heard: "your photo", fields: [] }, photo: copies.photo });
   };
 
+  // Several e-bills at once: read one after another, each into Recent scans (and a bill due this
+  // week into Autopilot's plan). The phone ends on the last one.
+  const [reading, setReading] = useState<{ at: number; of: number }>();
+  const uploadAll = async (input: HTMLInputElement) => {
+    const files = Array.from(input.files ?? []);
+    input.value = ""; // so picking the same files again still reads them
+    for (const [i, file] of files.entries()) {
+      if (files.length > 1) setReading({ at: i + 1, of: files.length });
+      try {
+        await upload(file);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+    setReading(undefined);
+  };
+
   useOnScreen(box, () => {
     if (live.mode === "demo") start({ sample: samples[0] });
   });
@@ -566,11 +583,17 @@ export function Snap() {
             aria-disabled={!canRead || (currentStage === "scanning" && Boolean(view?.live))}
             className="pressable mt-2 flex h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-fill text-[15px] aria-disabled:pointer-events-none aria-disabled:opacity-40"
           >
-            <FileText size={17} /> Upload an e-bill
-            <input type="file" accept="application/pdf,.pdf,image/*" className="sr-only" disabled={!canRead} onChange={(e) => void upload(e.target.files?.[0])} />
+            <FileText size={17} /> Upload e-bills
+            <input type="file" accept="application/pdf,.pdf,image/*" multiple className="sr-only" disabled={!canRead || Boolean(reading)} onChange={(e) => void uploadAll(e.currentTarget)} />
           </label>
           <p className="mt-2 text-center text-[12px] leading-4 text-secondary">
-            {canRead ? "A bill or an e-bill (PDF), a receipt, a price tag or a tip jar. Lens reads it, and you pay it with PayPal." : live.mode === "loading" ? "Getting Lens ready…" : "Lens can't read photos right now: Flick's AI is off."}
+            {reading
+              ? `Reading ${reading.at} of ${reading.of}…`
+              : canRead
+                ? "A bill or e-bills (PDF, pick several at once), a receipt, a price tag or a tip jar. Lens reads them, and you pay with PayPal."
+                : live.mode === "loading"
+                  ? "Getting Lens ready…"
+                  : "Lens can't read photos right now: Flick's AI is off."}
           </p>
           {error && <p className="mt-2 text-center text-[12px] leading-4 text-wait">{error}</p>}
 

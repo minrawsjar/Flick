@@ -332,7 +332,7 @@ await step("a new browser has its own Flick: an empty workspace, and Today says 
 await step("Lens: a new Flick shows nothing made up: no sample bills, just how to start", async () => {
   await open("/lens");
   const t = await textOf();
-  check(t.includes("Nothing read yet") && t.includes("Upload an e-bill"), "no empty state");
+  check(t.includes("Nothing read yet") && t.includes("Upload e-bills"), "no empty state");
   check(!t.includes("Electricity bill") && !t.includes("Or watch a sample") && !t.includes("$64.20"), "a sample bill is on the page");
   const s = await state();
   check(!s.scans.length && !Object.keys(s.checkouts).length, "the page made a scan or a checkout");

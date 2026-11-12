@@ -1,10 +1,10 @@
 "use client";
 
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Check, Coffee, LoaderCircle, Receipt, RotateCcw, ScanLine, ShoppingBag, ShoppingCart, Smartphone, Trophy, Users, Zap, type LucideIcon } from "lucide-react";
+import { Check, Coffee, FileText, LoaderCircle, Receipt, RotateCcw, ScanLine, ShoppingBag, ShoppingCart, Smartphone, Trophy, Users, Zap, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { Unusual } from "@backend/model";
+import type { Scan, Unusual } from "@backend/model";
 import { Bot } from "@/components/bot";
 import { Grid } from "@/components/grid";
 import { Phone } from "@/components/phone";
@@ -12,6 +12,7 @@ import { Meter, Primary, Secondary, Tile, Title } from "@/components/ui";
 import { usd } from "@/lib/format";
 import { act, approveOnPayPal, refresh, useLive, type LiveState } from "@/lib/live";
 import { agents, DAYS, week, WEEKLY_CAP, type Day, type PayeeIcon, type Planned } from "./data";
+import { forLens, isPdf, pdfForLens } from "./lens";
 
 // Autopilot: the week's payments, planned from what you've snapped and paid before. Edit them in
 // the grid, approve once, then step through the days and watch each one get paid. Live, that's
@@ -286,6 +287,60 @@ function useLiveWeek(state: LiveState | null): WeekDriver | null {
   };
 }
 
+const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/**
+ * Bills straight into the week: Lens reads each file (several at once, one after another), and a
+ * bill due this week joins the plan as it's read (backend/src/lens.ts). Then it says what was added
+ * and what wasn't, by the same rule the plan uses: an unpaid bill, due a day of this week. Kept in
+ * Autopilot, not the button: the empty week's button goes as soon as the first bill lands.
+ */
+function useAddBills(starts: string | undefined) {
+  const [reading, setReading] = useState<{ at: number; of: number }>();
+  const [said, setSaid] = useState<string>();
+
+  const add = async (input: HTMLInputElement) => {
+    const files = Array.from(input.files ?? []);
+    input.value = ""; // so picking the same files again still reads them
+    if (!files.length || !starts) return;
+    const ends = new Date(Date.parse(`${starts}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
+    setSaid(undefined);
+    let added = 0;
+    const notes: string[] = [];
+    for (const [i, file] of files.entries()) {
+      setReading({ at: i + 1, of: files.length });
+      try {
+        const scan = await act<Scan>("lens/read", isPdf(file) ? { pdf: await pdfForLens(file) } : await forLens(file));
+        if (scan.kind !== "bill" || scan.status === "paid") notes.push(`${scan.title || file.name} isn't a bill to pay.`);
+        else if (!scan.due) notes.push(`${scan.title} has no due date.`);
+        else if (scan.due < starts || scan.due > ends) notes.push(`${scan.title} is due ${shortDate(scan.due)}, not this week.`);
+        else added++;
+      } catch (err) {
+        notes.push(`${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    setReading(undefined);
+    setSaid([`${added} ${added === 1 ? "bill" : "bills"} added to this week.`, ...notes].join(" "));
+  };
+  return { reading, said, add };
+}
+
+function AddBills({ bills: { reading, said, add }, center = false }: { bills: ReturnType<typeof useAddBills>; center?: boolean }) {
+  return (
+    <div className={`flex flex-col gap-1.5 ${center ? "items-center text-center" : "items-end text-right"}`}>
+      <label
+        aria-disabled={Boolean(reading)}
+        className="pressable flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-ink px-4 text-[13px] text-on-ink aria-disabled:pointer-events-none aria-disabled:opacity-60"
+      >
+        {reading ? <LoaderCircle size={14} className="spinner" /> : <FileText size={14} />}
+        {reading ? `Reading ${reading.at} of ${reading.of}…` : "Add bills"}
+        <input type="file" accept="application/pdf,.pdf,image/*" multiple className="sr-only" disabled={Boolean(reading)} onChange={(e) => void add(e.currentTarget)} />
+      </label>
+      {said && <p className="max-w-sm text-[12px] leading-4 text-secondary">{said}</p>}
+    </div>
+  );
+}
+
 export function Autopilot() {
   const live = useLive();
   const demo = useDemoWeek();
@@ -295,6 +350,9 @@ export function Autopilot() {
   // Each row carries the status it shows. Worked out in the grid instead, a new week could arrive
   // before the new day reached its columns, and keep the old day's statuses.
   const rows = w.rows.map((p) => ({ ...p, shown: statusOf(p, w.approved, w.today) }));
+  // The Monday of your own week while bills can still join it: live, not approved, not under way.
+  const planningWeek = real && !w.approved && w.today < 0 ? live.state?.week.starts : undefined;
+  const bills = useAddBills(planningWeek);
 
   // Editable until approved: the approval covers exactly what's in the grid.
   const columns = useMemo<ColDef<Row>[]>(() => {
@@ -331,17 +389,25 @@ export function Autopilot() {
 
       <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <Tile className="md:col-span-2">
-          <p className="mb-3 text-[13px] text-secondary">The plan, in AG Grid. Tap an amount or a day to change it, until you approve.</p>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <p className="text-[13px] text-secondary">The plan, in AG Grid. Tap an amount or a day to change it, until you approve.</p>
+            {/* Until the week is approved or under way: after that, new bills wait for next week. */}
+            {planningWeek && rows.length > 0 && <AddBills bills={bills} />}
+          </div>
           {w.live && !rows.length ? (
             <div className="flex flex-col items-center gap-3 rounded-2xl bg-raised px-6 py-10 text-center">
               <Bot {...agents.autopilot} size={40} mood="idle" />
               <p className="max-w-md text-[15px] leading-[1.45]">Nothing planned this week yet.</p>
               <p className="max-w-md text-[13px] leading-[1.45] text-secondary">
-                Autopilot plans from what it sees you pay: a bill Lens reads that falls due this week, a bill you ask it to pay every month, and anything you pay week after week.
+                Add this week&apos;s bills (PDFs or photos, several at once) and Autopilot plans them. It also plans a bill you ask it to pay every month, and anything you pay week after week.
               </p>
-              <Link href="/lens" className="pressable flex h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-[14px] text-on-ink">
-                <ScanLine size={15} /> Snap a bill
-              </Link>
+              {planningWeek ? (
+                <AddBills bills={bills} center />
+              ) : (
+                <Link href="/lens" className="pressable flex h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-[14px] text-on-ink">
+                  <ScanLine size={15} /> Snap a bill
+                </Link>
+              )}
             </div>
           ) : (
             <Grid<Row>
