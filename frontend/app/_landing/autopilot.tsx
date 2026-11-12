@@ -96,8 +96,8 @@ function PayeeIconTile({ icon, size = 28 }: { icon: PayeeIcon; size?: number }) 
 }
 
 /** "This week" on the phone. */
-export function WeekScreen({ rows, approved, today, approving, onApprove }: { rows: Planned[]; approved: boolean; today: number; approving?: boolean; onApprove?: () => void }) {
-  const message = autopilotSays(rows, approved, today);
+export function WeekScreen({ rows, approved, today, approving, onApprove, loading = false }: { rows: Planned[]; approved: boolean; today: number; approving?: boolean; onApprove?: () => void; loading?: boolean }) {
+  const message = loading ? "Getting your week…" : autopilotSays(rows, approved, today);
   const sum = total(rows.filter((p) => statusOf(p, approved, today) !== "skipped"));
 
   return (
@@ -113,7 +113,7 @@ export function WeekScreen({ rows, approved, today, approving, onApprove }: { ro
         <Meter label="Weekly cap" used={sum} of={WEEKLY_CAP} />
       </div>
       <p className="px-6 pb-1 pt-2.5 text-[10px] uppercase tracking-wide text-secondary">Planned</p>
-      {!rows.length && <p className="mx-3 rounded-card bg-card px-3 py-2.5 text-[12px] leading-4 text-secondary">Snap a bill with Lens: one due this week lands here.</p>}
+      {!rows.length && !loading && <p className="mx-3 rounded-card bg-card px-3 py-2.5 text-[12px] leading-4 text-secondary">Snap a bill with Lens: one due this week lands here.</p>}
       <div className="mx-3 divide-y divide-separator/50 rounded-card bg-card">
         {rows.map((p) => (
           <div key={p.id} className="flex items-center gap-2 px-2.5 py-1">
@@ -216,6 +216,10 @@ function rejudge(p: Planned): Planned {
   const above = p.amount / usual - 1;
   return { ...p, unusual: above >= 0.25 - 1e-9 ? { kind: "above-usual", percent: Math.round(above * 100), usual } : undefined };
 }
+
+const noop = () => {};
+/** While the backend hasn't answered yet: nothing planned, nothing to press (busy). */
+const LOADING_WEEK: WeekDriver = { live: false, rows: [], approved: false, today: -1, busy: true, edit: noop, approve: noop, tick: noop, next: noop, retry: noop, reset: noop };
 
 // Copies: AG Grid writes edits into the rows it's given, and `week` must stay as planned.
 const plannedWeek = () => week.map((p) => ({ ...p }));
@@ -346,7 +350,10 @@ export function Autopilot() {
   const demo = useDemoWeek();
   // Your own week, even an empty one: the sample week is only the one-pager's, or when the backend is out of reach.
   const real = useLiveWeek(live.mode === "live" ? live.state : null);
-  const w = real ?? demo;
+  // Until the backend answers, an empty week that says so: not the sample week, which would show
+  // its $142.30 for a moment and then change to your own.
+  const loading = live.mode === "loading";
+  const w = real ?? (loading ? LOADING_WEEK : demo);
   // Each row carries the status it shows. Worked out in the grid instead, a new week could arrive
   // before the new day reached its columns, and keep the old day's statuses.
   const rows = w.rows.map((p) => ({ ...p, shown: statusOf(p, w.approved, w.today) }));
@@ -384,7 +391,7 @@ export function Autopilot() {
   return (
     <div className="grid grid-cols-1 items-center justify-items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:justify-items-stretch">
       <Phone width={262}>
-        <WeekScreen rows={w.rows} approved={w.approved} today={w.today} approving={w.busy} onApprove={w.approve} />
+        <WeekScreen rows={w.rows} approved={w.approved} today={w.today} approving={w.busy} onApprove={w.approve} loading={loading} />
       </Phone>
 
       <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
@@ -394,7 +401,11 @@ export function Autopilot() {
             {/* Until the week is approved or under way: after that, new bills wait for next week. */}
             {planningWeek && rows.length > 0 && <AddBills bills={bills} />}
           </div>
-          {w.live && !rows.length ? (
+          {loading ? (
+            <p className="flex items-center justify-center gap-2 rounded-2xl bg-raised px-6 py-10 text-[14px] text-secondary">
+              <LoaderCircle size={15} className="spinner" /> Loading your week…
+            </p>
+          ) : w.live && !rows.length ? (
             <div className="flex flex-col items-center gap-3 rounded-2xl bg-raised px-6 py-10 text-center">
               <Bot {...agents.autopilot} size={40} mood="idle" />
               <p className="max-w-md text-[15px] leading-[1.45]">Nothing planned this week yet.</p>
@@ -445,7 +456,7 @@ export function Autopilot() {
                 )}
               </Primary>
             ) : (
-              <p className="flex h-10 items-center justify-center rounded-full bg-fill text-[13px] text-secondary">Nothing to approve this week</p>
+              <p className="flex h-10 items-center justify-center rounded-full bg-fill text-[13px] text-secondary">{loading ? "Loading…" : "Nothing to approve this week"}</p>
             )}
           </div>
         </Tile>
@@ -459,7 +470,7 @@ export function Autopilot() {
               </li>
             ))}
           </ol>
-          <p className="mt-2 text-[12px] text-secondary">{w.today < 0 ? "It's Sunday: planning day." : `It's ${DAYS[w.today]}.`}</p>
+          <p className="mt-2 text-[12px] text-secondary">{loading ? "Loading…" : w.today < 0 ? "It's Sunday: planning day." : `It's ${DAYS[w.today]}.`}</p>
           <div className="mt-auto flex gap-2 pt-4">
             {failed ? (
               <Secondary onClick={w.retry} disabled={w.busy} className="flex-1">
