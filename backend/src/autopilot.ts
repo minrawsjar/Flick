@@ -214,6 +214,22 @@ export function replan() {
   state.week.payments.push(...planWeek(state.week.starts, state).filter((p) => !planned.has(p.id) && !paid.has(p.payeeId)));
 }
 
+/**
+ * Back a week, while nothing is approved: say "Plan next week" went one week too far. Never before
+ * this week by the calendar, and the week is planned afresh, without what was paid in it already.
+ */
+export function previousWeek() {
+  need(!state.week.approval, "This week is approved: it can't be swapped for another.", 409);
+  const starts = addDays(state.week.starts, -7);
+  need(starts >= thisMonday(), "That week is over: Autopilot plans from this week on.", 409);
+  const ends = addDays(starts, 6);
+  const paid = new Set(state.history.filter((h) => h.date >= starts && h.date <= ends).map((h) => h.payeeId));
+  state.week = { starts, today: -1, payments: planWeek(starts, state).filter((p) => !paid.has(p.payeeId)) };
+  log('autopilot', `Went back to the week of ${starts}: ${state.week.payments.length} payments`);
+  save();
+  return state.week;
+}
+
 /** Closes the week: what was paid becomes history to learn from, and the next week is planned (and paid, if Autopilot pays by itself). */
 export async function nextWeek() {
   for (const p of state.week.payments) {

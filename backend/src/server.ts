@@ -87,6 +87,7 @@ const routes: Record<string, Handler> = {
   'POST /api/week/tick': () => autopilot.tick(),
   'POST /api/week/retry': () => autopilot.retry(),
   'POST /api/week/next': () => autopilot.nextWeek(),
+  'POST /api/week/previous': () => autopilot.previousWeek(),
   // Autopilot paying by itself, with PayPal saved for it
   'POST /api/autopay/cap': async ({ body }) => autopilot.setCap(await body()),
   'POST /api/autopay/stop': () => autopilot.stopAutopay(),

@@ -201,6 +201,8 @@ type WeekDriver = {
   approve: () => void;
   tick: () => void;
   next: () => void;
+  /** Your own week only: back a week while nothing is approved. */
+  previous?: () => void;
   retry: () => void;
   reset: () => void;
 };
@@ -286,9 +288,16 @@ function useLiveWeek(state: LiveState | null): WeekDriver | null {
       }),
     tick: () => run(() => act("week/tick")),
     next: () => run(() => act("week/next")),
+    previous: () => run(() => act("week/previous")),
     retry: () => run(() => act("week/retry")),
     reset: () => run(() => act("reset")),
   };
+}
+
+/** This week's Monday by the calendar, in UTC as the backend counts it. */
+function thisMonday() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7))).toISOString().slice(0, 10);
 }
 
 const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -369,6 +378,8 @@ export function Autopilot() {
   // The Monday of your own week while bills can still join it: live and not approved (backend/src/autopilot.ts, replan).
   const planningWeek = real && !w.approved && !live.state?.week.approval ? live.state?.week.starts : undefined;
   const bills = useAddBills(planningWeek);
+  // Back a week, while nothing is approved, down to this week (backend/src/autopilot.ts, previousWeek).
+  const canGoBack = Boolean(real && live.state && !live.state.week.approval && live.state.week.starts > thisMonday());
 
   // Editable until approved: the approval covers exactly what's in the grid.
   const columns = useMemo<ColDef<Row>[]>(() => {
@@ -410,7 +421,14 @@ export function Autopilot() {
               {real && live.state ? `The week of ${shortDate(live.state.week.starts)}, in AG Grid.` : "The plan, in AG Grid."} Tap an amount or a day to change it, until you approve.
             </p>
             {/* Until the week is approved: after that, new bills wait for next week. */}
-            {planningWeek && rows.length > 0 && <AddBills bills={bills} />}
+            <div className="flex flex-wrap items-start justify-end gap-2">
+              {canGoBack && (
+                <Secondary onClick={w.previous ?? noop} disabled={w.busy} className="h-9 px-3 text-[13px]">
+                  ← Previous week
+                </Secondary>
+              )}
+              {planningWeek && rows.length > 0 && <AddBills bills={bills} />}
+            </div>
           </div>
           {loading ? (
             <p className="flex items-center justify-center gap-2 rounded-2xl bg-raised px-6 py-10 text-[14px] text-secondary">
