@@ -255,7 +255,7 @@ export default function Home() {
           tone="grey"
           label="Ask Flick"
           title="One sentence. Every agent."
-          intro="Tell Flick what you need in plain words. It reads your real data, plans across Lens, Autopilot, Splitter and Nudge, and asks before it does anything."
+          intro="Tell Flick what you need in plain words. It reads your real data, plans across Lens, Autopilot, Splitter, Nudge, Scout and Safe, and asks before it does anything."
         >
           <AskDemo />
         </Section>

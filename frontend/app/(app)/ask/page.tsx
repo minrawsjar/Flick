@@ -12,7 +12,7 @@ export default function Page() {
       tone="white"
       label="Ask Flick"
       title="Say what you need. Flick does the rest."
-      intro="One conversation reaches Lens, Autopilot, Splitter and Nudge. Flick reads your real data, plans the steps, and asks before it does anything."
+      intro="One conversation reaches Lens, Autopilot, Splitter, Nudge, Scout and Safe. Flick reads your real data, plans the steps, and asks before it does anything."
     >
       <Ask />
     </Section>

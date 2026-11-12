@@ -277,7 +277,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
       {
         id: 'flickActivity',
         name: 'Agent Activity',
-        description: 'What Lens, Autopilot, Splitter and Nudge did, newest first.',
+        description: 'What each agent did, newest first.',
         data: data.flickActivity,
         fields: fields([
           ['id', 'ID', 'textFormat', true],

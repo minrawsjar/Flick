@@ -446,7 +446,7 @@ export function Ask() {
             <Crew size={26} />
             <div className="min-w-0">
               <p className="text-[15px]">Flick</p>
-              <p className="truncate text-[12px] text-secondary">Lens, Autopilot, Splitter and Nudge, in one conversation</p>
+              <p className="truncate text-[12px] text-secondary">All six agents, in one conversation</p>
             </div>
           </div>
           {hasSpeechSynthesis && (
@@ -538,7 +538,7 @@ export function Ask() {
       <div className="grid content-start gap-3">
         {[
           ["Reads your real data", "Your week, what Lens read, who owes you and your usual amounts, so it can spot what's odd."],
-          ["Plans across agents", "One request can pay a bill, split a receipt and remind a friend: Lens, Autopilot, Splitter and Nudge working together."],
+          ["Plans across agents", "One request can pay a bill, split a receipt and remind a friend: all six agents, from Lens to Safe, working together."],
           ["You say yes to every action", "Each action waits for your OK. Payments still go through PayPal's own approval."],
         ].map(([title, body]) => (
           <Tile key={title} className="!p-4">
@@ -605,7 +605,7 @@ export function AskDemo() {
       <div className="grid w-full min-w-0 gap-3 md:grid-cols-3">
         {[
           ["Reads your real data", "Your week, what Lens read, who owes you and your usual amounts, so it can spot what's odd."],
-          ["Plans across agents", "One sentence becomes a split, invoices and a reminder: Lens, Autopilot, Splitter and Nudge working together."],
+          ["Plans across agents", "One sentence becomes a split, invoices and a reminder: all six agents, from Lens to Safe, working together."],
           ["You say yes to every action", "Nothing runs until you approve it, and payments still go through PayPal's own approval."],
         ].map(([title, body]) => (
           <Tile key={title}>
