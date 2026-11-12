@@ -20,7 +20,7 @@ on one approval; Splitter and Flick Chat get friends to pay you back; Scout buys
 groceries where they're cheapest; Safe keeps money given for one thing spent on that thing; and Ask
 Flick plans across all of them, typed or spoken.**
 
-[Open Flick](https://www.flickit.site) · [Install it](https://www.flickit.site/install) · [Architecture](#architecture) · [How the money moves](#how-the-money-moves) · [Partner evidence](partner-docs/) · [Run it](#run-and-verify)
+[Open Flick](https://www.flickit.site) · [Install it](https://www.flickit.site/install) · [Flick Safe](#flick-safe-money-for-one-thing) · [Architecture](#architecture) · [How the money moves](#how-the-money-moves) · [Partner evidence](partner-docs/) · [Run it](#run-and-verify)
 
 Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com), on PayPal's sandbox.
 
@@ -76,6 +76,33 @@ a photo, PDF or e-mail of a bill → Lens reads it (vision model, strict JSON sc
 | What each agent did (the newest 200 lines) | Photos in other prompts: Ask Flick and Money Studio get fields, not photos |
 
 ---
+
+## Flick Safe: money for one thing
+
+A friend asks you for $20 "for chocolates". Send it as you would anywhere else and it can be spent on
+anything; a receipt proves little, since it can be old, edited or used before. Flick Safe locks the
+money to what it was asked for.
+
+~~~text
+"$20 for chocolates" in Flick Chat → Pay into a Safe → a flick charges your saved PayPal (Vault)
+  → Flick holds it, in a Safe in both your chats
+  → they snap the receipt → Safe's reader: each line, for chocolates or not, any sign of a fake
+  → safe-rules.ts decides: the chocolates paid back (a Payout), the charger never paid,
+    a used, old or unrelated receipt refused, anything doubtful asked of you
+  → closed, or ended: what's left refunded to you from your payment (Payments v2)
+~~~
+
+<table>
+<tr>
+<td width="33%"><b>1. Lock it</b><br/>Pay a friend's request into a Safe, or give money unasked from the lock in Flick Chat. One flick, from the PayPal you signed in with.</td>
+<td width="33%"><b>2. Spend it on that</b><br/>They snap the receipt. Only the lines for the purpose are ever paid, with their share of the tax; nothing else, not even with your say-so. Each receipt counts once, anywhere on Flick.</td>
+<td width="33%"><b>3. Get the rest back</b><br/>Close it, or let it end, and what's left is refunded to your PayPal. A doubtful receipt waits for you, with its photo, in the chat and on Today.</td>
+</tr>
+</table>
+
+Tested with the real model and real sandbox money: 11 unit tests of the rules, 14 API steps, and two
+browser steps that give, spend, refuse and refund a Safe for real. The details are under
+[Safe](#safe), below.
 
 ## Architecture
 
@@ -385,10 +412,10 @@ Every call goes through [`paypal.ts`](backend/src/paypal.ts), with plain `fetch`
 | API | Calls | Used for |
 |---|---|---|
 | **Orders v2** | `POST /v2/checkout/orders`, `POST /v2/checkout/orders/{id}/capture` | Every checkout: bills, the week, baskets; a vault charge is an order with a `vault_id` |
-| **Vault v3** | `POST /v3/vault/setup-tokens`, `POST /v3/vault/payment-tokens`, `DELETE /v3/vault/payment-tokens/{id}` | Signing in, flicks that pay at once, Autopilot and Flick Chat paying by themselves |
-| **Payouts v1** | `POST /v1/payments/payouts` | Paying billers, businesses, stores and friends from Flick's account |
+| **Vault v3** | `POST /v3/vault/setup-tokens`, `POST /v3/vault/payment-tokens`, `DELETE /v3/vault/payment-tokens/{id}` | Signing in, flicks that pay at once (a Safe too), Autopilot and Flick Chat paying by themselves |
+| **Payouts v1** | `POST /v1/payments/payouts` | Paying billers, businesses, stores and friends from Flick's account, and each receipt a Safe lets out |
 | **Invoicing v2** | `POST /v2/invoicing/invoices`, `…/send`, `…/remind`, `GET …/{id}`, list | Asking friends not on Flick; PayPal's own reminders; who's paid |
-| **Payments v2** | `POST /v2/payments/captures/{id}/refund` | Payments skipped after approval |
+| **Payments v2** | `POST /v2/payments/captures/{id}/refund` | Payments skipped after approval; what's left of a Safe, back to whoever gave it |
 | **Webhooks** | `POST /v1/notifications/verify-webhook-signature` | Checking each event really came from PayPal |
 | **Reporting v1** | `GET /v1/reporting/transactions`, `GET /v1/reporting/balances` | Money Studio |
 | **Catalog and Billing** | `GET /v1/catalogs/products`, `GET /v1/billing/plans` (and each in full) | Money Studio |
@@ -470,6 +497,7 @@ The design language (bot faces, phone frame, colours and motion) is ported from
 | AI can't pay | Model output checked by rules; amounts from what was read or the server's prices; every action approved by a person | A model inventing an amount, a payee or a payment |
 | Who's paid | Friends and businesses are paid at the PayPal they signed in with | A bill or a typed email pointing money at the wrong account |
 | Paying by itself | Autopilot's weekly cap; a per-friend limit in Flick Chat; a refusal goes back to asking | A saved PayPal charged beyond what you allowed |
+| Money for one thing | [`safe-rules.ts`](backend/src/safe-rules.ts): only a Safe's lines for its purpose are paid; each receipt once, across Flick (by shop, date and total, and by file); dated after the Safe; never more than is left; doubts go to the giver | A Safe paying for something else, a receipt used twice, or an old one |
 | Webhooks | Verified with PayPal; applied once each; only to the workspace they're about | Forged events marking things paid |
 | Coming back from PayPal | `next` must be a path on Flick | Signing in sending you to another site |
 | The AI key | Never leaves the backend; allowed models only; an hourly budget | Someone spending the key from the browser |
@@ -477,7 +505,9 @@ The design language (bot faces, phone frame, colours and motion) is ported from
 **Not done yet:** this is a sandbox demo. The API has no rate limit beyond the AI's, and workspaces
 are JSON files held in memory (fine for a few thousand people; Postgres beyond that). A business's
 name is first come, so production would verify businesses with PayPal. Invoices to friends not on
-Flick are paid into Flick's account and marked paid, rather than forwarded.
+Flick are paid into Flick's account and marked paid, rather than forwarded. Safe's reader can't prove
+a receipt is genuine, so a convincing fake that fits the purpose can pass: that's why doubtful ones
+go to the giver with the photo, and why paying the shop straight from the Safe is the next step.
 
 ---
 
