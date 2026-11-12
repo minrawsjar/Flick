@@ -366,8 +366,8 @@ export function Autopilot() {
   // Each row carries the status it shows. Worked out in the grid instead, a new week could arrive
   // before the new day reached its columns, and keep the old day's statuses.
   const rows = w.rows.map((p) => ({ ...p, shown: statusOf(p, w.approved, w.today) }));
-  // The Monday of your own week while bills can still join it: live, not approved, not under way.
-  const planningWeek = real && !w.approved && w.today < 0 ? live.state?.week.starts : undefined;
+  // The Monday of your own week while bills can still join it: live and not approved (backend/src/autopilot.ts, replan).
+  const planningWeek = real && !w.approved && !live.state?.week.approval ? live.state?.week.starts : undefined;
   const bills = useAddBills(planningWeek);
 
   // Editable until approved: the approval covers exactly what's in the grid.
@@ -409,7 +409,7 @@ export function Autopilot() {
             <p className="text-[13px] text-secondary">
               {real && live.state ? `The week of ${shortDate(live.state.week.starts)}, in AG Grid.` : "The plan, in AG Grid."} Tap an amount or a day to change it, until you approve.
             </p>
-            {/* Until the week is approved or under way: after that, new bills wait for next week. */}
+            {/* Until the week is approved: after that, new bills wait for next week. */}
             {planningWeek && rows.length > 0 && <AddBills bills={bills} />}
           </div>
           {loading ? (

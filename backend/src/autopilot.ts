@@ -195,12 +195,15 @@ const thisMonday = () => mondayOf(new Date());
 
 /**
  * Until the week is approved, what's new joins its plan: a bill Lens just read that's due this
- * week, a monthly bill just learned. What's planned already, edited or not, stays as it is.
+ * week, a monthly bill just learned. What's planned already, edited or not, stays as it is. A week
+ * stepped into with Next day but never approved still takes new bills: those for days gone by wait,
+ * and approving pays them at once (`approved` pays what's due).
  */
 export function replan() {
-  if (state.week.approval || state.week.today >= 0) return;
-  // A workspace keeps the week it was made in until the next one is planned. Still being planned,
-  // but over by the calendar, it moves on to this week first, or this week's bills couldn't join it.
+  // Approved, or waiting on its PayPal approval: the approval covers what was planned, nothing more.
+  if (state.week.approval) return;
+  // A workspace keeps the week it was made in until the next one is planned. Never approved and
+  // over by the calendar, it moves on to this week first, or this week's bills couldn't join it.
   if (state.week.starts < thisMonday()) {
     state.week = { starts: thisMonday(), today: -1, payments: [] };
     log('autopilot', `Moved the plan on to this week, the week of ${state.week.starts}`);
