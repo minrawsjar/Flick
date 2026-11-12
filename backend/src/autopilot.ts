@@ -1,7 +1,7 @@
 import { received } from './business.ts';
 import { startCheckout } from './checkout.ts';
 import { HttpError, need } from './http.ts';
-import { addDays, cents, DAYS, id, usd, ymd, type Checkout, type Day } from './model.ts';
+import { addDays, cents, DAYS, id, mondayOf, usd, ymd, type Checkout, type Day } from './model.ts';
 import { chargeSaved, createPayout, deleteSaved, PayPalApiError, refundCapture, type Saved } from './paypal.ts';
 import { dueNow, planWeek, unapproved, unusual } from './rules.ts';
 import { log, payee, save, state } from './store.ts';
@@ -190,12 +190,21 @@ export async function retry() {
   return state.week;
 }
 
+/** This week's Monday, by the calendar (UTC). */
+const thisMonday = () => mondayOf(new Date());
+
 /**
  * Until the week is approved, what's new joins its plan: a bill Lens just read that's due this
  * week, a monthly bill just learned. What's planned already, edited or not, stays as it is.
  */
 export function replan() {
   if (state.week.approval || state.week.today >= 0) return;
+  // A workspace keeps the week it was made in until the next one is planned. Still being planned,
+  // but over by the calendar, it moves on to this week first, or this week's bills couldn't join it.
+  if (state.week.starts < thisMonday()) {
+    state.week = { starts: thisMonday(), today: -1, payments: [] };
+    log('autopilot', `Moved the plan on to this week, the week of ${state.week.starts}`);
+  }
   const planned = new Set(state.week.payments.map((p) => p.id));
   // Paid this week already (say, with Lens): not again.
   const paid = new Set(state.history.filter((h) => h.date >= state.week.starts).map((h) => h.payeeId));
@@ -207,7 +216,9 @@ export async function nextWeek() {
   for (const p of state.week.payments) {
     if (p.status === 'paid') state.history.push({ payeeId: p.payeeId, what: p.what, amount: p.amount, date: addDays(state.week.starts, DAYS.indexOf(p.day)) });
   }
-  const starts = addDays(state.week.starts, 7);
+  // The week after, or this week by the calendar if that's later: never a week that's over.
+  const after = addDays(state.week.starts, 7);
+  const starts = after < thisMonday() ? thisMonday() : after;
   state.week = { starts, today: -1, payments: planWeek(starts, state) };
   log('autopilot', `Planned the week of ${starts}: ${state.week.payments.length} payments`);
   save();

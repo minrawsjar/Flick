@@ -307,21 +307,30 @@ function useAddBills(starts: string | undefined) {
     const files = Array.from(input.files ?? []);
     input.value = ""; // so picking the same files again still reads them
     if (!files.length || !starts) return;
-    const ends = new Date(Date.parse(`${starts}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
     setSaid(undefined);
-    let added = 0;
+    const read: Scan[] = [];
     const notes: string[] = [];
     for (const [i, file] of files.entries()) {
       setReading({ at: i + 1, of: files.length });
       try {
-        const scan = await act<Scan>("lens/read", isPdf(file) ? { pdf: await pdfForLens(file) } : await forLens(file));
-        if (scan.kind !== "bill" || scan.status === "paid") notes.push(`${scan.title || file.name} isn't a bill to pay.`);
-        else if (!scan.due) notes.push(`${scan.title} has no due date.`);
-        else if (scan.due < starts || scan.due > ends) notes.push(`${scan.title} is due ${shortDate(scan.due)}, not this week.`);
-        else added++;
+        read.push(await act<Scan>("lens/read", isPdf(file) ? { pdf: await pdfForLens(file) } : await forLens(file)));
       } catch (err) {
         notes.push(`${file.name}: ${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+    // What joined, from the week as it is now: the backend moves a plan that's over on to this week.
+    const week = await fetch("/api/state", { cache: "no-store" })
+      .then((res) => (res.ok ? (res.json() as Promise<LiveState>) : null))
+      .then((state) => state?.week)
+      .catch(() => undefined);
+    const ends = week && new Date(Date.parse(`${week.starts}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
+    let added = 0;
+    for (const scan of read) {
+      if (scan.kind !== "bill" || scan.status === "paid") notes.push(`${scan.title} isn't a bill to pay.`);
+      else if (week?.payments.some((p) => p.payeeId === scan.payeeId)) added++;
+      else if (!scan.due) notes.push(`${scan.title} has no due date.`);
+      else if (week && ends && (scan.due < week.starts || scan.due > ends)) notes.push(`${scan.title} is due ${shortDate(scan.due)}, not in the week of ${shortDate(week.starts)}.`);
+      else notes.push(`${scan.title} didn't join this week's plan.`);
     }
     setReading(undefined);
     setSaid([`${added} ${added === 1 ? "bill" : "bills"} added to this week.`, ...notes].join(" "));
@@ -397,7 +406,9 @@ export function Autopilot() {
       <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <Tile className="md:col-span-2">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-            <p className="text-[13px] text-secondary">The plan, in AG Grid. Tap an amount or a day to change it, until you approve.</p>
+            <p className="text-[13px] text-secondary">
+              {real && live.state ? `The week of ${shortDate(live.state.week.starts)}, in AG Grid.` : "The plan, in AG Grid."} Tap an amount or a day to change it, until you approve.
+            </p>
             {/* Until the week is approved or under way: after that, new bills wait for next week. */}
             {planningWeek && rows.length > 0 && <AddBills bills={bills} />}
           </div>
